@@ -195,4 +195,83 @@ To add a new architecture (e.g., ARM64):
 - Machine: Q35 chipset
 - Memory: 128MB
 - Serial output: Redirected to stdio
-- Single core (default)
+- CPUs: 4 cores (use `-smp 4` flag to simulate multi-core system)
+
+2. Add architecture-specific boot code, linker script, and drivers
+3. Update Makefile to support multiple architectures
+4. Ensure `kernel/` code remains architecture-independent
+5. Use conditional compilation or function pointers for architecture interfaces
+
+### Code Style
+
+- Use C-style comments (`/* */`) for multi-line explanations
+- Use C++-style comments (`//`) for single-line notes
+- Use inline assembly with `asm volatile ()` for hardware access
+- Use `static inline` for small, performance-critical functions
+- Use meaningful variable and function names
+- Add comments explaining non-obvious operations, especially for hardware manipulation
+
+## QEMU Configuration
+- Machine: Q35 chipset
+- Memory: 128MB
+- Serial output: Redirected to stdio
+- CPUs: 4 cores (use `-smp 4` flag to simulate multi-core system)
+
+
+## SMP (Symmetric Multi-Processing) Support
+
+JAKernel has experimental SMP support with the following components:
+
+### SMP Initialization Flow
+
+1. **BSP Boot**:
+   - CPU 0 (BSP) starts at `_start` in `arch/x86_64/boot.S`
+   - BSP performs full MMU initialization (page tables, long mode enablement)
+   - BSP initializes VGA, serial port, and device drivers
+   - BSP calls `smp_init()` to set up CPU information
+   - BSP marks itself ready and calls `smp_start_all_aps()`
+
+2. **AP Startup**:
+   - APs detect they are not BSP via atomic increment of `cpu_boot_counter`
+   - APs wait for BSP to complete basic initialization (`bsp_init_done` flag)
+   - APs skip re-initialization and jump to `ap_entry`
+   - APs load GDT and switch to 64-bit mode (already done by BSP)
+   - APs call `ap_start()` to mark themselves as ready
+
+### ACPI Support (for Future CPU Detection)
+
+JAKernel includes basic ACPI support for detecting CPUs from ACPI MADT:
+
+**Components (`arch/x86_64/acpi.c`, `arch/x86_64/acpi.h`):
+- `acpi_find_rsdp()` - Searches BIOS memory for RSDP
+- `acpi_find_madt()` - Locates MADT in RSDT
+- `acpi_parse_madt()` - Parses MADT to extract APIC entries
+- `acpi_get_apic_id()` - Gets Local APIC ID (currently returns 0 for BSP)
+- `acpi_get_apic_count()` - Returns number of APICs found
+
+### Data Structures (`kernel/smp.h`):
+
+- `smp_cpu_info_t` - Per-CPU information (APIC ID, state, stack)
+- `cpu_count` - Number of detected CPUs (fixed at 4 for QEMU compatibility)
+- `ready_cpus` - Number of CPUs that have completed initialization
+- `bsp_init_complete` - Flag set by BSP after basic init (used for synchronization)
+
+### CPU Boot Messages
+
+Each CPU prints its status in English:
+```
+CPU 0 (APIC ID 0): Successfully booted
+SMP: BSP initialization complete.
+SMP: Starting all Application Processors...
+SMP: All CPUs are online and ready
+System initialization complete
+```
+
+### Current Status
+- BSP (CPU 0) fully functional with English boot messages
+- Device driver framework with device/driver abstractions
+- ACPI/APIC foundation for future CPU detection
+- AP startup requires proper IPI sending via Local APIC
+- English boot messages for all operations
+
+The APs are currently not starting because QEMU requires proper STARTUP IPIs sent via the Local APIC. The framework is in place for future AP startup once IPI is working.

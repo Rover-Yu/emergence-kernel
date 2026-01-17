@@ -1,0 +1,269 @@
+!_TAG_FILE_FORMAT	2	/extended format; --format=1 will not append ;" to lines/
+!_TAG_FILE_SORTED	1	/0=unsorted, 1=sorted, 2=foldcase/
+!_TAG_PROGRAM_AUTHOR	Darren Hiebert	/dhiebert@users.sourceforge.net/
+!_TAG_PROGRAM_NAME	Exuberant Ctags	//
+!_TAG_PROGRAM_URL	http://ctags.sourceforge.net	/official site/
+!_TAG_PROGRAM_VERSION	5.9~svn20110310	//
+ARCH_BOOT_OBJ	Makefile	/^ARCH_BOOT_OBJ := $(BUILD_DIR)\/boot.o$/;"	m
+ARCH_BOOT_SRC	Makefile	/^ARCH_BOOT_SRC := $(ARCH_DIR)\/boot.S$/;"	m
+ARCH_C_SRCS	Makefile	/^ARCH_C_SRCS := $(ARCH_DIR)\/vga.c $(ARCH_DIR)\/serial_driver.c $(ARCH_DIR)\/apic.c$/;"	m
+ARCH_DIR	Makefile	/^ARCH_DIR := arch\/x86_64$/;"	m
+ARCH_LINKER	Makefile	/^ARCH_LINKER := $(ARCH_DIR)\/linker.ld$/;"	m
+ARCH_OBJS	Makefile	/^ARCH_OBJS := $(patsubst $(ARCH_DIR)\/%.c,$(BUILD_DIR)\/arch_%.o,$(ARCH_C_SRCS))$/;"	m
+AS	Makefile	/^AS := as$/;"	m
+BUILD_DIR	Makefile	/^BUILD_DIR := build$/;"	m
+CC	Makefile	/^CC := gcc$/;"	m
+CFLAGS	Makefile	/^CFLAGS := -ffreestanding -O2 -Wall -Wextra -nostdlib -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2 -I.$/;"	m
+CPU_BOOTING	kernel/smp.h	/^    CPU_BOOTING,      \/* CPU is booting *\/$/;"	e	enum:__anon1
+CPU_OFFLINE	kernel/smp.h	/^    CPU_OFFLINE,      \/* CPU is offline *\/$/;"	e	enum:__anon1
+CPU_ONLINE	kernel/smp.h	/^    CPU_ONLINE,       \/* CPU is online and running *\/$/;"	e	enum:__anon1
+CPU_READY	kernel/smp.h	/^    CPU_READY         \/* CPU completed initialization *\/$/;"	e	enum:__anon1
+CPU_STACK_SIZE	kernel/smp.h	13;"	d
+CPU_STATE_READY	arch/x86_64/apic.h	/^    CPU_STATE_READY             \/* CPU completed initialization *\/$/;"	e	enum:__anon3
+CPU_STATE_RUNNING	arch/x86_64/apic.h	/^    CPU_STATE_RUNNING,          \/* CPU is running *\/$/;"	e	enum:__anon3
+CPU_STATE_STARTING	arch/x86_64/apic.h	/^    CPU_STATE_STARTING,         \/* CPU is being started *\/$/;"	e	enum:__anon3
+CPU_STATE_UNINITIALIZED	arch/x86_64/apic.h	/^    CPU_STATE_UNINITIALIZED,    \/* CPU not yet started *\/$/;"	e	enum:__anon3
+C_SRCS	Makefile	/^C_SRCS := $(ARCH_C_SRCS) $(KERNEL_C_SRCS)$/;"	m
+DEVICE_STATE_FAILED	kernel/device.h	/^    DEVICE_STATE_FAILED,          \/* Initialization failed *\/$/;"	e	enum:device_state
+DEVICE_STATE_INITIALIZED	kernel/device.h	/^    DEVICE_STATE_INITIALIZED,     \/* Device fully initialized *\/$/;"	e	enum:device_state
+DEVICE_STATE_PROBED	kernel/device.h	/^    DEVICE_STATE_PROBED,          \/* Driver matched, probe completed *\/$/;"	e	enum:device_state
+DEVICE_STATE_UNINITIALIZED	kernel/device.h	/^    DEVICE_STATE_UNINITIALIZED,   \/* Device registered but not probed *\/$/;"	e	enum:device_state
+DEVICE_TYPE_CONSOLE	kernel/device.h	/^    DEVICE_TYPE_CONSOLE,      \/* Console devices *\/$/;"	e	enum:device_type
+DEVICE_TYPE_ISA	kernel/device.h	/^    DEVICE_TYPE_ISA,          \/* ISA bus devices *\/$/;"	e	enum:device_type
+DEVICE_TYPE_PCI	kernel/device.h	/^    DEVICE_TYPE_PCI,          \/* PCI bus devices *\/$/;"	e	enum:device_type
+DEVICE_TYPE_PLATFORM	kernel/device.h	/^    DEVICE_TYPE_PLATFORM,     \/* Platform devices (memory-mapped, fixed) *\/$/;"	e	enum:device_type
+DEVICE_TYPE_SERIAL	kernel/device.h	/^    DEVICE_TYPE_SERIAL,       \/* Serial port devices *\/$/;"	e	enum:device_type
+DEVICE_TYPE_SERIAL_ID	arch/x86_64/serial_driver.c	9;"	d	file:
+DEVICE_TYPE_UNKNOWN	kernel/device.h	/^    DEVICE_TYPE_UNKNOWN,$/;"	e	enum:device_type
+GRUB_MKRESCUE	Makefile	/^GRUB_MKRESCUE := grub-mkrescue$/;"	m
+IA32_APIC_BASE_MSR	arch/x86_64/apic.c	11;"	d	file:
+ISO	Makefile	/^ISO := jakernel.iso$/;"	m
+ISO_DIR	Makefile	/^ISO_DIR := isodir$/;"	m
+JAKERNEL_ARCH_X86_64_APIC_H	arch/x86_64/apic.h	4;"	d
+JAKERNEL_ARCH_X86_64_IO_H	arch/x86_64/io.h	4;"	d
+JAKERNEL_ARCH_X86_64_SERIAL_H	arch/x86_64/serial.h	4;"	d
+JAKERNEL_ARCH_X86_64_VGA_H	arch/x86_64/vga.h	4;"	d
+JAKERNEL_KERNEL_DEVICE_H	kernel/device.h	4;"	d
+JAKERNEL_KERNEL_SMP_H	kernel/smp.h	4;"	d
+KERNEL	Makefile	/^KERNEL := jakernel$/;"	m
+KERNEL_C_SRCS	Makefile	/^KERNEL_C_SRCS := $(KERNEL_DIR)\/main.c $(KERNEL_DIR)\/device.c $(KERNEL_DIR)\/smp.c$/;"	m
+KERNEL_DIR	Makefile	/^KERNEL_DIR := kernel$/;"	m
+KERNEL_ELF	Makefile	/^KERNEL_ELF := $(BUILD_DIR)\/$(KERNEL).elf$/;"	m
+KERNEL_OBJS	Makefile	/^KERNEL_OBJS := $(patsubst $(KERNEL_DIR)\/%.c,$(BUILD_DIR)\/kernel_%.o,$(KERNEL_C_SRCS))$/;"	m
+LAPIC_APR	arch/x86_64/apic.h	12;"	d
+LAPIC_DEFAULT_BASE	arch/x86_64/apic.h	66;"	d
+LAPIC_DFR	arch/x86_64/apic.h	16;"	d
+LAPIC_EOI	arch/x86_64/apic.h	14;"	d
+LAPIC_ERROR_LVT	arch/x86_64/apic.h	32;"	d
+LAPIC_ESR	arch/x86_64/apic.h	24;"	d
+LAPIC_ICR_ASSERT	arch/x86_64/apic.h	40;"	d
+LAPIC_ICR_DM_EXTINT	arch/x86_64/apic.h	50;"	d
+LAPIC_ICR_DM_FIXED	arch/x86_64/apic.h	44;"	d
+LAPIC_ICR_DM_INIT	arch/x86_64/apic.h	48;"	d
+LAPIC_ICR_DM_LOWPRI	arch/x86_64/apic.h	45;"	d
+LAPIC_ICR_DM_NMI	arch/x86_64/apic.h	47;"	d
+LAPIC_ICR_DM_SMI	arch/x86_64/apic.h	46;"	d
+LAPIC_ICR_DM_STARTUP	arch/x86_64/apic.h	49;"	d
+LAPIC_ICR_DS	arch/x86_64/apic.h	38;"	d
+LAPIC_ICR_DST_ALL	arch/x86_64/apic.h	59;"	d
+LAPIC_ICR_DST_LOGICAL	arch/x86_64/apic.h	54;"	d
+LAPIC_ICR_DST_NONE	arch/x86_64/apic.h	57;"	d
+LAPIC_ICR_DST_OTHERS	arch/x86_64/apic.h	60;"	d
+LAPIC_ICR_DST_PHYSICAL	arch/x86_64/apic.h	53;"	d
+LAPIC_ICR_DST_SELF	arch/x86_64/apic.h	58;"	d
+LAPIC_ICR_HIGH	arch/x86_64/apic.h	26;"	d
+LAPIC_ICR_LEVEL	arch/x86_64/apic.h	39;"	d
+LAPIC_ICR_LOW	arch/x86_64/apic.h	25;"	d
+LAPIC_ICR_PENDING	arch/x86_64/apic.h	41;"	d
+LAPIC_ID	arch/x86_64/apic.h	9;"	d
+LAPIC_IRR0	arch/x86_64/apic.h	22;"	d
+LAPIC_IRR1	arch/x86_64/apic.h	23;"	d
+LAPIC_ISR0	arch/x86_64/apic.h	18;"	d
+LAPIC_ISR1	arch/x86_64/apic.h	19;"	d
+LAPIC_LDR	arch/x86_64/apic.h	15;"	d
+LAPIC_LINT0_LVT	arch/x86_64/apic.h	30;"	d
+LAPIC_LINT1_LVT	arch/x86_64/apic.h	31;"	d
+LAPIC_PERF_LVT	arch/x86_64/apic.h	29;"	d
+LAPIC_PPR	arch/x86_64/apic.h	13;"	d
+LAPIC_SVR	arch/x86_64/apic.h	17;"	d
+LAPIC_SVR_ENABLE	arch/x86_64/apic.h	63;"	d
+LAPIC_THERM_LVT	arch/x86_64/apic.h	28;"	d
+LAPIC_TIMER_CCR	arch/x86_64/apic.h	34;"	d
+LAPIC_TIMER_DCR	arch/x86_64/apic.h	35;"	d
+LAPIC_TIMER_ICR	arch/x86_64/apic.h	33;"	d
+LAPIC_TIMER_LVT	arch/x86_64/apic.h	27;"	d
+LAPIC_TMR0	arch/x86_64/apic.h	20;"	d
+LAPIC_TMR1	arch/x86_64/apic.h	21;"	d
+LAPIC_TPR	arch/x86_64/apic.h	11;"	d
+LAPIC_VER	arch/x86_64/apic.h	10;"	d
+LD	Makefile	/^LD := ld$/;"	m
+LDFLAGS	Makefile	/^LDFLAGS := -nostdlib -m elf_x86_64$/;"	m
+MAX_CPUS	arch/x86_64/apic.h	69;"	d
+MAX_DEVICES	kernel/device.c	7;"	d	file:
+OBJS	Makefile	/^OBJS := $(ARCH_BOOT_OBJ) $(ARCH_OBJS) $(KERNEL_OBJS)$/;"	m
+SERIAL_COM1	arch/x86_64/serial.h	7;"	d
+SERIAL_DRIVER_ID	arch/x86_64/serial_driver.c	24;"	d	file:
+SERIAL_DRIVER_MASK	arch/x86_64/serial_driver.c	25;"	d	file:
+SERIAL_LSR_THRE	arch/x86_64/serial_driver.c	21;"	d	file:
+SERIAL_REG_DATA	arch/x86_64/serial_driver.c	12;"	d	file:
+SERIAL_REG_FIFO_CTRL	arch/x86_64/serial_driver.c	14;"	d	file:
+SERIAL_REG_INT_EN	arch/x86_64/serial_driver.c	13;"	d	file:
+SERIAL_REG_LINE_CTRL	arch/x86_64/serial_driver.c	15;"	d	file:
+SERIAL_REG_LINE_STAT	arch/x86_64/serial_driver.c	17;"	d	file:
+SERIAL_REG_MODEM_CTRL	arch/x86_64/serial_driver.c	16;"	d	file:
+SERIAL_REG_MODEM_STAT	arch/x86_64/serial_driver.c	18;"	d	file:
+SMP_MAX_CPUS	kernel/smp.h	10;"	d
+VGA_BUFFER	arch/x86_64/vga.c	7;"	d	file:
+VGA_COLOR	arch/x86_64/vga.h	31;"	d
+VGA_COLOR_BLACK	arch/x86_64/vga.h	13;"	d
+VGA_COLOR_BLUE	arch/x86_64/vga.h	14;"	d
+VGA_COLOR_BRIGHT_BLUE	arch/x86_64/vga.h	22;"	d
+VGA_COLOR_BRIGHT_CYAN	arch/x86_64/vga.h	24;"	d
+VGA_COLOR_BRIGHT_GREEN	arch/x86_64/vga.h	23;"	d
+VGA_COLOR_BRIGHT_MAGENTA	arch/x86_64/vga.h	26;"	d
+VGA_COLOR_BRIGHT_RED	arch/x86_64/vga.h	25;"	d
+VGA_COLOR_BROWN	arch/x86_64/vga.h	19;"	d
+VGA_COLOR_CYAN	arch/x86_64/vga.h	16;"	d
+VGA_COLOR_DARK_GREY	arch/x86_64/vga.h	21;"	d
+VGA_COLOR_GREEN	arch/x86_64/vga.h	15;"	d
+VGA_COLOR_LIGHT_GREY	arch/x86_64/vga.h	20;"	d
+VGA_COLOR_MAGENTA	arch/x86_64/vga.h	18;"	d
+VGA_COLOR_RED	arch/x86_64/vga.h	17;"	d
+VGA_COLOR_WHITE	arch/x86_64/vga.h	28;"	d
+VGA_COLOR_YELLOW	arch/x86_64/vga.h	27;"	d
+VGA_HEIGHT	arch/x86_64/vga.h	10;"	d
+VGA_WIDTH	arch/x86_64/vga.h	9;"	d
+_start	arch/x86_64/boot.S	/^_start:$/;"	l
+_trampoline_halt	arch/x86_64/boot.S	/^_trampoline_halt:$/;"	l
+_trampoline_long_mode	arch/x86_64/boot.S	/^_trampoline_long_mode:$/;"	l
+acpi_id	arch/x86_64/apic.h	/^    uint8_t acpi_id;            \/* ACPI processor ID *\/$/;"	m	struct:__anon4
+ap_entry	arch/x86_64/boot.S	/^ap_entry:$/;"	l
+ap_gdt32	arch/x86_64/boot.S	/^ap_gdt32:$/;"	l
+ap_gdt64	arch/x86_64/boot.S	/^ap_gdt64:$/;"	l
+ap_gdt64_ptr	arch/x86_64/boot.S	/^ap_gdt64_ptr:$/;"	l
+ap_halt	arch/x86_64/boot.S	/^ap_halt:$/;"	l
+ap_mode_64	arch/x86_64/boot.S	/^ap_mode_64:$/;"	l
+ap_protected_mode	arch/x86_64/boot.S	/^ap_protected_mode:$/;"	l
+ap_stack_bottom	arch/x86_64/boot.S	/^ap_stack_bottom:$/;"	l
+ap_stack_end	arch/x86_64/boot.S	/^ap_stack_end:$/;"	l
+ap_stack_top	arch/x86_64/boot.S	/^ap_stack_top:$/;"	l
+ap_stacks	kernel/smp.c	/^static uint8_t ap_stacks[SMP_MAX_CPUS][CPU_STACK_SIZE] __attribute__((aligned(16)));$/;"	v	file:
+ap_start	kernel/smp.c	/^void ap_start(void) {$/;"	f
+ap_startup	arch/x86_64/apic.c	/^int ap_startup(uint8_t apic_id, uint32_t startup_addr) {$/;"	f
+ap_trampoline_end	arch/x86_64/boot.S	/^ap_trampoline_end:$/;"	l
+ap_trampoline_start	arch/x86_64/boot.S	/^ap_trampoline_start:$/;"	l
+ap_wait_loop	arch/x86_64/boot.S	/^ap_wait_loop:$/;"	l
+apic_id	kernel/smp.h	/^    uint8_t apic_id;           \/* Local APIC ID *\/$/;"	m	struct:__anon2
+base_port	arch/x86_64/serial_driver.c	/^    uint16_t base_port;$/;"	m	struct:serial_data	file:
+boot_is_bsp	arch/x86_64/boot.S	/^boot_is_bsp:$/;"	l
+boot_pd	arch/x86_64/boot.S	/^boot_pd:$/;"	l
+boot_pdpt	arch/x86_64/boot.S	/^boot_pdpt:$/;"	l
+boot_pml4	arch/x86_64/boot.S	/^boot_pml4:$/;"	l
+bound_driver	kernel/device.h	/^    struct driver *bound_driver;      \/* Driver that matched this device *\/$/;"	m	struct:device	typeref:struct:device::driver
+bsp_init_complete	kernel/smp.c	/^static volatile int bsp_init_complete = 0;$/;"	v	file:
+bsp_init_done	arch/x86_64/boot.S	/^bsp_init_done:$/;"	l
+com1_data	arch/x86_64/serial_driver.c	/^static struct serial_data com1_data;$/;"	v	typeref:struct:serial_data	file:
+com1_data_init	arch/x86_64/serial_driver.c	/^static void com1_data_init(void) {$/;"	f	file:
+com1_device	arch/x86_64/serial_driver.c	/^static struct device com1_device = {$/;"	v	typeref:struct:device	file:
+cpu_boot_counter	arch/x86_64/boot.S	/^cpu_boot_counter:$/;"	l
+cpu_count	kernel/smp.c	/^static int cpu_count = 0;$/;"	v	file:
+cpu_index	kernel/smp.h	/^    uint8_t cpu_index;         \/* CPU index (0, 1, 2, 3) *\/$/;"	m	struct:__anon2
+cpu_info	kernel/smp.c	/^static smp_cpu_info_t cpu_info[SMP_MAX_CPUS];$/;"	v	file:
+cpu_info_t	arch/x86_64/apic.h	/^} cpu_info_t;$/;"	t	typeref:struct:__anon4
+cpu_state_t	arch/x86_64/apic.h	/^} cpu_state_t;$/;"	t	typeref:enum:__anon3
+current_cpu_index	kernel/smp.c	/^static volatile int current_cpu_index = 0;$/;"	v	file:
+device	kernel/device.h	/^struct device {$/;"	s
+device_count	kernel/device.c	/^static int device_count = 0;$/;"	v	file:
+device_get	kernel/device.c	/^struct device *device_get(const char *name) {$/;"	f
+device_get_drvdata	kernel/device.c	/^void *device_get_drvdata(struct device *dev) {$/;"	f
+device_init_all	kernel/device.c	/^int device_init_all(void) {$/;"	f
+device_list	kernel/device.c	/^static struct device *device_list = NULL;$/;"	v	typeref:struct:device	file:
+device_probe_all	kernel/device.c	/^int device_probe_all(void) {$/;"	f
+device_register	kernel/device.c	/^int device_register(struct device *dev) {$/;"	f
+device_set_drvdata	kernel/device.c	/^void device_set_drvdata(struct device *dev, void *data) {$/;"	f
+device_state	kernel/device.h	/^enum device_state {$/;"	g
+device_type	kernel/device.h	/^enum device_type {$/;"	g
+device_unregister	kernel/device.c	/^void device_unregister(struct device *dev) {$/;"	f
+driver	kernel/device.h	/^struct driver {$/;"	s
+driver_data	kernel/device.h	/^    void *driver_data;$/;"	m	struct:device
+driver_list	kernel/device.c	/^static struct driver *driver_list = NULL;$/;"	v	typeref:struct:driver	file:
+driver_register	kernel/device.c	/^int driver_register(struct driver *drv) {$/;"	f
+driver_unregister	kernel/device.c	/^void driver_unregister(struct driver *drv) {$/;"	f
+efault	Makefile	/^	echo 'set default=0' >> $(ISO_DIR)\/boot\/grub\/grub.cfg$/;"	m
+gdt32_ptr	arch/x86_64/boot.S	/^gdt32_ptr:$/;"	l
+gdt64	arch/x86_64/boot.S	/^gdt64:$/;"	l
+gdt64_ptr	arch/x86_64/boot.S	/^gdt64_ptr:$/;"	l
+halt	arch/x86_64/boot.S	/^halt:$/;"	l
+halt_loop	arch/x86_64/boot.S	/^halt_loop:$/;"	l
+id	arch/x86_64/apic.h	/^    uint8_t id;                 \/* Local APIC ID *\/$/;"	m	struct:__anon4
+imeout	Makefile	/^	echo 'set timeout=0' > $(ISO_DIR)\/boot\/grub\/grub.cfg$/;"	m
+inb	arch/x86_64/io.h	/^static inline uint8_t inb(uint16_t port) {$/;"	f
+init	kernel/device.h	/^    int (*init)(struct device *dev);      \/* Initialize the device *\/$/;"	m	struct:driver
+init_priority	kernel/device.h	/^    uint8_t init_priority;            \/* Initialization order (0=first) *\/$/;"	m	struct:device
+initialized	arch/x86_64/serial_driver.c	/^    int initialized;$/;"	m	struct:serial_data	file:
+inl	arch/x86_64/io.h	/^static inline uint32_t inl(uint16_t port) {$/;"	f
+inw	arch/x86_64/io.h	/^static inline uint16_t inw(uint16_t port) {$/;"	f
+io_port_base	kernel/device.h	/^    uint16_t io_port_base;            \/* I\/O port base *\/$/;"	m	struct:device
+io_port_count	kernel/device.h	/^    uint16_t io_port_count;           \/* Number of I\/O ports *\/$/;"	m	struct:device
+is_bsp	arch/x86_64/apic.c	/^int is_bsp(void) {$/;"	f
+kernel_halt	kernel/main.c	/^static void kernel_halt(void) {$/;"	f	file:
+kernel_main	kernel/main.c	/^void kernel_main(void) {$/;"	f
+lapic_base	arch/x86_64/apic.c	/^static volatile uint32_t *lapic_base = (volatile uint32_t *)LAPIC_DEFAULT_BASE;$/;"	v	file:
+lapic_get_base	arch/x86_64/apic.c	/^uint64_t lapic_get_base(void) {$/;"	f
+lapic_get_id	arch/x86_64/apic.c	/^uint8_t lapic_get_id(void) {$/;"	f
+lapic_init	arch/x86_64/apic.c	/^void lapic_init(void) {$/;"	f
+lapic_read	arch/x86_64/apic.c	/^uint32_t lapic_read(uint32_t offset) {$/;"	f
+lapic_send_ipi	arch/x86_64/apic.c	/^void lapic_send_ipi(uint8_t apic_id, uint32_t delivery_mode, uint8_t vector) {$/;"	f
+lapic_wait_for_ipi	arch/x86_64/apic.c	/^void lapic_wait_for_ipi(void) {$/;"	f
+lapic_write	arch/x86_64/apic.c	/^void lapic_write(uint32_t offset, uint32_t value) {$/;"	f
+long_mode_start	arch/x86_64/boot.S	/^long_mode_start:$/;"	l
+match_device_driver	kernel/device.c	/^static int match_device_driver(struct driver *drv, struct device *dev) {$/;"	f	file:
+match_id	kernel/device.h	/^    uint16_t match_id;                \/* ID for matching with device *\/$/;"	m	struct:driver
+match_id	kernel/device.h	/^    uint16_t match_id;                \/* ID for matching with driver *\/$/;"	m	struct:device
+match_mask	kernel/device.h	/^    uint16_t match_mask;              \/* Mask for ID matching *\/$/;"	m	struct:driver
+mmio_base	kernel/device.h	/^    void *mmio_base;                  \/* Memory-mapped I\/O base *\/$/;"	m	struct:device
+mmio_size	kernel/device.h	/^    uint32_t mmio_size;               \/* Memory-mapped I\/O size *\/$/;"	m	struct:device
+multiboot_header_end	arch/x86_64/boot.S	/^multiboot_header_end:$/;"	l
+multiboot_header_start	arch/x86_64/boot.S	/^multiboot_header_start:$/;"	l
+name	kernel/device.h	/^    const char *name;                 \/* Device name *\/$/;"	m	struct:device
+name	kernel/device.h	/^    const char *name;                 \/* Driver name *\/$/;"	m	struct:driver
+next	kernel/device.h	/^    struct device *next;$/;"	m	struct:device	typeref:struct:device::device
+next	kernel/device.h	/^    struct driver *next;$/;"	m	struct:driver	typeref:struct:driver::driver
+next_cpu_id	kernel/smp.c	/^static volatile int next_cpu_id = 0;$/;"	v	file:
+no_long_mode	arch/x86_64/boot.S	/^no_long_mode:$/;"	l
+outb	arch/x86_64/io.h	/^static inline void outb(uint16_t port, uint8_t val) {$/;"	f
+outl	arch/x86_64/io.h	/^static inline void outl(uint16_t port, uint32_t val) {$/;"	f
+outw	arch/x86_64/io.h	/^static inline void outw(uint16_t port, uint16_t val) {$/;"	f
+probe	kernel/device.h	/^    int (*probe)(struct device *dev);     \/* Check if driver can handle device *\/$/;"	m	struct:driver
+rdmsr	arch/x86_64/apic.c	/^static inline uint64_t rdmsr(uint32_t msr) {$/;"	f	file:
+ready_cpus	kernel/smp.c	/^static volatile int ready_cpus = 0;$/;"	v	file:
+remove	kernel/device.h	/^    void (*remove)(struct device *dev);   \/* Remove driver from device *\/$/;"	m	struct:driver
+serial_data	arch/x86_64/serial_driver.c	/^struct serial_data {$/;"	s	file:
+serial_driver	arch/x86_64/serial_driver.c	/^static struct driver serial_driver = {$/;"	v	typeref:struct:driver	file:
+serial_driver_init	arch/x86_64/serial_driver.c	/^int serial_driver_init(void) {$/;"	f
+serial_init_device	arch/x86_64/serial_driver.c	/^static int serial_init_device(struct device *dev) {$/;"	f	file:
+serial_probe	arch/x86_64/serial_driver.c	/^static int serial_probe(struct device *dev) {$/;"	f	file:
+serial_putc	arch/x86_64/serial_driver.c	/^void serial_putc(char c) {$/;"	f
+serial_puts	arch/x86_64/serial_driver.c	/^void serial_puts(const char *str) {$/;"	f
+smp_cpu_info_t	kernel/smp.h	/^} smp_cpu_info_t;$/;"	t	typeref:struct:__anon2
+smp_cpu_state_t	kernel/smp.h	/^} smp_cpu_state_t;$/;"	t	typeref:enum:__anon1
+smp_get_apic_id	kernel/smp.c	/^uint8_t smp_get_apic_id(void) {$/;"	f
+smp_get_cpu_count	kernel/smp.c	/^int smp_get_cpu_count(void) {$/;"	f
+smp_get_cpu_index	kernel/smp.c	/^int smp_get_cpu_index(void) {$/;"	f
+smp_get_cpu_info	kernel/smp.c	/^smp_cpu_info_t *smp_get_cpu_info(int cpu_index) {$/;"	f
+smp_init	kernel/smp.c	/^void smp_init(void) {$/;"	f
+smp_initialized	kernel/smp.c	/^static volatile int smp_initialized = 0;$/;"	v	file:
+smp_mark_cpu_ready	kernel/smp.c	/^void smp_mark_cpu_ready(int cpu_index) {$/;"	f
+smp_start_all_aps	kernel/smp.c	/^void smp_start_all_aps(void) {$/;"	f
+smp_wait_for_all_cpus	kernel/smp.c	/^void smp_wait_for_all_cpus(void) {$/;"	f
+stack_bottom	arch/x86_64/boot.S	/^stack_bottom:$/;"	l
+stack_top	arch/x86_64/apic.h	/^    void *stack_top;            \/* Top of stack for this CPU *\/$/;"	m	struct:__anon4
+stack_top	arch/x86_64/boot.S	/^stack_top:$/;"	l
+stack_top	kernel/smp.h	/^    void *stack_top;           \/* Top of this CPU's stack *\/$/;"	m	struct:__anon2
+state	arch/x86_64/apic.h	/^    cpu_state_t state;          \/* Current state *\/$/;"	m	struct:__anon4
+state	kernel/device.h	/^    enum device_state state;          \/* Current state *\/$/;"	m	struct:device	typeref:enum:device::device_state
+state	kernel/smp.h	/^    smp_cpu_state_t state;     \/* Current state *\/$/;"	m	struct:__anon2
+type	kernel/device.h	/^    enum device_type type;            \/* Device type *\/$/;"	m	struct:device	typeref:enum:device::device_type
+vga_init	arch/x86_64/vga.c	/^void vga_init(void) {$/;"	f
+vga_putc	arch/x86_64/vga.c	/^void vga_putc(char c, int row, int col, uint8_t color) {$/;"	f
+vga_puts	arch/x86_64/vga.c	/^void vga_puts(const char *str, int row, int col, uint8_t color) {$/;"	f
