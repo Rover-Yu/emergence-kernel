@@ -11,9 +11,9 @@ AS := as
 LD := ld
 GRUB_MKRESCUE := grub-mkrescue
 
-# Flags (use i386 for GRUB compatibility)
-CFLAGS := -ffreestanding -O2 -Wall -Wextra -nostdlib -m32
-LDFLAGS := -nostdlib -m elf_i386
+# Flags (x86_64 with multiboot support)
+CFLAGS := -ffreestanding -O2 -Wall -Wextra -nostdlib -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2
+LDFLAGS := -nostdlib -m elf_x86_64
 
 # Sources
 SRC_DIR := src
@@ -35,7 +35,7 @@ $(BUILD_DIR):
 $(ISO_DIR):
 	mkdir -p $(ISO_DIR)/boot/grub
 
-# Compile assembly
+# Compile assembly with 64-bit support
 $(ASM_OBJ): $(ASM_SRC) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 

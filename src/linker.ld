@@ -1,4 +1,4 @@
-/* JAKernel Linker Script */
+/* JAKernel Linker Script for x86_64 */
 
 ENTRY(_start)
 
@@ -12,12 +12,12 @@ SECTIONS
         *(.multiboot)
     }
 
-    /* Text section (code) */
+    /* Text section (code) - both 32-bit and 64-bit */
     .text ALIGN(4K) : {
         *(.text*)
     }
 
-    /* Read-only data */
+    /* Read-only data (GDT goes here) */
     .rodata ALIGN(4K) : {
         *(.rodata*)
     }
@@ -27,7 +27,7 @@ SECTIONS
         *(.data*)
     }
 
-    /* Uninitialized data */
+    /* Uninitialized data (stack and page tables) */
     .bss ALIGN(4K) : {
         *(COMMON)
         *(.bss*)
