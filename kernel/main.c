@@ -9,6 +9,7 @@
 #include "arch/x86_64/idt.h"
 #include "arch/x86_64/timer.h"
 #include "arch/x86_64/rtc.h"
+#include "arch/x86_64/ipi.h"
 
 /* External driver initialization functions */
 extern int serial_driver_init(void);
@@ -87,6 +88,15 @@ void kernel_main(void) {
         serial_puts("Initializing RTC timer...\n");
         rtc_init(RTC_RATE_2HZ);  /* 2 Hz = 500ms period */
         timer_start();
+
+        /* Initialize IPI driver (before enabling interrupts for testing) */
+        serial_puts("Initializing IPI driver...\n");
+        ret = ipi_driver_init();
+        (void)ret;
+
+        /* Run IPI self-test (before enabling interrupts) */
+        serial_puts("Running IPI self-test...\n");
+        ipi_test_start();
 
         serial_puts("Enabling interrupts...\n");
         enable_interrupts();

@@ -173,8 +173,77 @@ rtc_isr:
     /* Call C handler */
     call rtc_isr_handler
 
+    /* Restore all general-purpose registers
+     * Restore in reverse order: r15 first, rax last */
+    pop %r15
+    pop %r14
+    pop %r13
+    pop %r12
+    pop %r11
+    pop %r10
+    pop %r9
+    pop %r8
+    pop %rbp
+    pop %rdi
+    pop %rsi
+    pop %rdx
+    pop %rcx
+    pop %rbx
+    pop %rax
+
+    /* Return from interrupt */
+    iretq
+.size rtc_isr, . - rtc_isr
+
+/* IPI ISR - Inter-Processor Interrupt */
+.global ipi_isr
+.type ipi_isr, @function
+ipi_isr:
+    /* Save all general-purpose registers (x86-64 has no pusha)
+     * Save in order: r15 first, rax last (reverse restore) */
+    push %r15
+    push %r14
+    push %r13
+    push %r12
+    push %r11
+    push %r10
+    push %r9
+    push %r8
+    push %rbp
+    push %rdi
+    push %rsi
+    push %rdx
+    push %rcx
+    push %rbx
+    push %rax
+
+    /* In x86-64 long mode, segment registers are fixed to flat model
+     * We don't need to save/restore %ds, %es, %fs, %gs */
+
     /* Call C handler */
-    call rtc_isr_handler
+    call ipi_isr_handler
+
+    /* Restore all general-purpose registers
+     * Restore in reverse order: r15 first, rax last */
+    pop %r15
+    pop %r14
+    pop %r13
+    pop %r12
+    pop %r11
+    pop %r10
+    pop %r9
+    pop %r8
+    pop %rbp
+    pop %rdi
+    pop %rsi
+    pop %rdx
+    pop %rcx
+    pop %rbx
+    pop %rax
+
+    /* Return from interrupt */
+    iretq
+.size ipi_isr, . - ipi_isr
 
 
 

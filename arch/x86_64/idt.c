@@ -14,6 +14,7 @@ static idt_ptr_t idt_ptr;
 /* External ISR assembly wrappers */
 extern void timer_isr(void);
 extern void rtc_isr(void);
+extern void ipi_isr(void);
 extern void divide_error_isr(void);
 extern void debug_isr(void);
 extern void nmi_isr(void);
@@ -91,6 +92,8 @@ void idt_init(void) {
 
     /* Set up interrupt handlers (32+) */
     idt_set_gate(TIMER_VECTOR, (uint64_t)timer_isr, kernel_cs, IDT_GATE_INTERRUPT);
+    /* Vector 33 is for IPI (Inter-Processor Interrupt) */
+    idt_set_gate(33, (uint64_t)ipi_isr, kernel_cs, IDT_GATE_INTERRUPT);  /* IPI */
     /* IRQ 8 is RTC (Real Time Clock) */
     idt_set_gate(40, (uint64_t)rtc_isr, kernel_cs, IDT_GATE_INTERRUPT);  /* IRQ 8 */
     /* More interrupt handlers can be added here */
