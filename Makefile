@@ -19,11 +19,11 @@ LDFLAGS := -nostdlib -m elf_x86_64
 ARCH_DIR := arch/x86_64
 ARCH_BOOT_SRC := $(ARCH_DIR)/boot.S
 ARCH_LINKER := $(ARCH_DIR)/linker.ld
-ARCH_C_SRCS := $(ARCH_DIR)/vga.c $(ARCH_DIR)/serial.c
+ARCH_C_SRCS := $(ARCH_DIR)/vga.c $(ARCH_DIR)/serial_driver.c
 
 # Architecture-independent kernel sources
 KERNEL_DIR := kernel
-KERNEL_C_SRCS := $(KERNEL_DIR)/main.c
+KERNEL_C_SRCS := $(KERNEL_DIR)/main.c $(KERNEL_DIR)/device.c
 
 # All C sources
 C_SRCS := $(ARCH_C_SRCS) $(KERNEL_C_SRCS)
