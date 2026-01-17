@@ -42,6 +42,9 @@ uint8_t smp_get_apic_id(void);
 /* Get current CPU's index */
 int smp_get_cpu_index(void);
 
+/* Get APIC ID by CPU index */
+uint8_t smp_get_apic_id_by_index(int cpu_index);
+
 /* Mark CPU as ready */
 void smp_mark_cpu_ready(int cpu_index);
 

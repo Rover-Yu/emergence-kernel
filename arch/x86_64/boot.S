@@ -156,30 +156,32 @@ boot_is_bsp:
      * - PD   (Page Directory)        : Maps 1 GB
      * - PT   (Page Table)            : Maps 2 MB (not used, we use 2MB pages)
      *
-     * For simplicity, we identity-map the first 2MB of physical memory.
-     * This means virtual address 0x0 maps to physical address 0x0.
+     * We identity-map the first 1GB of physical memory using 2MB pages.
      */
 
-    /* Set up PML4 entry 0 -> points to PDPT
-     * Entry format: [63:52 reserved][51:12 PDPT phys addr][11:2 flags][1:0 reserved]
-     * Flags: bit 0 = Present, bit 1 = Writable */
+    /* Set up PML4 entry 0 -> points to PDPT */
     movl $boot_pdpt, %eax
     orl $0x3, %eax              /* Set Present (bit 0) and Writable (bit 1) */
     movl %eax, boot_pml4
 
-    /* Set up PDPT entry 0 -> points to Page Directory
-     * Same format as PML4 entry */
+    /* Set up PDPT entry 0 -> points to Page Directory */
     movl $boot_pd, %eax
     orl $0x3, %eax              /* Present + Writable */
     movl %eax, boot_pdpt
 
-    /* Set up PD entry 0 -> identity map first 2MB using a 2MB page
-     * Entry format with PS bit set: [63:52 reserved][51:21 reserved][20:13 PAT][12:0 flags]
-     * - Physical address must be 2MB aligned (bits 20-0 are zero)
-     * - Bit 7 (PS) = Page Size: 1 = 2MB page, 0 = 4KB page
-     * - Flags: Present (bit 0), Writable (bit 1), PS/huge (bit 7) */
-    movl $0x83, %eax            /* 0x83 = Present(1) | Writable(2) | PS(0x80) */
-    movl %eax, boot_pd
+    /* Set up PD entries for first 1GB using 2MB pages (512 entries needed) */
+    leal boot_pd, %esi         /* PD base address */
+    movl $512, %ecx            /* 512 entries for 1GB */
+    xorl %edx, %edx            /* Running physical address */
+
+1:
+    movl %edx, %eax
+    orl $0x183, %eax           /* Present | Writable | PS (2MB page) */
+    movl %eax, (%esi)          /* Store low 32 bits of PD entry */
+    movl $0, 4(%esi)           /* Store high 32 bits (reserved/zero) */
+    addl $8, %esi              /* Next PD entry (8 bytes per entry) */
+    addl $0x200000, %edx       /* Next 2MB physical address */
+    loop 1b                    /* Loop for all 512 entries */
 
     /* ---- CR Register Configuration ---- */
     /* Load PML4 base address into CR3
@@ -244,10 +246,8 @@ long_mode_start:
     mov %ax, %fs
     mov %ax, %gs
 
-    /* Signal APs that basic initialization is complete */
-    movq $1, bsp_init_done(%rip)
-
     /* Call kernel main */
+    /* Note: bsp_init_done will be set by kernel code when ready */
     call kernel_main
 
     /* Halt if kernel returns */

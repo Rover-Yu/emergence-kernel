@@ -3,6 +3,11 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "kernel/smp.h"
+#include "arch/x86_64/apic.h"
+
+/* External ACPI functions for getting APIC information */
+extern int acpi_get_apic_count(void);
+extern uint8_t acpi_get_apic_id_by_index(int index);
 
 /* Stack area for AP CPUs (aligned to 16 bytes) */
 static uint8_t ap_stacks[SMP_MAX_CPUS][CPU_STACK_SIZE] __attribute__((aligned(16)));
@@ -22,8 +27,9 @@ static volatile int smp_initialized = 0;
 /* CPU ID assignment - atomically incremented by each CPU */
 static volatile int next_cpu_id = 0;
 
-/* BSP initialization complete flag */
-static volatile int bsp_init_complete = 0;
+/* BSP initialization complete flag - use the same variable as boot.S */
+extern volatile int bsp_init_done;
+#define bsp_init_complete bsp_init_done  /* Alias for compatibility */
 
 /* Current CPU index (for each CPU) */
 static volatile int current_cpu_index = 0;
@@ -40,11 +46,14 @@ int smp_get_cpu_count(void) {
 /**
  * smp_get_apic_id - Get current CPU's APIC ID
  *
- * Returns: Local APIC ID (simulated as CPU index for now)
+ * Returns: Local APIC ID from CPU info
  */
 uint8_t smp_get_apic_id(void) {
-    /* For simplicity, return CPU index as APIC ID */
-    return (uint8_t)smp_get_cpu_index();
+    int idx = smp_get_cpu_index();
+    if (idx >= 0 && idx < SMP_MAX_CPUS) {
+        return cpu_info[idx].apic_id;
+    }
+    return 0;
 }
 
 /**
@@ -54,6 +63,19 @@ uint8_t smp_get_apic_id(void) {
  */
 int smp_get_cpu_index(void) {
     return current_cpu_index;
+}
+
+/**
+ * smp_get_apic_id_by_index - Get APIC ID by CPU index
+ * @cpu_index: CPU index
+ *
+ * Returns: APIC ID for the given CPU index
+ */
+uint8_t smp_get_apic_id_by_index(int cpu_index) {
+    if (cpu_index >= 0 && cpu_index < SMP_MAX_CPUS) {
+        return cpu_info[cpu_index].apic_id;
+    }
+    return 0;
 }
 
 /**
@@ -97,18 +119,22 @@ void smp_init(void) {
     current_cpu_index = 0;
     next_cpu_id = 1;
 
-    cpu_info[0].apic_id = 0;
-    cpu_info[0].cpu_index = 0;
-    cpu_info[0].state = CPU_ONLINE;
-    cpu_info[0].stack_top = NULL;
-
     cpu_count = SMP_MAX_CPUS;
     ready_cpus = 0;
 
-    for (int i = 1; i < SMP_MAX_CPUS; i++) {
-        cpu_info[i].apic_id = i;
+    /* Initialize CPU info with real APIC IDs from ACPI */
+    for (int i = 0; i < SMP_MAX_CPUS; i++) {
         cpu_info[i].cpu_index = i;
-        cpu_info[i].state = CPU_OFFLINE;
+        cpu_info[i].apic_id = acpi_get_apic_id_by_index(i);
+        cpu_info[i].state = (i == 0) ? CPU_ONLINE : CPU_OFFLINE;
+        cpu_info[i].stack_top = NULL;
+    }
+
+    /* Fallback: if ACPI didn't provide APIC IDs, use CPU indices */
+    if (cpu_info[0].apic_id == 0 && acpi_get_apic_count() == 0) {
+        for (int i = 0; i < SMP_MAX_CPUS; i++) {
+            cpu_info[i].apic_id = i;
+        }
     }
 }
 
@@ -116,10 +142,11 @@ void smp_init(void) {
  * smp_start_all_aps - Start all Application Processors
  */
 void smp_start_all_aps(void) {
-    /* Signal APs that they can proceed */
+    /* Signal APs that BSP initialization is complete
+     * APs will wake up through the normal boot path in boot.S */
     bsp_init_complete = 1;
 
-    /* Small delay */
+    /* Delay to allow APs to wake up */
     for (int i = 0; i < 100000; i++) {
         asm volatile ("pause");
     }

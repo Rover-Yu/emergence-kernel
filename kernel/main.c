@@ -5,6 +5,7 @@
 #include "kernel/smp.h"
 #include "arch/x86_64/vga.h"
 #include "arch/x86_64/apic.h"
+#include "arch/x86_64/acpi.h"
 
 /* External driver initialization functions */
 extern int serial_driver_init(void);
@@ -46,6 +47,13 @@ void kernel_main(void) {
     /* Print boot message */
     serial_puts("Hello, JAKernel!\n");
     serial_puts("Device driver framework initialized.\n");
+
+    /* Note: ACPI parsing temporarily disabled for testing
+     * We'll use default APIC IDs (0, 1, 2, 3) for now */
+    serial_puts("Using default APIC ID configuration (4 CPUs)\n");
+
+    /* Note: Local APIC initialization skipped for now
+     * QEMU may have APIC enabled by default */
     serial_puts("Initializing SMP...\n");
 
     /* Initialize SMP subsystem */

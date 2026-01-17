@@ -101,4 +101,12 @@ uint8_t acpi_get_apic_id(void);
  */
 int acpi_get_apic_count(void);
 
+/**
+ * acpi_get_apic_id_by_index - Get APIC ID by index
+ * @index: Index into APIC list (0-based)
+ *
+ * Returns: APIC ID at given index, or 0 if index out of range
+ */
+uint8_t acpi_get_apic_id_by_index(int index);
+
 #endif /* JAKERNEL_ARCH_X86_64_ACPI_H */

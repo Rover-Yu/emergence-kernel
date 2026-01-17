@@ -57,6 +57,14 @@ rsdp_t *acpi_find_rsdp(void) {
 }
 
 /**
+ * Helper to read SDT signature at physical address
+ */
+static uint32_t read_sdt_signature(uint32_t phys_addr) {
+    /* SDT signature is the first 4 bytes */
+    return *(uint32_t *)(uintptr_t)phys_addr;
+}
+
+/**
  * acpi_find_madt - Find MADT in RSDT
  *
  * Returns: Pointer to MADT header, NULL if not found
@@ -71,23 +79,28 @@ madt_header_t *acpi_find_madt(void) {
     /* Get RSDT address */
     uint32_t rsdt_address = rsdp->rsdt_address;
 
-    /* RSDT is an SDT containing pointers to other tables */
-    uint32_t *rsdt = (uint32_t *)rsdt_address;
+    /* RSDT is an SDT containing pointers to other tables
+     * Format: [signature:4][length:4][entry1:4][entry2:4]... */
+    uint32_t *rsdt = (uint32_t *)(uintptr_t)rsdt_address;
 
-    /* Skip signature and length (each entry is 8 bytes: type + length + address) */
-    uint32_t *entries = (uint32_t *)(rsdt + 8);
-    uint32_t rsdt_length = rsdp->length;
+    /* Length is at offset 4 (second DWORD) */
+    uint32_t rsdt_length = rsdt[1];
 
-    /* Get number of entries (each entry is 8 bytes: type + length + address) */
-    uint32_t num_entries = rsdt_length / 8;
+    /* Entries start at offset 8 (after signature and length)
+     * Each entry is a 32-bit physical address to an SDT */
+    uint32_t num_entries = (rsdt_length - 8) / 4;
+    uint32_t *entries = &rsdt[2];  /* Pointer to first entry */
 
     /* Search for MADT signature in RSDT entries */
     for (uint32_t i = 0; i < num_entries; i++) {
-        uint32_t address = entries[i * 2 + 1];  /* Address is 3rd DWORD */
+        uint32_t sdt_address = entries[i];
 
-        /* Check if signature matches "APIC" */
-        if (address == ACPI_MADT_SIGNATURE) {
-            return (madt_header_t *)address;
+        /* Read signature at this SDT address */
+        uint32_t sig = read_sdt_signature(sdt_address);
+
+        /* Check if signature matches "APIC" (0x43414944 = "APIC" in LE) */
+        if (sig == ACPI_MADT_SIGNATURE) {
+            return (madt_header_t *)(uintptr_t)sdt_address;
         }
     }
 
@@ -108,11 +121,12 @@ int acpi_parse_madt(madt_header_t *madt) {
 
     /* Parse APIC entries */
     uint8_t *entries = (uint8_t *)(madt + 1);
-    int offset = 0;
+    uint32_t offset = 0;
+    uint32_t madt_length = madt->length;
 
     apic_count = 0;
 
-    while (offset < madt->length) {
+    while (offset < madt_length) {
         madt_apic_entry_t *entry = (madt_apic_entry_t *)(entries + offset);
 
         if (entry->type == MADT_TYPE_LOCAL_APIC) {
@@ -151,4 +165,17 @@ uint8_t acpi_get_apic_id(void) {
  */
 int acpi_get_apic_count(void) {
     return apic_count;
+}
+
+/**
+ * acpi_get_apic_id_by_index - Get APIC ID by index
+ * @index: Index into APIC list (0-based)
+ *
+ * Returns: APIC ID at given index, or 0 if index out of range
+ */
+uint8_t acpi_get_apic_id_by_index(int index) {
+    if (index >= 0 && index < apic_count && index < 4) {
+        return apic_ids[index];
+    }
+    return 0;
 }

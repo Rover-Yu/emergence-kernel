@@ -54,10 +54,9 @@ uint64_t lapic_get_base(void) {
  * lapic_init - Initialize Local APIC
  */
 void lapic_init(void) {
-    uint64_t apic_base = lapic_get_base();
-
-    /* Set LAPIC base pointer */
-    lapic_base = (volatile uint32_t *)apic_base;
+    /* For now, use the default Local APIC base address
+     * Reading from MSR might fail if APIC is not enabled yet */
+    lapic_base = (volatile uint32_t *)LAPIC_DEFAULT_BASE;
 
     /* Enable Local APIC via SVR register */
     uint32_t svr = lapic_read(LAPIC_SVR);
@@ -102,11 +101,12 @@ void lapic_send_ipi(uint8_t apic_id, uint32_t delivery_mode, uint8_t vector) {
 /**
  * lapic_wait_for_ipi - Wait for IPI delivery to complete
  *
- * Waits for the delivery status bit to clear.
+ * Waits for the delivery status bit to clear, with timeout.
  */
 void lapic_wait_for_ipi(void) {
-    /* Wait for delivery status bit to clear */
-    while (lapic_read(LAPIC_ICR_LOW) & LAPIC_ICR_DS) {
+    /* Wait for delivery status bit to clear, with timeout */
+    int timeout = 10000;
+    while ((lapic_read(LAPIC_ICR_LOW) & LAPIC_ICR_DS) && timeout-- > 0) {
         asm volatile ("pause");
     }
 }
