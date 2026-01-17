@@ -26,13 +26,9 @@ extern void serial_putc(char c);
  * timer_handler - Timer interrupt handler
  *
  * Called from timer_isr in isr.S every time the timer expires.
- * Prints a mathematician quote every second, up to 5 quotes total.
+ * Prints a mathematician quote every 0.5 seconds, up to 5 quotes total.
  */
 void timer_handler(void) {
-    serial_puts("[DEBUG: timer_handler called, count=");
-    serial_putc('0' + timer_count);
-    serial_puts("]\n");
-
     if (timer_active && timer_count < (int)NUM_QUOTES) {
         serial_puts(math_quotes[timer_count]);
         serial_puts("\n");
@@ -41,7 +37,6 @@ void timer_handler(void) {
         /* Stop timer after 5 quotes */
         if (timer_count >= (int)NUM_QUOTES) {
             timer_active = 0;
-            serial_puts("[DEBUG: Timer stopped]\n");
         }
     }
 }

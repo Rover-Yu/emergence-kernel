@@ -7,10 +7,7 @@
 /* External serial output */
 extern void serial_puts(const char *str);
 
-/* Local RTC Status B bits for rtc_init() */
-#define RTC_STATUS_B_SET     0x80   /* Set bit */
-#define RTC_STATUS_B_DM      0x40   /* Data Mode bit */
-#define RTC_STATUS_B_24HR    0x02   /* 24-hour format bit */
+/* Use RTC Status B definitions from rtc.h */
 
 /**
  * rtc_read - Read RTC register
@@ -46,13 +43,6 @@ void rtc_write(uint8_t reg, uint8_t value) {
 void rtc_init(uint8_t rate) {
     uint8_t status_b;
 
-    /* Disable RTC interrupts during setup */
-    status_b = rtc_read(RTC_REG_STATUS_B);
-    rtc_write(RTC_REG_STATUS_B, status_b & ~RTC_STATUS_B_SET);
-
-    /* Enable binary mode (24-hour format is implicit in binary mode) */
-    status_b = rtc_read(RTC_REG_STATUS_B);
-    rtc_write(RTC_REG_STATUS_B, status_b | RTC_STATUS_B_DM);
 
     /* Set periodic interrupt rate */
     rtc_write(RTC_REG_STATUS_A, rate);
