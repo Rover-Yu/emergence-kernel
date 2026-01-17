@@ -6,6 +6,9 @@
 #include "arch/x86_64/vga.h"
 #include "arch/x86_64/apic.h"
 #include "arch/x86_64/acpi.h"
+#include "arch/x86_64/idt.h"
+#include "arch/x86_64/timer.h"
+#include "arch/x86_64/rtc.h"
 
 /* External driver initialization functions */
 extern int serial_driver_init(void);
@@ -73,6 +76,21 @@ void kernel_main(void) {
     if (cpu_id == 0) {
         serial_puts("SMP: BSP initialization complete.\n");
         serial_puts("SMP: Starting all Application Processors...\n");
+
+        /* Initialize IDT (Interrupt Descriptor Table) */
+        serial_puts("Initializing IDT...\n");
+        idt_init();
+
+        /* Initialize and start timer on BSP using RTC (Real Time Clock)
+         * RTC can generate periodic interrupts without needing APIC memory mapping
+         * We'll use 2Hz (500ms period) for the demo */
+        serial_puts("Initializing RTC timer...\n");
+        rtc_init(RTC_RATE_2HZ);  /* 2 Hz = 500ms period */
+        timer_start();
+
+        serial_puts("Enabling interrupts...\n");
+        enable_interrupts();
+        serial_puts("Timer started. Quotes will print every 0.5 seconds.\n");
 
         /* Mark BSP as ready */
         smp_mark_cpu_ready(0);

@@ -158,3 +158,64 @@ int is_bsp(void) {
     /* Bit 8 of IA32_APIC_BASE_MSR is set for BSP */
     return (apic_base & (1 << 8)) ? 1 : 0;
 }
+
+/**
+ * lapic_timer_init - Initialize Local APIC timer
+ * @frequency: Timer frequency in Hz (ticks per second)
+ *
+ * Configures the Local APIC timer for periodic interrupts.
+ * The timer will generate interrupts at the specified frequency.
+ *
+ * Note: The actual APIC timer base frequency is CPU-dependent.
+ * For QEMU, a typical value is around 100 MHz, but may vary.
+ * This function assumes the given frequency is the APIC base frequency.
+ *
+ * WARNING: Requires APIC MMIO region to be mapped in page tables.
+ * The Local APIC is at 0xFEE00000 (~4GB), beyond the current 1GB mapping.
+ * This will cause a page fault if APIC is not accessible.
+ */
+void lapic_timer_init(uint32_t frequency) {
+    /* Note: APIC access may fail if not mapped in page tables */
+    (void)frequency;  /* TODO: Implement once APIC is mapped */
+
+    /* For now, this is a placeholder to show where timer init would go
+     * The actual timer initialization requires:
+     * 1. APIC MMIO region mapped in page tables (0xFEE00000)
+     * 2. Proper APIC base address detection
+     * 3. Timer frequency calibration
+     */
+
+    /* Placeholder: Timer init skipped - needs APIC memory mapping */
+    asm volatile ("nop");  /* Prevent unused parameter warning */
+}
+
+/**
+ * lapic_timer_set_divide - Configure timer divide
+ * @divide_value: Divide configuration value
+ *
+ * Common values:
+ * 0xB = divide by 1
+ * 0x0 = divide by 2
+ * 0x1 = divide by 4
+ * 0x3 = divide by 16
+ */
+void lapic_timer_set_divide(uint32_t divide_value) {
+    lapic_write(LAPIC_TIMER_DCR, divide_value);
+}
+
+/**
+ * lapic_timer_set_initial_count - Set timer initial count
+ * @count: Initial count value
+ */
+void lapic_timer_set_initial_count(uint32_t count) {
+    lapic_write(LAPIC_TIMER_ICR, count);
+}
+
+/**
+ * lapic_timer_get_current_count - Get current timer count
+ *
+ * Returns: Current timer count value
+ */
+uint32_t lapic_timer_get_current_count(void) {
+    return lapic_read(LAPIC_TIMER_CCR);
+}

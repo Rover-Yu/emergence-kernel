@@ -62,6 +62,9 @@
 /* SVR (Spurious Interrupt Vector Register) bits */
 #define LAPIC_SVR_ENABLE     0x100   /* APIC enable bit */
 
+/* Timer interrupt vector */
+#define TIMER_VECTOR         32      /* Timer interrupt vector */
+
 /* Default Local APIC base address (will be detected from MSR) */
 #define LAPIC_DEFAULT_BASE   0xFEE00000
 
@@ -110,5 +113,11 @@ void lapic_wait_for_ipi(void);
 
 /* BSP (Boot Strap Processor) detection */
 int is_bsp(void);
+
+/* Timer functions */
+void lapic_timer_init(uint32_t frequency);
+void lapic_timer_set_divide(uint32_t divide_value);
+void lapic_timer_set_initial_count(uint32_t count);
+uint32_t lapic_timer_get_current_count(void);
 
 #endif /* JAKERNEL_ARCH_X86_64_APIC_H */

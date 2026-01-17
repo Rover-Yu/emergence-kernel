@@ -17,9 +17,9 @@ LDFLAGS := -nostdlib -m elf_x86_64
 
 # Architecture-specific sources (x86_64)
 ARCH_DIR := arch/x86_64
-ARCH_BOOT_SRC := $(ARCH_DIR)/boot.S
+ARCH_BOOT_SRC := $(ARCH_DIR)/boot.S $(ARCH_DIR)/isr.S
 ARCH_LINKER := $(ARCH_DIR)/linker.ld
-ARCH_C_SRCS := $(ARCH_DIR)/vga.c $(ARCH_DIR)/serial_driver.c $(ARCH_DIR)/apic.c $(ARCH_DIR)/acpi.c
+ARCH_C_SRCS := $(ARCH_DIR)/vga.c $(ARCH_DIR)/serial_driver.c $(ARCH_DIR)/apic.c $(ARCH_DIR)/acpi.c $(ARCH_DIR)/idt.c $(ARCH_DIR)/timer.c $(ARCH_DIR)/rtc.c
 
 # Architecture-independent kernel sources
 KERNEL_DIR := kernel
@@ -29,7 +29,8 @@ KERNEL_C_SRCS := $(KERNEL_DIR)/main.c $(KERNEL_DIR)/device.c $(KERNEL_DIR)/smp.c
 C_SRCS := $(ARCH_C_SRCS) $(KERNEL_C_SRCS)
 
 # Objects
-ARCH_BOOT_OBJ := $(BUILD_DIR)/boot.o
+ARCH_BOOT_OBJ := $(patsubst $(ARCH_DIR)/%.S,$(BUILD_DIR)/boot_%.o,$(ARCH_DIR)/boot.S) \
+                $(patsubst $(ARCH_DIR)/%.S,$(BUILD_DIR)/isr_%.o,$(ARCH_DIR)/isr.S)
 ARCH_OBJS := $(patsubst $(ARCH_DIR)/%.c,$(BUILD_DIR)/arch_%.o,$(ARCH_C_SRCS))
 KERNEL_OBJS := $(patsubst $(KERNEL_DIR)/%.c,$(BUILD_DIR)/kernel_%.o,$(KERNEL_C_SRCS))
 OBJS := $(ARCH_BOOT_OBJ) $(ARCH_OBJS) $(KERNEL_OBJS)
@@ -46,7 +47,11 @@ $(ISO_DIR):
 	mkdir -p $(ISO_DIR)/boot/grub
 
 # Compile architecture-specific boot assembly
-$(ARCH_BOOT_OBJ): $(ARCH_BOOT_SRC) | $(BUILD_DIR)
+$(BUILD_DIR)/boot_%.o: $(ARCH_DIR)/boot.S | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Compile ISR assembly
+$(BUILD_DIR)/isr_%.o: $(ARCH_DIR)/isr.S | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Compile architecture-specific C files
