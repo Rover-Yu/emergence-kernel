@@ -1,0 +1,15 @@
+# Build outputs
+build/
+isodir/
+*.iso
+
+# Editor and IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Session files
+session-*.md
+.claude/
