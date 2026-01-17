@@ -20,12 +20,33 @@ multiboot_header_start:
     .long 8
 multiboot_header_end:
 
+/* BSP initialization flag - APs wait until BSP sets this */
+.section .bss
+.align 8
+.global bsp_init_done
+bsp_init_done:
+    .skip 8  /* 64-bit flag */
+
+/* CPU boot counter - atomic increment to determine BSP/AP */
+.section .bss
+.align 8
+.global cpu_boot_counter
+cpu_boot_counter:
+    .skip 8  /* 64-bit counter */
+
 /* Boot stack (temporary, for 32-bit code) */
 .section .bss
 .align 16
 stack_bottom:
     .skip 16384  /* 16 KiB stack */
 stack_top:
+
+/* AP stacks (one for each AP) */
+.section .bss
+.align 16
+ap_stack_bottom:
+    .skip 16384  /* 16 KiB for APs */
+ap_stack_end:
 
 /* Page tables for Long Mode (must be aligned) */
 .section .bss
@@ -57,6 +78,31 @@ gdt64_ptr:
 _start:
     /* Disable interrupts */
     cli
+
+    /* Check if this CPU is first to run (BSP) or an AP
+     * We use a simple atomic increment on cpu_boot_counter */
+    mov $cpu_boot_counter, %eax
+    lock incl (%eax)           /* Atomic increment */
+    mov (%eax), %eax           /* Get new value */
+    cmp $1, %eax               /* If 1, we are BSP */
+    je boot_is_bsp
+
+    /* ============================================================
+     * AP Path - Wait for BSP to complete initialization
+     * ============================================================ */
+ap_wait_loop:
+    mov $bsp_init_done, %eax
+    mov (%eax), %eax            /* Load flag value (32-bit load) */
+    test %eax, %eax             /* Check if BSP is done */
+    jz ap_wait_loop             /* If 0, keep waiting */
+
+    /* BSP is done, AP continues to AP entry point */
+    jmp ap_entry
+
+boot_is_bsp:
+    /* ============================================================
+     * BSP Path - Boot the system
+     * ============================================================ */
 
     /* Set up temporary stack */
     mov $stack_top, %esp
@@ -198,6 +244,9 @@ long_mode_start:
     mov %ax, %fs
     mov %ax, %gs
 
+    /* Signal APs that basic initialization is complete */
+    movq $1, bsp_init_done(%rip)
+
     /* Call kernel main */
     call kernel_main
 
@@ -208,3 +257,160 @@ halt:
     jmp halt
 
 .size long_mode_start, . - long_mode_start
+
+/* AP entry point - called when BSP initialization is complete */
+.global ap_entry
+.code32
+ap_entry:
+    /* APs skip to 64-bit mode setup since BSP already did it */
+    /* Load GDT */
+    lgdt gdt64_ptr
+
+    /* Far jump to 64-bit code */
+    ljmp $8, $ap_mode_64
+
+.code64
+ap_mode_64:
+    /* Set up AP stack (use separate stack area) */
+    mov $ap_stack_end, %rsp
+
+    /* Clear segment registers */
+    mov $0, %ax
+    mov %ax, %ss
+    mov %ax, %ds
+    mov %ax, %es
+    mov %ax, %fs
+    mov %ax, %gs
+
+    /* Call AP start function in C */
+    movq $ap_start, %rax
+    call *%rax
+
+    /* Halt if ap_start returns */
+ap_halt:
+    cli
+    hlt
+    jmp ap_halt
+
+/* ============================================================================
+ * AP (Application Processor) Trampoline Code
+ * ============================================================================
+ * This code is placed at physical address 0x7000 and is executed by APs
+ * when they are woken up by STARTUP IPI. It starts in real mode and
+ * switches to long mode before calling ap_start().
+ * ============================================================================ */
+
+.section .ap_trampoline
+.align 4096
+.global ap_trampoline_start
+ap_trampoline_start:
+    /* Real mode entry point for APs */
+    .code16
+    cli
+
+    /* Load a temporary GDT */
+    lgdt gdt32_ptr - ap_trampoline_start + 0x7000
+
+    /* Enable protected mode */
+    movl %cr0, %eax
+    orl $1, %eax
+    movl %eax, %cr0
+
+    /* Far jump to 32-bit protected mode */
+    ljmp $0x08, $ap_protected_mode - ap_trampoline_start + 0x7000
+
+    /* 32-bit protected mode code */
+    .code32
+ap_protected_mode:
+    /* Set up data segments */
+    movw $0x10, %ax
+    movw %ax, %ds
+    movw %ax, %es
+    movw %ax, %ss
+
+    /* Set up temporary stack */
+    movl $ap_stack_top - ap_trampoline_start + 0x7000, %esp
+
+    /* Enable PAE */
+    movl %cr4, %eax
+    orl $(1 << 5), %eax
+    movl %eax, %cr4
+
+    /* Use same page tables as BSP (identity mapping) */
+    movl $boot_pml4, %ecx
+    movl %ecx, %cr3
+
+    /* Enable long mode */
+    movl $0xC0000080, %ecx
+    rdmsr
+    orl $(1 << 8), %eax
+    wrmsr
+
+    /* Enable paging */
+    movl %cr0, %eax
+    orl $(1 << 31), %eax
+    movl %eax, %cr0
+
+    /* Load 64-bit GDT */
+    lgdt gdt64_ptr - ap_trampoline_start + 0x7000
+
+    /* Far jump to 64-bit mode */
+    ljmp $0x08, $_trampoline_long_mode - ap_trampoline_start + 0x7000
+
+    /* 64-bit long mode code */
+    .code64
+_trampoline_long_mode:
+    /* Clear segment registers */
+    movq $0, %rax
+    mov %ax, %ss
+    mov %ax, %ds
+    mov %ax, %es
+    mov %ax, %fs
+    mov %ax, %gs
+
+    /* Call AP start function in C */
+    movq $ap_start, %rax
+    call *%rax
+
+    /* Halt if ap_start returns */
+_trampoline_halt:
+    cli
+    hlt
+    jmp _trampoline_halt
+
+/* ============================================================================
+ * AP GDT and Data Structures
+ * ============================================================================ */
+
+/* 32-bit GDT for AP (protected mode) */
+.align 16
+ap_gdt32:
+    .quad 0                           /* Null descriptor */
+    .quad 0x00CF9A000000FFFF          /* 32-bit code segment */
+    .quad 0x00CF92000000FFFF          /* 32-bit data segment */
+gdt32_ptr:
+    .word gdt32_ptr - ap_gdt32 - 1
+    .quad ap_gdt32 - ap_trampoline_start + 0x7000
+
+/* 64-bit GDT for AP (long mode) - reuse BSP's GDT layout */
+.align 16
+ap_gdt64:
+    .quad 0                           /* Null descriptor */
+    .quad 0x00209A0000000000          /* 64-bit code segment */
+    .quad 0x0000920000000000          /* 64-bit data segment */
+ap_gdt64_ptr:
+    .word ap_gdt64_ptr - ap_gdt64 - 1
+    .quad ap_gdt64 - ap_trampoline_start + 0x7000
+
+/* AP temporary stack */
+.align 16
+.skip 4096
+ap_stack_top:
+
+.size ap_trampoline_start, . - ap_trampoline_start
+
+/* External functions */
+.global ap_start
+.global boot_pml4
+.global ap_trampoline_end
+ap_trampoline_end:

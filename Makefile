@@ -19,11 +19,11 @@ LDFLAGS := -nostdlib -m elf_x86_64
 ARCH_DIR := arch/x86_64
 ARCH_BOOT_SRC := $(ARCH_DIR)/boot.S
 ARCH_LINKER := $(ARCH_DIR)/linker.ld
-ARCH_C_SRCS := $(ARCH_DIR)/vga.c $(ARCH_DIR)/serial_driver.c
+ARCH_C_SRCS := $(ARCH_DIR)/vga.c $(ARCH_DIR)/serial_driver.c $(ARCH_DIR)/apic.c
 
 # Architecture-independent kernel sources
 KERNEL_DIR := kernel
-KERNEL_C_SRCS := $(KERNEL_DIR)/main.c $(KERNEL_DIR)/device.c
+KERNEL_C_SRCS := $(KERNEL_DIR)/main.c $(KERNEL_DIR)/device.c $(KERNEL_DIR)/smp.c
 
 # All C sources
 C_SRCS := $(ARCH_C_SRCS) $(KERNEL_C_SRCS)
@@ -73,10 +73,10 @@ $(ISO): $(KERNEL_ELF) | $(ISO_DIR)
 	$(GRUB_MKRESCUE) -o $@ $(ISO_DIR)
 
 run: $(ISO)
-	qemu-system-x86_64 -M q35 -m 128M -serial stdio -cdrom $(ISO)
+	qemu-system-x86_64 -M q35 -m 128M -serial stdio -cdrom $(ISO) -smp 4
 
 run-debug: $(ISO)
-	qemu-system-x86_64 -M q35 -m 128M -serial stdio -cdrom $(ISO) -s -S
+	qemu-system-x86_64 -M q35 -m 128M -serial stdio -cdrom $(ISO) -smp 4 -s -S
 
 clean:
 	rm -rf $(BUILD_DIR) $(ISO_DIR) $(ISO)

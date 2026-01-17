@@ -4,6 +4,12 @@ ENTRY(_start)
 
 SECTIONS
 {
+    /* AP Trampoline - must be at physical address 0x7000 (28KB) */
+    . = 0x7000;
+    .ap_trampoline : {
+        *(.ap_trampoline)
+    }
+
     /* Kernel starts at 1MB */
     . = 1M;
 
