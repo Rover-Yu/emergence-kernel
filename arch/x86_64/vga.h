@@ -1,0 +1,38 @@
+/* JAKernel - x86-64 VGA text mode interface */
+
+#ifndef JAKERNEL_ARCH_X86_64_VGA_H
+#define JAKERNEL_ARCH_X86_64_VGA_H
+
+#include <stdint.h>
+
+/* VGA text mode dimensions */
+#define VGA_WIDTH   80
+#define VGA_HEIGHT  25
+
+/* VGA colors */
+#define VGA_COLOR_BLACK     0
+#define VGA_COLOR_BLUE      1
+#define VGA_COLOR_GREEN     2
+#define VGA_COLOR_CYAN      3
+#define VGA_COLOR_RED       4
+#define VGA_COLOR_MAGENTA   5
+#define VGA_COLOR_BROWN     6
+#define VGA_COLOR_LIGHT_GREY  7
+#define VGA_COLOR_DARK_GREY   8
+#define VGA_COLOR_BRIGHT_BLUE 9
+#define VGA_COLOR_BRIGHT_GREEN 10
+#define VGA_COLOR_BRIGHT_CYAN  11
+#define VGA_COLOR_BRIGHT_RED   12
+#define VGA_COLOR_BRIGHT_MAGENTA 13
+#define VGA_COLOR_YELLOW    14
+#define VGA_COLOR_WHITE     15
+
+/* Combine foreground and background colors */
+#define VGA_COLOR(fg, bg)   (((bg) << 4) | (fg))
+
+/* VGA functions */
+void vga_init(void);
+void vga_putc(char c, int row, int col, uint8_t color);
+void vga_puts(const char *str, int row, int col, uint8_t color);
+
+#endif /* JAKERNEL_ARCH_X86_64_VGA_H */

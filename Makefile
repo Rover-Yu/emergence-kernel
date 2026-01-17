@@ -12,17 +12,27 @@ LD := ld
 GRUB_MKRESCUE := grub-mkrescue
 
 # Flags (x86_64 with multiboot support)
-CFLAGS := -ffreestanding -O2 -Wall -Wextra -nostdlib -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2
+CFLAGS := -ffreestanding -O2 -Wall -Wextra -nostdlib -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2 -I.
 LDFLAGS := -nostdlib -m elf_x86_64
 
-# Sources
-SRC_DIR := src
-ASM_SRC := $(SRC_DIR)/boot.S
-C_SRC := $(SRC_DIR)/kernel.c
+# Architecture-specific sources (x86_64)
+ARCH_DIR := arch/x86_64
+ARCH_BOOT_SRC := $(ARCH_DIR)/boot.S
+ARCH_LINKER := $(ARCH_DIR)/linker.ld
+ARCH_C_SRCS := $(ARCH_DIR)/vga.c $(ARCH_DIR)/serial.c
+
+# Architecture-independent kernel sources
+KERNEL_DIR := kernel
+KERNEL_C_SRCS := $(KERNEL_DIR)/main.c
+
+# All C sources
+C_SRCS := $(ARCH_C_SRCS) $(KERNEL_C_SRCS)
 
 # Objects
-ASM_OBJ := $(BUILD_DIR)/boot.o
-C_OBJ := $(BUILD_DIR)/kernel.o
+ARCH_BOOT_OBJ := $(BUILD_DIR)/boot.o
+ARCH_OBJS := $(patsubst $(ARCH_DIR)/%.c,$(BUILD_DIR)/arch_%.o,$(ARCH_C_SRCS))
+KERNEL_OBJS := $(patsubst $(KERNEL_DIR)/%.c,$(BUILD_DIR)/kernel_%.o,$(KERNEL_C_SRCS))
+OBJS := $(ARCH_BOOT_OBJ) $(ARCH_OBJS) $(KERNEL_OBJS)
 KERNEL_ELF := $(BUILD_DIR)/$(KERNEL).elf
 
 .PHONY: all clean run
@@ -35,17 +45,21 @@ $(BUILD_DIR):
 $(ISO_DIR):
 	mkdir -p $(ISO_DIR)/boot/grub
 
-# Compile assembly with 64-bit support
-$(ASM_OBJ): $(ASM_SRC) | $(BUILD_DIR)
+# Compile architecture-specific boot assembly
+$(ARCH_BOOT_OBJ): $(ARCH_BOOT_SRC) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Compile C
-$(C_OBJ): $(C_SRC) | $(BUILD_DIR)
+# Compile architecture-specific C files
+$(BUILD_DIR)/arch_%.o: $(ARCH_DIR)/%.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Compile architecture-independent kernel C files
+$(BUILD_DIR)/kernel_%.o: $(KERNEL_DIR)/%.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Link
-$(KERNEL_ELF): $(ASM_OBJ) $(C_OBJ)
-	$(LD) $(LDFLAGS) -T $(SRC_DIR)/linker.ld $^ -o $@
+$(KERNEL_ELF): $(OBJS)
+	$(LD) $(LDFLAGS) -T $(ARCH_LINKER) $^ -o $@
 
 # Create ISO
 $(ISO): $(KERNEL_ELF) | $(ISO_DIR)
