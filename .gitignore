@@ -13,3 +13,8 @@ isodir/
 # Session files
 session-*.md
 .claude/
+
+# Cscope and Ctags files
+cscope.*
+cscope.*.out
+tags
