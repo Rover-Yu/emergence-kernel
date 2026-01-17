@@ -108,8 +108,8 @@ void lapic_send_ipi(uint8_t apic_id, uint32_t delivery_mode, uint8_t vector);
 /* Startup Application Processor */
 int ap_startup(uint8_t apic_id, uint32_t startup_addr);
 
-/* Wait for IPI delivery */
-void lapic_wait_for_ipi(void);
+/* Wait for IPI delivery (returns 0 on success, -1 on timeout) */
+int lapic_wait_for_ipi(void);
 
 /* BSP (Boot Strap Processor) detection */
 int is_bsp(void);

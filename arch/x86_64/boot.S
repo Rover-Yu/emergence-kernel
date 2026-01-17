@@ -41,6 +41,19 @@ stack_bottom:
     .skip 16384  /* 16 KiB stack */
 stack_top:
 
+/* Page tables for APIC mapping */
+.section .bss
+.align 4096
+.global boot_pd_apic
+boot_pd_apic:
+    .skip 4096
+
+.section .bss
+.align 4096
+.global boot_pt_apic
+boot_pt_apic:
+    .skip 4096
+
 /* AP stacks (one for each AP) */
 .section .bss
 .align 16
@@ -168,6 +181,35 @@ boot_is_bsp:
     movl $boot_pd, %eax
     orl $0x3, %eax              /* Present + Writable */
     movl %eax, boot_pdpt
+
+    /* ============================================================
+     * APIC Memory Mapping Strategy
+     * ============================================================
+     * For 0xFEE00000 access, we need PDPT[3] -> PD[504]
+     *
+     * Challenge: boot_pd only has 512 entries (indices 0-511)
+     * We need to access PD[504], which is in range
+     * BUT: The virtual address 0xFEE00000 translates to PDPT[3], NOT PDPT[0]
+     *
+     * Solution: Make PDPT[3] also point to boot_pd
+     * This means addresses 3GB-4GB will use the same PD entries as 0-1GB
+     * For 0xFEE00000: PDPT[3] -> boot_pd[504] -> should work!
+     */
+
+    /* Set up PDPT[3] -> boot_pd for APIC access */
+    movl $boot_pd, %eax
+    orl $0x3, %eax              /* Present + Writable */
+    movl %eax, boot_pdpt + 3*8  /* PDPT[3] */
+    movl $0, boot_pdpt + 3*8 + 4  /* High 32 bits */
+
+    /* Now set up boot_pd[504] to map the APIC region
+     * Note: This will be done AFTER the loop that sets up the first 1GB
+     * For now, let's set up PD[504] here before the loop */
+
+    /* Set up PD entry 504 -> 2MB page at 0xFEC00000 (covers APIC at 0xFEE00000) */
+    movl $0xFEC00183, %eax     /* 0xFEC00000 | Present | Writable | PS (2MB) */
+    movl %eax, boot_pd + 504*8  /* PD entry 504 */
+    movl $0, boot_pd + 504*8 + 4  /* High 32 bits */
 
     /* Set up PD entries for first 1GB using 2MB pages (512 entries needed) */
     leal boot_pd, %esi         /* PD base address */

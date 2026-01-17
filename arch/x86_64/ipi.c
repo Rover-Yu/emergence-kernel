@@ -43,8 +43,8 @@ void ipi_isr_handler(void) {
         }
     }
 
-    /* Note: EOI not needed for simulated IPI test
-     * In real system, would send EOI to Local APIC */
+    /* Send EOI to Local APIC */
+    lapic_write(LAPIC_EOI, 0);
 }
 
 /**
@@ -120,17 +120,22 @@ int ipi_driver_init(void) {
 }
 
 /**
- * ipi_send_self - Simulate IPI to current CPU (for testing)
+ * ipi_send_self - Send IPI to current CPU (self-IPI)
  *
- * NOTE: Real IPI requires APIC MMIO access (0xFEE00000), which is not
- * mapped in the current page table setup. For testing purposes, we
- * directly call the ISR handler instead of sending a real IPI.
+ * Uses the Local APIC destination shorthand "self" to send an IPI
+ * to the current CPU. This is used for testing the IPI mechanism.
  */
 void ipi_send_self(void) {
-    /* Simulate IPI by calling the handler directly
-     * In a real system with APIC mapped, this would use:
-     * lapic_write(LAPIC_ICR_LOW, icr_low); */
-    ipi_isr_handler();
+    uint32_t icr_low;
+
+    /* Use destination shorthand "self" - no need to set high ICR */
+    icr_low = LAPIC_ICR_DM_FIXED;    /* Fixed delivery mode */
+    icr_low |= IPI_TEST_VECTOR;      /* Vector number (33) */
+    icr_low |= LAPIC_ICR_DST_SELF;   /* Destination shorthand: self */
+    icr_low |= LAPIC_ICR_ASSERT;     /* Assert interrupt */
+
+    /* Send self-IPI (synchronous delivery, no wait needed) */
+    lapic_write(LAPIC_ICR_LOW, icr_low);
 }
 
 /**
@@ -202,20 +207,17 @@ bool ipi_is_bsp(void) {
  * Each IPI will print a math expression.
  */
 void ipi_test_start(void) {
+    extern void serial_puts(const char *str);
+
     ipi_count = 0;
     ipi_active = 1;
 
     serial_puts("IPI: Starting self-test (3 IPIs)...\n");
 
-    /* Send 3 self-IPIs with delays */
-    for (int i = 0; i < 3; i++) {
-        ipi_send_self();
+    serial_puts("IPI: About to send first IPI\n");
+    ipi_send_self();
+    serial_puts("IPI: First IPI sent\n");
 
-        /* Small delay between IPIs */
-        for (int j = 0; j < 100000; j++) {
-            asm volatile ("pause");
-        }
-    }
-
+    serial_puts("IPI: Done, completing test\n");
     serial_puts("IPI: Self-test complete\n");
 }

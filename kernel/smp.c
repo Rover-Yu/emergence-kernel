@@ -140,16 +140,51 @@ void smp_init(void) {
 
 /**
  * smp_start_all_aps - Start all Application Processors
+ *
+ * Sends real STARTUP IPIs to all APs via the Local APIC.
+ * The AP trampoline is at physical address 0x7000.
  */
 void smp_start_all_aps(void) {
-    /* Signal APs that BSP initialization is complete
-     * APs will wake up through the normal boot path in boot.S */
-    bsp_init_complete = 1;
+    extern int ap_startup(uint8_t apic_id, uint32_t startup_addr);
+    extern void serial_puts(const char *str);
+    extern void serial_putc(char c);
 
-    /* Delay to allow APs to wake up */
-    for (int i = 0; i < 100000; i++) {
-        asm volatile ("pause");
+    /* AP trampoline is at physical address 0x7000
+     * Page number for STARTUP IPI = 0x7000 >> 12 = 7 */
+    const uint32_t TRAMPOLINE_PAGE = 7;
+
+    serial_puts("SMP: Starting all Application Processors...\n");
+
+    /* Start each AP (CPU 1, 2, 3) */
+    for (int i = 1; i < SMP_MAX_CPUS; i++) {
+        uint8_t apic_id = smp_get_apic_id_by_index(i);
+
+        serial_puts("SMP: Starting AP ");
+        serial_putc('0' + i);
+        serial_puts(" (APIC ID ");
+        serial_putc('0' + apic_id);
+        serial_puts(")...\n");
+
+        /* Send STARTUP IPI to AP */
+        int ret = ap_startup(apic_id, TRAMPOLINE_PAGE);
+
+        if (ret == 0) {
+            serial_puts("SMP: STARTUP IPI sent successfully\n");
+        } else {
+            serial_puts("SMP: WARNING - STARTUP IPI failed (error ");
+            serial_putc('0' - ret);
+            serial_puts(")\n");
+        }
+
+        /* Small delay between AP startups */
+        for (int j = 0; j < 100000; j++) {
+            asm volatile ("pause");
+        }
     }
+
+    /* Signal APs that BSP initialization is complete */
+    bsp_init_complete = 1;
+    serial_puts("SMP: AP startup initiated\n");
 }
 
 /**
@@ -177,11 +212,9 @@ void ap_start(void) {
 
     cpu_info[my_index].state = CPU_ONLINE;
 
-    /* Call kernel_main for AP initialization path */
-    extern void kernel_main(void);
-    kernel_main();
-
-    /* Mark CPU as ready (in case kernel_main doesn't halt) */
+    /* Call AP-specific kernel entry point instead of kernel_main */
+    /* AP should not call kernel_main() - it would re-initialize everything */
+    /* Mark CPU as ready and halt */
     smp_mark_cpu_ready(my_index);
 
     /* Halt */

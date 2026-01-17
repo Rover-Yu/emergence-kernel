@@ -102,13 +102,16 @@ void lapic_send_ipi(uint8_t apic_id, uint32_t delivery_mode, uint8_t vector) {
  * lapic_wait_for_ipi - Wait for IPI delivery to complete
  *
  * Waits for the delivery status bit to clear, with timeout.
+ *
+ * Returns: 0 on success, -1 on timeout
  */
-void lapic_wait_for_ipi(void) {
+int lapic_wait_for_ipi(void) {
     /* Wait for delivery status bit to clear, with timeout */
     int timeout = 10000;
     while ((lapic_read(LAPIC_ICR_LOW) & LAPIC_ICR_DS) && timeout-- > 0) {
         asm volatile ("pause");
     }
+    return (timeout < 0) ? -1 : 0;
 }
 
 /**
