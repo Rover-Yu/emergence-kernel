@@ -34,6 +34,10 @@ extern volatile int bsp_init_done;
 /* Current CPU index (for each CPU) */
 static volatile int current_cpu_index = 0;
 
+/* External symbols */
+extern void ap_start(void);
+extern uint64_t boot_pml4;
+
 /**
  * smp_get_cpu_count - Get number of detected CPUs
  *
@@ -149,11 +153,25 @@ void smp_start_all_aps(void) {
     extern void serial_puts(const char *str);
     extern void serial_putc(char c);
 
-    /* AP trampoline is at physical address 0x7000
+    /* AP trampoline is at 0x7000 (page 7)
      * Page number for STARTUP IPI = 0x7000 >> 12 = 7 */
     const uint32_t TRAMPOLINE_PAGE = 7;
 
     serial_puts("SMP: Starting all Application Processors...\n");
+
+    /* Debug: Print CPU info */
+    serial_puts("SMP: CPU info:\n");
+    for (int i = 0; i < SMP_MAX_CPUS; i++) {
+        serial_puts("  CPU ");
+        serial_putc('0' + i);
+        serial_puts(" -> APIC ID ");
+        serial_putc('0' + smp_get_apic_id_by_index(i));
+        serial_puts("\n");
+    }
+
+    /* Disable interrupts during AP startup to avoid interference */
+    serial_puts("SMP: Disabling interrupts for AP startup...\n");
+    asm volatile ("cli");
 
     /* Start each AP (CPU 1, 2, 3) */
     for (int i = 1; i < SMP_MAX_CPUS; i++) {
@@ -169,37 +187,80 @@ void smp_start_all_aps(void) {
         int ret = ap_startup(apic_id, TRAMPOLINE_PAGE);
 
         if (ret == 0) {
-            serial_puts("SMP: STARTUP IPI sent successfully\n");
+            serial_puts("SMP: STARTUP IPI sent successfully, waiting for AP...\n");
         } else {
-            serial_puts("SMP: WARNING - STARTUP IPI failed (error ");
-            serial_putc('0' - ret);
-            serial_puts(")\n");
+            serial_puts("SMP: WARNING - STARTUP IPI failed\n");
         }
 
-        /* Small delay between AP startups */
-        for (int j = 0; j < 100000; j++) {
+        /* Give AP time to start */
+        for (int j = 0; j < 10000000; j++) {
             asm volatile ("pause");
+        }
+
+        /* Check if AP is ready */
+        if (cpu_info[i].state == CPU_READY) {
+            serial_puts("SMP: AP ");
+            serial_putc('0' + i);
+            serial_puts(" is READY!\n");
+        } else {
+            serial_puts("SMP: AP ");
+            serial_putc('0' + i);
+            serial_puts(" not ready yet (state=");
+            serial_putc('0' + cpu_info[i].state);
+            serial_puts(")\n");
         }
     }
 
     /* Signal APs that BSP initialization is complete */
     bsp_init_complete = 1;
-    serial_puts("SMP: AP startup initiated\n");
+    serial_puts("SMP: bsp_init_complete flag set\n");
+
+    /* Re-enable interrupts */
+    serial_puts("SMP: Re-enabling interrupts...\n");
+    asm volatile ("sti");
+
+    /* Wait a bit more */
+    for (int j = 0; j < 10000000; j++) {
+        asm volatile ("pause");
+    }
+
+    /* Final check */
+    serial_puts("SMP: Final CPU status:\n");
+    for (int i = 0; i < SMP_MAX_CPUS; i++) {
+        serial_puts("  CPU ");
+        serial_putc('0' + i);
+        serial_puts(" state=");
+        serial_putc('0' + cpu_info[i].state);
+        serial_puts("\n");
+    }
 }
 
 /**
  * ap_start - Application Processor entry point
  */
 void ap_start(void) {
+    extern void serial_puts(const char *str);
+    extern void serial_putc(char c);
+
+    /* Debug output to confirm AP reached this point */
+    serial_puts("[AP] ap_start() reached!\n");
+
     /* Wait for BSP initialization */
     while (!bsp_init_complete) {
         asm volatile ("pause");
     }
 
+    serial_puts("[AP] BSP init complete, getting CPU ID...\n");
+
     /* Get CPU ID */
     int my_index = __sync_fetch_and_add(&next_cpu_id, 1);
 
+    serial_puts("[AP] Got CPU index: ");
+    serial_putc('0' + my_index);
+    serial_puts("\n");
+
     if (my_index <= 0 || my_index >= SMP_MAX_CPUS) {
+        serial_puts("[AP] ERROR: Invalid CPU index!\n");
         while (1) { asm volatile ("hlt"); }
     }
 
@@ -212,11 +273,110 @@ void ap_start(void) {
 
     cpu_info[my_index].state = CPU_ONLINE;
 
-    /* Call AP-specific kernel entry point instead of kernel_main */
-    /* AP should not call kernel_main() - it would re-initialize everything */
+    serial_puts("[AP] Stack set up, marking CPU as ready...\n");
+
     /* Mark CPU as ready and halt */
     smp_mark_cpu_ready(my_index);
 
+    serial_puts("[AP] CPU marked as ready, halting...\n");
+
     /* Halt */
     while (1) { asm volatile ("hlt"); }
+}
+
+/**
+ * patch_ap_trampoline - Patch the AP trampoline with runtime values
+ *
+ * This function patches the placeholder values in the AP trampoline
+ * with the correct addresses for boot_pml4 and ap_start.
+ */
+void patch_ap_trampoline(void) {
+    extern void serial_puts(const char *str);
+    extern void serial_putc(char c);
+
+    /* Trampoline is at physical address 0x7000 */
+    uint8_t *trampoline = (uint8_t *)0x7000;
+
+    /* The trampoline ends with:
+     * - GDT32 data (24 bytes)
+     * - GDT32 ptr (6 bytes)
+     * - GDT64 data (24 bytes)
+     * - GDT64 ptr (10 bytes with padding)
+     * - boot_pml4_placeholder (4 bytes)
+     * - ap_start_placeholder (4 bytes)
+     *
+     * Total from GDT32 to end: 24+6+24+10+4+4 = 72 bytes (0x48)
+     *
+     * The placeholders are at the very end of the trampoline.
+     * We can find them by searching backward from the end.
+     */
+
+    /* Trampoline binary is 0xC8 (200) bytes based on the file size
+     * Placeholders start at approximately 0xC8 - 8 = 0xC0 */
+
+    uint8_t *ptr = trampoline + 0xC0;  /* Approximate location */
+
+    /* Search backward for the first zero dword (boot_pml4_placeholder = 0) */
+    while (ptr > trampoline) {
+        uint32_t *dword_ptr = (uint32_t *)ptr;
+        if (*dword_ptr == 0) {
+            /* Check if next dword is also 0 (ap_start_placeholder) */
+            if (*(dword_ptr + 1) == 0) {
+                break;
+            }
+        }
+        ptr--;
+    }
+
+    if (ptr <= trampoline) {
+        serial_puts("SMP: ERROR - Could not find placeholders in trampoline\n");
+        return;
+    }
+
+    /* Now ptr points to boot_pml4_placeholder */
+    uint32_t *boot_pml4_ptr = (uint32_t *)ptr;
+    uint32_t *ap_start_ptr = (uint32_t *)(ptr + 4);
+
+    /* Patch boot_pml4 placeholder with low 32 bits of address */
+    *boot_pml4_ptr = ((uint32_t)&boot_pml4);
+
+    /* Patch ap_start placeholder with low 32 bits of address */
+    *ap_start_ptr = ((uint32_t)&ap_start);
+
+    serial_puts("SMP: Trampoline patched successfully\n");
+    serial_puts("SMP: boot_pml4 = 0x");
+    uint32_t pml4_addr = (uint32_t)&boot_pml4;
+    for (int i = 28; i >= 0; i -= 4) {
+        uint8_t byte = (pml4_addr >> i) & 0xF;
+        serial_putc(byte < 10 ? '0' + byte : 'A' + byte - 10);
+    }
+    serial_puts("\n");
+
+    /* Copy trampoline to 0x7000 manually */
+    serial_puts("SMP: Copying trampoline to 0x7000...\n");
+    extern uint8_t _binary_build_ap_trampoline_bin_start[];
+    extern uint8_t _binary_build_ap_trampoline_bin_end[];
+    uint8_t *trampoline_src = _binary_build_ap_trampoline_bin_start;
+    uint8_t *trampoline_dst = (uint8_t *)0x7000;
+    uint32_t trampoline_size = _binary_build_ap_trampoline_bin_end - _binary_build_ap_trampoline_bin_start;
+
+    for (uint32_t i = 0; i < trampoline_size; i++) {
+        trampoline_dst[i] = trampoline_src[i];
+    }
+
+    /* Verify trampoline is loaded at 0x7000 */
+    serial_puts("SMP: Verifying trampoline at 0x7000...\n");
+    uint8_t *tramp_check = (uint8_t *)0x7000;
+    if (tramp_check[0] == 0xBA && tramp_check[1] == 0xF8) {
+        serial_puts("SMP: Trampoline signature OK (mov dx, 0x3F8)\n");
+    } else {
+        serial_puts("SMP: ERROR - Trampoline signature mismatch!\n");
+        serial_puts("SMP: First bytes: ");
+        for (int i = 0; i < 16; i++) {
+            serial_putc('0' + ((tramp_check[i] >> 4) & 0xF));
+            serial_putc('0' + (tramp_check[i] & 0xF));
+            serial_putc(' ');
+        }
+        serial_puts("\n");
+    }
 }

@@ -173,6 +173,13 @@ rtc_isr:
     /* Call C handler */
     call rtc_isr_handler
 
+    /* Send EOI to PIC (8259 Programmable Interrupt Controller)
+     * RTC uses IRQ 8, which goes to the slave PIC
+     * We need to send EOI to both slave and master PICs */
+    movb $0x20, %al           /* Generic EOI signal */
+    outb %al, $0xA0           /* Send to slave PIC (command port at 0xA0) */
+    outb %al, $0x20           /* Send to master PIC (command port at 0x20) */
+
     /* Restore all general-purpose registers
      * Restore in reverse order: r15 first, rax last */
     pop %r15

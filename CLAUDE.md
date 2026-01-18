@@ -4,274 +4,117 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-JAKernel is a minimal experimental operating system kernel for x86-64 architecture. It boots via GRUB using the Multiboot2 protocol and outputs "Hello, JAKernel!" to both VGA display and serial port.
+**JAKernel** is an educational x86-64 operating system kernel demonstrating OS fundamentals including multi-processor support (SMP), device driver frameworks, and interrupt handling. The kernel boots via GRUB2 multiboot2 and runs on QEMU.
 
-## Build Commands
+## Build and Run Commands
 
 ```bash
-# Build the kernel ISO image
-make all
+# Build the kernel ISO
+make
 
-# Run the kernel in QEMU (serial output goes to stdout)
+# Run in QEMU with 4 CPUs
 make run
 
-# Run the kernel in QEMU with GDB debugging (listens on localhost:1234)
+# Run in QEMU with GDB debugging (listens on localhost:1234)
 make run-debug
 
-# Clean all build artifacts
+# Clean build artifacts
 make clean
 ```
 
-## Debugging
+## Architecture Overview
 
-When using `make run-debug`, GDB will connect to QEMU's remote debugger on port 1234. The `.gdbinit` file is configured to:
-- Connect to `localhost:1234`
-- Load symbols from `build/jakernel.elf`
-- Set a breakpoint at `kernel_main`
-- Continue execution
+### Boot Process
 
-To debug manually:
-```bash
-# Terminal 1: Start QEMU with debugging
-make run-debug
+The kernel has a sophisticated multi-processor boot sequence:
 
-# Terminal 2: Run GDB (it will auto-load .gdbinit)
-gdb
-```
+1. **BSP (Bootstrap Processor) Path**: Starts at `_start` in `arch/x86_64/boot.S`
+   - 32-bit protected mode entry via multiboot2
+   - Enables PAE, sets up 4-level page tables (PML4 → PDPT → PD)
+   - Transitions to x86-64 long mode
+   - Calls `kernel_main()`
 
-## Architecture
+2. **AP (Application Processor) Path**: Woken via STARTUP IPI
+   - APs begin execution at physical address 0x7000 (`.ap_trampoline` section)
+   - Real mode → protected mode → long mode transition
+   - Call `ap_start()` in `kernel/smp.c`
 
-### Boot Sequence
-1. GRUB loads the kernel ELF file from the ISO
-2. Multiboot2 header in `arch/x86_64/boot.S` is validated by GRUB
-3. `_start` entry point in `boot.S` switches to 64-bit long mode
-4. `long_mode_start` sets up 64-bit environment and calls `kernel_main`
-5. `kernel_main()` in `kernel/main.c` initializes hardware and outputs messages
+3. **BSP/AP Detection**: Uses atomic increment of `cpu_boot_counter` at boot
+   - First CPU (counter = 1) is BSP
+   - Subsequent CPUs are APs and wait for `bsp_init_done` flag
 
-### Directory Structure
+### Memory Layout (defined in `arch/x86_64/linker.ld`)
 
-```
-arch/x86_64/          # Architecture-specific code (x86-64)
-├── boot.S            # Boot code with MMU initialization
-├── linker.ld         # Linker script for x86-64
-├── vga.c             # VGA text mode driver
-├── vga.h             # VGA interface
-├── serial.c          # Serial port (COM1) driver
-├── serial.h          # Serial interface
-└── io.h              # I/O port operations (inline asm)
+- **0x0000 - 0x7000**: Multiboot2 header
+- **0x7000 - 0x8000**: AP trampoline code (real mode entry for APs)
+- **1MB+**: Kernel proper (text, rodata, data, bss sections)
 
-kernel/               # Architecture-independent kernel code
-└── main.c            # Main kernel entry point
+### Key Subsystems
 
-include/              # Common headers (reserved for future use)
-```
+**Device Driver Framework** (`kernel/device.c`):
+- Match/probe/init lifecycle model
+- Priority-based initialization ordering
+- Driver registry (singly linked list) and device registry
+- ID matching using bitmask for device-driver compatibility
 
-### Source File Locations
+**SMP** (`kernel/smp.c`):
+- Supports up to 4 CPUs (`SMP_MAX_CPUS`)
+- Per-CPU stacks and state tracking
+- APIC ID mapping (default 0,1,2,3 when ACPI unavailable)
+- Atomic CPU ID assignment using `__sync_fetch_and_add`
 
-| Path | Purpose |
-|------|---------|
-| `arch/x86_64/boot.S` | Multiboot2 header, long mode setup, MMU initialization |
-| `arch/x86_64/linker.ld` | Memory layout: kernel at 1MB, 4KB-aligned sections |
-| `arch/x86_64/vga.c` | VGA text mode driver |
-| `arch/x86_64/serial.c` | Serial port driver |
-| `arch/x86_64/io.h` | x86 I/O port operations |
-| `kernel/main.c` | Architecture-independent kernel main |
+**Interrupt System**:
+- IDT setup in `arch/x86_64/idt.c`
+- Local APIC driver in `arch/x86_64/apic.c` for IPI delivery
+- RTC timer driver (`arch/x86_64/rtc.c`) for periodic interrupts
+- ISR stubs in `arch/x86_64/isr.S`
 
-### Memory Layout (defined in linker.ld)
-- Kernel loads at physical address 1MB
-- Multiboot header must be in first 8KB (required by GRUB)
-- All sections (text, rodata, data, bss) are 4KB-aligned
-- 16KB stack in `.bss` section
+### Page Table Mapping
 
-### Hardware Interfaces
-- **VGA Text Mode**: Direct write to `0xB8000` (80x25 character grid)
-- **Serial Port (COM1)**: I/O ports starting at `0x3F8`, configured for 115200 baud
+The kernel identity-maps the first 1GB of physical memory using 2MB pages. For APIC access at 0xFEE00000, the page tables use a clever trick: `PDPT[3]` points to the same page directory as `PDPT[0]`, allowing access to high-memory regions through the same PD entries.
 
-### Build Notes
-- Uses 64-bit x86_64 compilation with `-mcmodel=large` for kernel code
-- Freestanding C (`-nostdlib`, `-ffreestanding`) - no standard library
-- Compiled with GCC (`-Wall -Wextra -O2`)
-- Additional flags: `-mno-red-zone`, `-mno-mmx`, `-mno-sse`, `-mno-sse2`
-- Linked as ELF64 format (`-m elf_x86_64`)
-
-## Development Workflow
-
-1. Edit source files in appropriate directories:
-   - Architecture-specific code → `arch/x86_64/`
-   - Architecture-independent code → `kernel/`
-   - Common headers → `include/`
-2. Run `make all` to build the ISO
-3. Run `make run` to test in QEMU
-4. Check serial output in terminal for "Hello, JAKernel!"
-5. Use `make run-debug` and GDB for more detailed debugging
-
-## Coding Standards
-
-### Code Organization Rules
-
-This project follows a strict separation between architecture-specific and architecture-independent code:
-
-#### 1. Directory Structure
+## Code Organization
 
 ```
-arch/<architecture>/    # Architecture-specific code
-kernel/                  # Architecture-independent kernel code
-include/                 # Common headers shared across architectures
+arch/x86_64/          # Architecture-specific code
+├── boot.S           # Boot sequence, mode switching, AP trampoline
+├── isr.S            # Interrupt service routine stubs
+├── apic.c           # Local APIC and IPI handling
+├── idt.c            # Interrupt Descriptor Table setup
+├── ipi.c            # IPI driver (device framework integration)
+├── timer.c/rtc.c    # Timer drivers
+├── serial_driver.c  # Serial port output (debug)
+└── vga.c            # VGA text mode display
+
+kernel/              # Architecture-independent code
+├── main.c           # Kernel entry point, initialization orchestration
+├── device.c         # Device driver framework
+└── smp.c            # Multi-processor coordination
 ```
 
-#### 2. What Goes Where
+## Development Notes
 
-**`arch/<architecture>/`** - Architecture-specific code:
-- Boot code and early initialization (`boot.S`, `boot.c`)
-- Linker scripts (`linker.ld`)
-- Hardware-specific drivers:
-  - VGA/text mode display
-  - Serial port communication
-  - I/O port operations
-  - Memory-mapped I/O
-  - CPU-specific features (MSR, CR registers, etc.)
-- Assembly code for architecture-specific operations
-- Interrupt handling and IDT setup
-- GDT/TLB management
+- **Compiler flags**: `-ffreestanding -mcmodel=large -mno-red-zone` (bare metal, large code model, no red zone)
+- **Testing**: The `tests/` directory contains reference implementations (not compiled into kernel)
+- **Debug output**: Serial port (COM1: 0x3F8) is primary debug output; VGA is secondary
+- **SMP timing**: QEMU-specific optimizations use shorter delays (1ms vs 10ms) for IPI delivery
+- **ACPI**: Currently disabled; uses default APIC IDs (0-3)
 
-**`kernel/`** - Architecture-independent code:
-- Main kernel entry point
-- Generic algorithms and data structures
-- Memory management abstractions
-- Process management (when implemented)
-- File system abstractions (when implemented)
-- Generic device interfaces
+## Common Patterns
 
-**`include/`** - Common headers:
-- Type definitions (`stdint.h`, `stddef.h` replacements if needed)
-- Common macros
-- Architecture-independent interfaces
-- Configuration constants
-
-#### 3. File Naming Conventions
-
-- C source files: `.c` extension (e.g., `vga.c`, `main.c`)
-- Assembly files: `.S` extension (e.g., `boot.S`)
-- Header files: `.h` extension (e.g., `vga.h`, `io.h`)
-- Linker scripts: `.ld` extension (e.g., `linker.ld`)
-
-#### 4. Header Include Paths
-
-When including headers, use the full path from the project root:
+**Device Registration**:
 ```c
-#include "arch/x86_64/io.h"      // Architecture-specific header
-#include "arch/x86_64/vga.h"     // Architecture-specific header
-#include "kernel/types.h"        // Kernel header (if created)
+struct driver my_driver = {
+    .name = "my_driver",
+    .match_id = 0x1234,
+    .match_mask = 0xFFFF,
+    .probe = my_probe,
+    .init = my_init,
+};
+driver_register(&my_driver);
 ```
 
-#### 5. Makefile Integration
-
-When adding new files:
-- Add architecture-specific C files to `ARCH_C_SRCS` in Makefile
-- Add kernel C files to `KERNEL_C_SRCS` in Makefile
-- Object files will be automatically generated with appropriate prefixes:
-  - `arch/<architecture>/*.c` → `build/arch_*.o`
-  - `kernel/*.c` → `build/kernel_*.o`
-
-#### 6. Adding Support for New Architectures
-
-To add a new architecture (e.g., ARM64):
-1. Create `arch/arm64/` directory
-2. Add architecture-specific boot code, linker script, and drivers
-3. Update Makefile to support multiple architectures
-4. Ensure `kernel/` code remains architecture-independent
-5. Use conditional compilation or function pointers for architecture interfaces
-
-### Code Style
-
-- Use C-style comments (`/* */`) for multi-line explanations
-- Use C++-style comments (`//`) for single-line notes
-- Use inline assembly with `asm volatile ()` for hardware access
-- Use `static inline` for small, performance-critical functions
-- Use meaningful variable and function names
-- Add comments explaining non-obvious operations, especially for hardware manipulation
-
-## QEMU Configuration
-- Machine: Q35 chipset
-- Memory: 128MB
-- Serial output: Redirected to stdio
-- CPUs: 4 cores (use `-smp 4` flag to simulate multi-core system)
-
-2. Add architecture-specific boot code, linker script, and drivers
-3. Update Makefile to support multiple architectures
-4. Ensure `kernel/` code remains architecture-independent
-5. Use conditional compilation or function pointers for architecture interfaces
-
-### Code Style
-
-- Use C-style comments (`/* */`) for multi-line explanations
-- Use C++-style comments (`//`) for single-line notes
-- Use inline assembly with `asm volatile ()` for hardware access
-- Use `static inline` for small, performance-critical functions
-- Use meaningful variable and function names
-- Add comments explaining non-obvious operations, especially for hardware manipulation
-
-## QEMU Configuration
-- Machine: Q35 chipset
-- Memory: 128MB
-- Serial output: Redirected to stdio
-- CPUs: 4 cores (use `-smp 4` flag to simulate multi-core system)
-
-
-## SMP (Symmetric Multi-Processing) Support
-
-JAKernel has experimental SMP support with the following components:
-
-### SMP Initialization Flow
-
-1. **BSP Boot**:
-   - CPU 0 (BSP) starts at `_start` in `arch/x86_64/boot.S`
-   - BSP performs full MMU initialization (page tables, long mode enablement)
-   - BSP initializes VGA, serial port, and device drivers
-   - BSP calls `smp_init()` to set up CPU information
-   - BSP marks itself ready and calls `smp_start_all_aps()`
-
-2. **AP Startup**:
-   - APs detect they are not BSP via atomic increment of `cpu_boot_counter`
-   - APs wait for BSP to complete basic initialization (`bsp_init_done` flag)
-   - APs skip re-initialization and jump to `ap_entry`
-   - APs load GDT and switch to 64-bit mode (already done by BSP)
-   - APs call `ap_start()` to mark themselves as ready
-
-### ACPI Support (for Future CPU Detection)
-
-JAKernel includes basic ACPI support for detecting CPUs from ACPI MADT:
-
-**Components (`arch/x86_64/acpi.c`, `arch/x86_64/acpi.h`):
-- `acpi_find_rsdp()` - Searches BIOS memory for RSDP
-- `acpi_find_madt()` - Locates MADT in RSDT
-- `acpi_parse_madt()` - Parses MADT to extract APIC entries
-- `acpi_get_apic_id()` - Gets Local APIC ID (currently returns 0 for BSP)
-- `acpi_get_apic_count()` - Returns number of APICs found
-
-### Data Structures (`kernel/smp.h`):
-
-- `smp_cpu_info_t` - Per-CPU information (APIC ID, state, stack)
-- `cpu_count` - Number of detected CPUs (fixed at 4 for QEMU compatibility)
-- `ready_cpus` - Number of CPUs that have completed initialization
-- `bsp_init_complete` - Flag set by BSP after basic init (used for synchronization)
-
-### CPU Boot Messages
-
-Each CPU prints its status in English:
-```
-CPU 0 (APIC ID 0): Successfully booted
-SMP: BSP initialization complete.
-SMP: Starting all Application Processors...
-SMP: All CPUs are online and ready
-System initialization complete
-```
-
-### Current Status
-- BSP (CPU 0) fully functional with English boot messages
-- Device driver framework with device/driver abstractions
-- ACPI/APIC foundation for future CPU detection
-- AP startup requires proper IPI sending via Local APIC
-- English boot messages for all operations
-
-The APs are currently not starting because QEMU requires proper STARTUP IPIs sent via the Local APIC. The framework is in place for future AP startup once IPI is working.
+**Per-CPU Operations**:
+- Use `smp_get_cpu_index()` to get current CPU index (0-3)
+- Use `smp_get_apic_id()` to get current CPU's APIC ID
+- BSP is always CPU 0; check with `if (cpu_id == 0)`

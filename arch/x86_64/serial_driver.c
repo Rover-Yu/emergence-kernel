@@ -30,6 +30,19 @@ struct serial_data {
     int initialized;
 };
 
+/* Simple spinlock for serial output */
+static volatile int serial_lock = 0;
+
+static void serial_lock_acquire(void) {
+    while (__sync_lock_test_and_set(&serial_lock, 1)) {
+        asm volatile("pause");
+    }
+}
+
+static void serial_lock_release(void) {
+    __sync_lock_release(&serial_lock);
+}
+
 /* ============================================================================
  * Driver Operations
  * ============================================================================ */
@@ -152,10 +165,12 @@ int serial_driver_init(void) {
  * ============================================================================ */
 
 /**
- * serial_putc - Write a character to COM1
+ * serial_putc_unlocked - Write a character to COM1 (no locking)
  * @c: Character to write
+ *
+ * Internal function - assumes caller holds the lock
  */
-void serial_putc(char c) {
+static void serial_putc_unlocked(char c) {
     struct serial_data *data = (struct serial_data *)com1_device.driver_data;
     uint16_t base;
 
@@ -174,12 +189,24 @@ void serial_putc(char c) {
 }
 
 /**
+ * serial_putc - Write a character to COM1
+ * @c: Character to write
+ */
+void serial_putc(char c) {
+    serial_lock_acquire();
+    serial_putc_unlocked(c);
+    serial_lock_release();
+}
+
+/**
  * serial_puts - Write a string to COM1
  * @str: Null-terminated string to write
  */
 void serial_puts(const char *str) {
+    serial_lock_acquire();
     while (*str) {
-        serial_putc(*str);
+        serial_putc_unlocked(*str);
         str++;
     }
+    serial_lock_release();
 }

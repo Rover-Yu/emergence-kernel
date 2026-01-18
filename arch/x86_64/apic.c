@@ -84,6 +84,7 @@ uint8_t lapic_get_id(void) {
  */
 void lapic_send_ipi(uint8_t apic_id, uint32_t delivery_mode, uint8_t vector) {
     uint32_t icr_low, icr_high;
+    extern void serial_puts(const char *str);
 
     /* Set destination APIC ID in ICR high */
     icr_high = (uint32_t)apic_id << 24;
@@ -106,12 +107,41 @@ void lapic_send_ipi(uint8_t apic_id, uint32_t delivery_mode, uint8_t vector) {
  * Returns: 0 on success, -1 on timeout
  */
 int lapic_wait_for_ipi(void) {
+    extern void serial_puts(const char *str);
+
     /* Wait for delivery status bit to clear, with timeout */
-    int timeout = 10000;
-    while ((lapic_read(LAPIC_ICR_LOW) & LAPIC_ICR_DS) && timeout-- > 0) {
+    int timeout = 100000;  /* Increased timeout */
+    uint32_t icr_low;
+    int first = 1;
+
+    while (timeout-- > 0) {
+        icr_low = lapic_read(LAPIC_ICR_LOW);
+        if (!(icr_low & LAPIC_ICR_DS)) {
+            /* Delivery complete */
+            return 0;
+        }
+        if (first) {
+            serial_puts("[APIC] Waiting for IPI delivery...\n");
+            first = 0;
+        }
         asm volatile ("pause");
     }
-    return (timeout < 0) ? -1 : 0;
+
+    serial_puts("[APIC] IPI delivery timeout!\n");
+    return -1;  /* Timeout */
+}
+
+/* Simple delay using busy-wait loop
+ * Optimized for QEMU - very short delays for SMP init */
+static void pit_delay_ms(uint32_t ms) {
+    /* For QEMU and SMP startup, we don't need precise timing
+     * Just give the AP some time to respond */
+    volatile int dummy;
+    for (volatile uint32_t i = 0; i < ms * 1000; i++) {
+        dummy = i;  /* Prevent optimization */
+        asm volatile ("pause");
+    }
+    (void)dummy;  /* Prevent unused warning */
 }
 
 /**
@@ -124,29 +154,58 @@ int lapic_wait_for_ipi(void) {
  * This sends an INIT IPI followed by a STARTUP IPI to wake up an AP.
  * The startup_addr is the page number (address >> 12) where the AP
  * will begin execution in real mode.
+ *
+ * Intel 64/IA-32 Architecture Software Developer's Manual spec:
+ * 1. Send INIT IPI (assert)
+ * 2. Wait 10ms
+ * 3. Send STARTUP IPI
+ * 4. Wait 200us
+ * 5. Send second STARTUP IPI (optional but recommended)
  */
 int ap_startup(uint8_t apic_id, uint32_t startup_addr) {
-    /* Send INIT IPI to reset the AP */
+    extern void serial_puts(const char *str);
+    extern void serial_putc(char c);
+
+    serial_puts("[APIC] ap_startup: APIC ID=");
+    serial_putc('0' + apic_id);
+    serial_puts(" vector=");
+    serial_putc('0' + startup_addr);
+    serial_puts("\n");
+
+    /* Step 1: Send INIT IPI to reset the AP to real mode */
+    serial_puts("[APIC] Sending INIT IPI...\n");
     lapic_send_ipi(apic_id, LAPIC_ICR_DM_INIT, 0);
-    lapic_wait_for_ipi();
-
-    /* Small delay (10ms) */
-    for (int i = 0; i < 1000000; i++) {
-        asm volatile ("pause");
+    if (lapic_wait_for_ipi() < 0) {
+        serial_puts("[APIC] INIT IPI timeout!\n");
+        return -1;
     }
+    serial_puts("[APIC] INIT IPI sent successfully\n");
 
-    /* Send STARTUP IPI (must send twice per spec) */
+    /* Step 2: Wait - reduced delay for QEMU */
+    serial_puts("[APIC] Waiting...\n");
+    pit_delay_ms(1);  /* Reduced from 10ms to 1ms for QEMU */
+
+    serial_puts("[APIC] Wait complete, sending STARTUP IPI...\n");
+
+    /* Step 3: Send first STARTUP IPI */
     lapic_send_ipi(apic_id, LAPIC_ICR_DM_STARTUP, startup_addr);
-    lapic_wait_for_ipi();
-
-    /* Small delay */
-    for (int i = 0; i < 200; i++) {
-        asm volatile ("pause");
+    if (lapic_wait_for_ipi() < 0) {
+        serial_puts("[APIC] STARTUP IPI timeout!\n");
+        return -1;
     }
+    serial_puts("[APIC] STARTUP IPI sent successfully\n");
 
-    /* Send second STARTUP IPI */
+    /* Step 4: Short delay */
+    pit_delay_ms(1);
+
+    /* Step 5: Send second STARTUP IPI (recommended by Intel) */
+    serial_puts("[APIC] Sending second STARTUP IPI...\n");
     lapic_send_ipi(apic_id, LAPIC_ICR_DM_STARTUP, startup_addr);
-    lapic_wait_for_ipi();
+    if (lapic_wait_for_ipi() < 0) {
+        serial_puts("[APIC] Second STARTUP IPI timeout!\n");
+        return -1;
+    }
+    serial_puts("[APIC] Second STARTUP IPI sent successfully\n");
 
     return 0;
 }

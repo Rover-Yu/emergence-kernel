@@ -55,6 +55,52 @@ void idt_set_gate(uint8_t num, uint64_t handler, uint16_t selector, uint8_t type
     idt[num].zero = 0;
 }
 
+/* PIC (8259 Programmable Interrupt Controller) I/O ports */
+#define PIC1_CMD  0x20   /* Master PIC command port */
+#define PIC1_DATA 0x21   /* Master PIC data port */
+#define PIC2_CMD  0xA0   /* Slave PIC command port */
+#define PIC2_DATA 0xA1   /* Slave PIC data port */
+
+#define ICW1_ICW4 0x01   /* ICW4 (not) needed */
+#define ICW1_INIT 0x10   /* Initialization - required! */
+
+/**
+ * pic_remap - Remap PIC interrupt vectors
+ *
+ * Remaps the PIC interrupts from IRQ 0-7 to vectors 32-39
+ * and IRQ 8-15 to vectors 40-47. This avoids conflicts with
+ * the x86 exceptions (vectors 0-31).
+ */
+static void pic_remap(void) {
+    /* Save current interrupt masks */
+    uint8_t a1 = inb(PIC1_DATA);
+    uint8_t a2 = inb(PIC2_DATA);
+
+    /* Start initialization sequence (ICW1) */
+    outb(PIC1_CMD, ICW1_INIT | ICW1_ICW4);
+    outb(PIC2_CMD, ICW1_INIT | ICW1_ICW4);
+
+    /* Set vector offsets (ICW2)
+     * Master PIC: IRQ 0-7 -> vectors 32-39
+     * Slave PIC: IRQ 8-15 -> vectors 40-47 */
+    outb(PIC1_DATA, 0x20);   /* Master PIC vector offset */
+    outb(PIC2_DATA, 0x28);   /* Slave PIC vector offset (32 + 8 = 40) */
+
+    /* Configure slave PIC identity (ICW3)
+     * Master PIC: slave at IRQ 2
+     * Slave PIC: slave identity code 2 */
+    outb(PIC1_DATA, 0x04);   /* Master PIC: slave at IRQ 2 */
+    outb(PIC2_DATA, 0x02);   /* Slave PIC: identity code 2 */
+
+    /* Set 8086 mode (ICW4) */
+    outb(PIC1_DATA, 0x01);
+    outb(PIC2_DATA, 0x01);
+
+    /* Restore interrupt masks */
+    outb(PIC1_DATA, a1);
+    outb(PIC2_DATA, a2);
+}
+
 /**
  * idt_init - Initialize IDT with default handlers
  *
@@ -62,6 +108,9 @@ void idt_set_gate(uint8_t num, uint64_t handler, uint16_t selector, uint8_t type
  * Must be called before enabling interrupts.
  */
 void idt_init(void) {
+    /* Remap PIC interrupts to avoid conflicts with exceptions */
+    pic_remap();
+
     /* Clear IDT */
     for (int i = 0; i < IDT_ENTRIES; i++) {
         idt_set_gate(i, 0, 0, 0);
@@ -94,7 +143,7 @@ void idt_init(void) {
     idt_set_gate(TIMER_VECTOR, (uint64_t)timer_isr, kernel_cs, IDT_GATE_INTERRUPT);
     /* Vector 33 is for IPI (Inter-Processor Interrupt) */
     idt_set_gate(33, (uint64_t)ipi_isr, kernel_cs, IDT_GATE_INTERRUPT);  /* IPI */
-    /* IRQ 8 is RTC (Real Time Clock) */
+    /* IRQ 8 is RTC (Real Time Clock) -> vector 40 (32 + 8) */
     idt_set_gate(40, (uint64_t)rtc_isr, kernel_cs, IDT_GATE_INTERRUPT);  /* IRQ 8 */
     /* More interrupt handlers can be added here */
 
@@ -104,4 +153,8 @@ void idt_init(void) {
 
     /* Load IDT using lidt instruction */
     asm volatile ("lidt %0" : : "m"(idt_ptr));
+
+    /* Enable IRQ 8 (RTC) on both PICs */
+    outb(PIC2_DATA, inb(PIC2_DATA) & ~0x01);  /* Enable IRQ 8 on slave PIC */
+    outb(PIC1_DATA, inb(PIC1_DATA) & ~0x04);  /* Enable IRQ 2 (cascade) on master PIC */
 }
