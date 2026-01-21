@@ -34,20 +34,4 @@ void timer_test_stop(void);
  */
 int timer_test_is_active(void);
 
-/* IPI test functions */
-
-/**
- * ipi_test_init - Initialize IPI test
- *
- * Initializes the IPI driver for testing.
- */
-int ipi_test_init(void);
-
-/**
- * ipi_test_start - Start IPI self-test
- *
- * Sends 3 self-IPIs with math expressions.
- */
-void ipi_test_start(void);
-
 #endif /* JAKERNEL_TESTS_TEST_H */

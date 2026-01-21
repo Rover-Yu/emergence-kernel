@@ -11,15 +11,6 @@
 extern void serial_puts(const char *str);
 extern void serial_putc(char c);
 
-/* Math expressions for IPI test (≤8 words each) */
-static const char *ipi_math_expressions[] = {
-    " 1. E=mc² - Mass-energy equivalence",
-    " 2. a²+b²=c² - Pythagorean theorem",
-    " 3. e^(iπ)+1=0 - Euler's identity"
-};
-
-#define NUM_IPI_EXPRESSIONS (sizeof(ipi_math_expressions) / sizeof(ipi_math_expressions[0]))
-
 /* IPI interrupt count */
 static volatile int ipi_count = 0;
 static volatile int ipi_active = 0;
@@ -31,14 +22,11 @@ static volatile int ipi_active = 0;
  * Prints a math expression for testing.
  */
 void ipi_isr_handler(void) {
-    if (ipi_active && ipi_count < (int)NUM_IPI_EXPRESSIONS) {
-        serial_puts("[IPI] ");
-        serial_puts(ipi_math_expressions[ipi_count]);
-        serial_puts("\n");
+    if (ipi_active && ipi_count < 3) {
         ipi_count++;
 
         /* Stop after 3 expressions */
-        if (ipi_count >= (int)NUM_IPI_EXPRESSIONS) {
+        if (ipi_count >= 3) {
             ipi_active = 0;
         }
     }
@@ -117,107 +105,4 @@ int ipi_driver_init(void) {
 
     serial_puts("IPI: Driver and device registered\n");
     return 0;
-}
-
-/**
- * ipi_send_self - Send IPI to current CPU (self-IPI)
- *
- * Uses the Local APIC destination shorthand "self" to send an IPI
- * to the current CPU. This is used for testing the IPI mechanism.
- */
-void ipi_send_self(void) {
-    uint32_t icr_low;
-
-    /* Use destination shorthand "self" - no need to set high ICR */
-    icr_low = LAPIC_ICR_DM_FIXED;    /* Fixed delivery mode */
-    icr_low |= IPI_TEST_VECTOR;      /* Vector number (33) */
-    icr_low |= LAPIC_ICR_DST_SELF;   /* Destination shorthand: self */
-    icr_low |= LAPIC_ICR_ASSERT;     /* Assert interrupt */
-
-    /* Send self-IPI (synchronous delivery, no wait needed) */
-    lapic_write(LAPIC_ICR_LOW, icr_low);
-}
-
-/**
- * ipi_send_to_cpu - Send IPI to specified CPU by APIC ID
- * @apic_id: Target APIC ID
- *
- * Returns: 0 on success, negative on error
- */
-int ipi_send_to_cpu(uint8_t apic_id) {
-    uint32_t icr_high, icr_low;
-
-    /* Set destination APIC ID in ICR high */
-    icr_high = (uint32_t)apic_id << 24;
-    lapic_write(LAPIC_ICR_HIGH, icr_high);
-
-    /* Set delivery mode and vector in ICR low */
-    icr_low = LAPIC_ICR_DM_FIXED;    /* Fixed delivery mode */
-    icr_low |= IPI_TEST_VECTOR;      /* Vector number */
-    icr_low |= LAPIC_ICR_DST_PHYSICAL; /* Physical destination mode */
-    icr_low |= LAPIC_ICR_ASSERT;     /* Assert interrupt */
-
-    /* Send IPI */
-    lapic_write(LAPIC_ICR_LOW, icr_low);
-
-    /* Wait for delivery */
-    lapic_wait_for_ipi();
-
-    return 0;
-}
-
-/**
- * ipi_send_to_cpu_index - Send IPI to CPU by index (0-3)
- * @cpu_index: CPU index (0 = BSP, 1-3 = APs)
- *
- * Returns: 0 on success, negative on error
- */
-int ipi_send_to_cpu_index(int cpu_index) {
-    if (cpu_index < 0 || cpu_index >= SMP_MAX_CPUS) {
-        return -1;  /* Invalid CPU index */
-    }
-
-    /* Get APIC ID from SMP CPU info */
-    uint8_t apic_id = smp_get_apic_id_by_index(cpu_index);
-    return ipi_send_to_cpu(apic_id);
-}
-
-/**
- * ipi_get_current_apic_id - Get current CPU's APIC ID
- *
- * Returns: Current CPU's APIC ID
- */
-uint8_t ipi_get_current_apic_id(void) {
-    return lapic_get_id();
-}
-
-/**
- * ipi_is_bsp - Check if current CPU is BSP
- *
- * Returns: true if BSP, false if AP
- */
-bool ipi_is_bsp(void) {
-    return is_bsp() ? true : false;
-}
-
-/**
- * ipi_test_start - Start IPI test (sends 3 self-IPIs)
- *
- * Activates IPI handling and sends 3 IPIs to self.
- * Each IPI will print a math expression.
- */
-void ipi_test_start(void) {
-    extern void serial_puts(const char *str);
-
-    ipi_count = 0;
-    ipi_active = 1;
-
-    serial_puts("IPI: Starting self-test (3 IPIs)...\n");
-
-    serial_puts("IPI: About to send first IPI\n");
-    ipi_send_self();
-    serial_puts("IPI: First IPI sent\n");
-
-    serial_puts("IPI: Done, completing test\n");
-    serial_puts("IPI: Self-test complete\n");
 }
