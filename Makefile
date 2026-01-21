@@ -22,7 +22,7 @@ ARCH_LINKER := $(ARCH_DIR)/linker.ld
 ARCH_C_SRCS := $(ARCH_DIR)/vga.c $(ARCH_DIR)/serial_driver.c $(ARCH_DIR)/apic.c $(ARCH_DIR)/acpi.c $(ARCH_DIR)/idt.c $(ARCH_DIR)/timer.c $(ARCH_DIR)/rtc.c $(ARCH_DIR)/ipi.c
 
 # AP Trampoline (built as 16-bit binary, included via incbin)
-TRAMPOLINE_SRC := ap_trampoline.bin.S
+TRAMPOLINE_SRC := $(ARCH_DIR)/ap_trampoline.bin.S
 TRAMPOLINE_BIN := $(BUILD_DIR)/ap_trampoline.bin
 TRAMPOLINE_OBJ := $(BUILD_DIR)/ap_trampoline.o
 
@@ -78,9 +78,9 @@ $(BUILD_DIR)/test_%.o: $(TESTS_DIR)/%.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Build AP trampoline (as 16-bit binary)
-$(TRAMPOLINE_BIN): $(TRAMPOLINE_SRC) ap_trampoline.ld | $(BUILD_DIR)
+$(TRAMPOLINE_BIN): $(TRAMPOLINE_SRC) $(ARCH_DIR)/ap_trampoline.ld | $(BUILD_DIR)
 	as --32 -o $(BUILD_DIR)/ap_trampoline.tmp.o $<
-	ld -m elf_i386 -T ap_trampoline.ld -o $(BUILD_DIR)/ap_trampoline.elf $(BUILD_DIR)/ap_trampoline.tmp.o
+	ld -m elf_i386 -T $(ARCH_DIR)/ap_trampoline.ld -o $(BUILD_DIR)/ap_trampoline.elf $(BUILD_DIR)/ap_trampoline.tmp.o
 	objcopy -O binary $(BUILD_DIR)/ap_trampoline.elf $@
 	rm $(BUILD_DIR)/ap_trampoline.tmp.o $(BUILD_DIR)/ap_trampoline.elf
 
