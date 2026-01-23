@@ -31,8 +31,8 @@ void ipi_isr_handler(void) {
         }
     }
 
-    /* Send EOI to Local APIC */
-    lapic_write(LAPIC_EOI, 0);
+    /* NOTE: EOI is now sent in the assembly wrapper (isr.S)
+     * for consistency with timer_isr and robustness */
 }
 
 /**

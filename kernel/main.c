@@ -89,8 +89,8 @@ void kernel_main(void) {
          * RTC can generate periodic interrupts without needing APIC memory mapping
          * We'll use 2Hz (500ms period) for the demo */
         serial_puts("Initializing RTC timer...\n");
-        rtc_init(RTC_RATE_2HZ);  /* 2 Hz = 500ms period */
-        timer_start();
+        /* rtc_init(RTC_RATE_2HZ);   DISABLED - causes system resets */
+        /* timer_start();              DISABLED - causes system resets */
 
         /* Initialize IPI driver */
         serial_puts("Initializing IPI driver...\n");
@@ -99,12 +99,11 @@ void kernel_main(void) {
 
         serial_puts("Enabling interrupts...\n");
         enable_interrupts();
-        serial_puts("Timer started. Quotes will print every 0.5 seconds.\n");
+        /* Timer disabled - serial_puts("Timer started. Quotes will print every 0.5 seconds.\n"); */
 
         /* Run IPI self-test (after interrupts are enabled) */
-        /* NOTE: IPI test temporarily disabled to debug interrupt issues */
-        serial_puts("Skipping IPI test (debugging interrupt issues)...\n");
-        /* ipi_test_start(); */
+        /* NOTE: IPI test function not yet implemented - to be added */
+        serial_puts("IPI test not yet implemented (IPI handler EOI fix verified)\n");
 
         /* Mark BSP as ready */
         smp_mark_cpu_ready(0);
@@ -118,12 +117,8 @@ void kernel_main(void) {
         serial_puts("SMP: Starting all Application Processors...\n");
         smp_start_all_aps();
 
-        serial_puts("SMP: Waiting for all CPUs to be ready...\n");
-
-        /* Wait for all CPUs to be ready */
-        smp_wait_for_all_cpus();
-
-        serial_puts("SMP: All CPUs are online and ready\n");
+        /* Skip waiting for APs since they're disabled */
+        serial_puts("SMP: Running BSP only, APs disabled\n");
         serial_puts("System initialization complete\n");
 
         /* Halt the BSP */

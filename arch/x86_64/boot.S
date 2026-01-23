@@ -65,6 +65,8 @@ ap_stack_end:
 .section .bss
 .align 4096
 .global boot_pml4
+.global boot_pdpt
+.global boot_pd
 boot_pml4:
     .skip 4096
 boot_pdpt:
@@ -177,6 +179,17 @@ boot_is_bsp:
     movl $boot_pdpt, %eax
     orl $0x3, %eax              /* Set Present (bit 0) and Writable (bit 1) */
     movl %eax, boot_pml4
+    movl $0, boot_pml4 + 4      /* High 32 bits */
+
+    /* Set up PML4 entry 0x1FD -> points to PDPT (for high memory access)
+     * Virtual address 0xFEE00000 requires PML4[0x1FD] because:
+     * VA 0xFEE00000 = 0b11111110111000000000000000000000000
+     * PML4 index = bits 39-47 = 0x1FD
+     * This allows APIC at 0xFEE00000 to be accessed */
+    movl $boot_pdpt, %eax
+    orl $0x3, %eax              /* Present + Writable */
+    movl %eax, boot_pml4 + 0x1FD*8  /* PML4[0x1FD] */
+    movl $0, boot_pml4 + 0x1FD*8 + 4  /* High 32 bits */
 
     /* Set up PDPT entry 0 -> points to Page Directory */
     movl $boot_pd, %eax
@@ -190,11 +203,13 @@ boot_is_bsp:
      *
      * Challenge: boot_pd only has 512 entries (indices 0-511)
      * We need to access PD[504], which is in range
-     * BUT: The virtual address 0xFEE00000 translates to PDPT[3], NOT PDPT[0]
+     * For 0xFEE00000:
+     *   PML4 index = (0xFEE00000 >> 39) & 0x1FF = 0x1FD
+     *   PDPT index = (0xFEE00000 >> 30) & 0x1FF = 0x3 (NOT 0x1FC!)
+     *   PD index   = (0xFEE00000 >> 21) & 0x1FF = 0x1F8 (504)
      *
-     * Solution: Make PDPT[3] also point to boot_pd
-     * This means addresses 3GB-4GB will use the same PD entries as 0-1GB
-     * For 0xFEE00000: PDPT[3] -> boot_pd[504] -> should work!
+     * Solution: Make PDPT[3] point to boot_pd
+     * This creates the mapping: VA 0xFEE00000 -> PML4[0x1FD] -> PDPT[3] -> PD[504] -> PA 0xFEE00000
      */
 
     /* Set up PDPT[3] -> boot_pd for APIC access */
@@ -202,15 +217,6 @@ boot_is_bsp:
     orl $0x3, %eax              /* Present + Writable */
     movl %eax, boot_pdpt + 3*8  /* PDPT[3] */
     movl $0, boot_pdpt + 3*8 + 4  /* High 32 bits */
-
-    /* Now set up boot_pd[504] to map the APIC region
-     * Note: This will be done AFTER the loop that sets up the first 1GB
-     * For now, let's set up PD[504] here before the loop */
-
-    /* Set up PD entry 504 -> 2MB page at 0xFEC00000 (covers APIC at 0xFEE00000) */
-    movl $0xFEC00183, %eax     /* 0xFEC00000 | Present | Writable | PS (2MB) */
-    movl %eax, boot_pd + 504*8  /* PD entry 504 */
-    movl $0, boot_pd + 504*8 + 4  /* High 32 bits */
 
     /* Set up PD entries for first 1GB using 2MB pages (512 entries needed) */
     leal boot_pd, %esi         /* PD base address */
@@ -225,6 +231,22 @@ boot_is_bsp:
     addl $8, %esi              /* Next PD entry (8 bytes per entry) */
     addl $0x200000, %edx       /* Next 2MB physical address */
     loop 1b                    /* Loop for all 512 entries */
+
+    /* IMPORTANT: Set up PD entry 503 AFTER the loop
+     * The loop above overwrites all 512 entries including [503]
+     * We need to map APIC at 0xFEE00000 in PD[503]
+     * PD index = (0xFEE00000 >> 21) & 0x1FF = 503
+     *
+     * CRITICAL: For MMIO regions like APIC, we must disable caching
+     * For strict UC (Uncacheable), we need: P=1, RW=1, CD=1, WT=1, PS=1
+     * Do NOT use Global bit (bit 8) for MMIO regions!
+     * 0x9B = 0b10011011 = P + RW + WT + CD + PS (strict UC)
+     *
+     * IMPORTANT: PD index for 0xFEE00000 is ((0xFEE00000 >> 21) & 0x1FF) = 503
+     * NOT 504! This was a bug. */
+    movl $0xFEE0009B, %eax     /* 0xFEE00000 | P + RW + WT + CD + PS for strict UC */
+    movl %eax, boot_pd + 503*8  /* PD entry 503 (not 504!) - APIC MMIO region, uncached */
+    movl $0, boot_pd + 503*8 + 4  /* High 32 bits */
 
     /* ---- CR Register Configuration ---- */
     /* Load PML4 base address into CR3

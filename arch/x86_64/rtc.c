@@ -47,9 +47,9 @@ void rtc_init(uint8_t rate) {
     /* Set periodic interrupt rate */
     rtc_write(RTC_REG_STATUS_A, rate);
 
-    /* Enable RTC interrupts (Status Register D, bit 7) */
+    /* Enable RTC interrupts (Status Register B, bit 6 = Periodic Interrupt Enable) */
     status_b = rtc_read(RTC_REG_STATUS_B);
-    rtc_write(RTC_REG_STATUS_D, status_b | RTC_STATUS_D_IRQ);
+    rtc_write(RTC_REG_STATUS_B, status_b | 0x40);  /* Set bit 6 (PIE = Periodic Interrupt Enable) */
 
     /* Read Status C to clear any pending flags */
     rtc_read(RTC_REG_STATUS_C);

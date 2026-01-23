@@ -2,9 +2,9 @@
 ENTRY(trampoline_start)
 SECTIONS
 {
-    /* Start at offset 8 to account for objcopy header
-     * objcopy adds 8 bytes: 2 bytes padding + 4 bytes symbol + 2 bytes padding */
-    . = 8;
+    /* Start at offset 0 - AP boots at physical 0x7000 via STARTUP IPI
+     * No offset needed - objcopy creates raw binary without headers */
+    . = 0;
     .text : {
         *(.text)
     }

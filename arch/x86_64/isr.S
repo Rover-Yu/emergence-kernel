@@ -230,6 +230,11 @@ ipi_isr:
     /* Call C handler */
     call ipi_isr_handler
 
+    /* Send EOI to Local APIC */
+    /* LAPIC EOI is at offset 0xB0 from base (0xFEE00000) */
+    movabs $0xFEE000B0, %rax      /* Load absolute EOI address */
+    movl $0, (%rax)              /* Write 0 to EOI register */
+
     /* Restore all general-purpose registers
      * Restore in reverse order: r15 first, rax last */
     pop %r15

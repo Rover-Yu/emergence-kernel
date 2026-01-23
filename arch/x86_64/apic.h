@@ -36,8 +36,9 @@
 
 /* ICR (Interrupt Command Register) bits */
 #define LAPIC_ICR_DS        0x1000  /* Delivery Status */
-#define LAPIC_ICR_LEVEL     0x8000  /* Level */
+#define LAPIC_ICR_LEVEL     0x8000  /* Level triggered (for INIT) */
 #define LAPIC_ICR_ASSERT    0x4000  /* Assert */
+#define LAPIC_ICR_LEVELTRIG 0x8000  /* Level triggered (alias for clarity) */
 #define LAPIC_ICR_PENDING   0x1000  /* Send pending */
 
 /* ICR Delivery Modes (these are shifted by 8 in the ICR register) */

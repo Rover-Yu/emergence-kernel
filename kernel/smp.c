@@ -173,41 +173,31 @@ void smp_start_all_aps(void) {
     serial_puts("SMP: Disabling interrupts for AP startup...\n");
     asm volatile ("cli");
 
-    /* Start each AP (CPU 1, 2, 3) */
+    /* Start each AP using STARTUP IPI */
     for (int i = 1; i < SMP_MAX_CPUS; i++) {
         uint8_t apic_id = smp_get_apic_id_by_index(i);
 
-        serial_puts("SMP: Starting AP ");
+        serial_puts("SMP: AP ");
         serial_putc('0' + i);
         serial_puts(" (APIC ID ");
         serial_putc('0' + apic_id);
-        serial_puts(")...\n");
+        serial_puts(") - sending STARTUP IPI...\n");
 
-        /* Send STARTUP IPI to AP */
+        /* Mark AP as booting */
+        cpu_info[i].state = CPU_BOOTING;
+
+        /* Send STARTUP IPI to AP at physical address 0x7000 */
         int ret = ap_startup(apic_id, TRAMPOLINE_PAGE);
 
-        if (ret == 0) {
-            serial_puts("SMP: STARTUP IPI sent successfully, waiting for AP...\n");
-        } else {
-            serial_puts("SMP: WARNING - STARTUP IPI failed\n");
-        }
-
-        /* Give AP time to start */
-        for (int j = 0; j < 10000000; j++) {
-            asm volatile ("pause");
-        }
-
-        /* Check if AP is ready */
-        if (cpu_info[i].state == CPU_READY) {
+        if (ret < 0) {
             serial_puts("SMP: AP ");
             serial_putc('0' + i);
-            serial_puts(" is READY!\n");
+            serial_puts(" startup FAILED!\n");
+            cpu_info[i].state = CPU_OFFLINE;
         } else {
             serial_puts("SMP: AP ");
             serial_putc('0' + i);
-            serial_puts(" not ready yet (state=");
-            serial_putc('0' + cpu_info[i].state);
-            serial_puts(")\n");
+            serial_puts(" STARTUP IPI sent successfully\n");
         }
     }
 
@@ -241,6 +231,9 @@ void smp_start_all_aps(void) {
 void ap_start(void) {
     extern void serial_puts(const char *str);
     extern void serial_putc(char c);
+
+    /* Output "JIMI" to complete "HAJIMI" (trampoline outputs "HA") */
+    serial_puts("JIMI");
 
     /* Debug output to confirm AP reached this point */
     serial_puts("[AP] ap_start() reached!\n");
@@ -294,65 +287,7 @@ void patch_ap_trampoline(void) {
     extern void serial_puts(const char *str);
     extern void serial_putc(char c);
 
-    /* Trampoline is at physical address 0x7000 */
-    uint8_t *trampoline = (uint8_t *)0x7000;
-
-    /* The trampoline ends with:
-     * - GDT32 data (24 bytes)
-     * - GDT32 ptr (6 bytes)
-     * - GDT64 data (24 bytes)
-     * - GDT64 ptr (10 bytes with padding)
-     * - boot_pml4_placeholder (4 bytes)
-     * - ap_start_placeholder (4 bytes)
-     *
-     * Total from GDT32 to end: 24+6+24+10+4+4 = 72 bytes (0x48)
-     *
-     * The placeholders are at the very end of the trampoline.
-     * We can find them by searching backward from the end.
-     */
-
-    /* Trampoline binary is 0xC8 (200) bytes based on the file size
-     * Placeholders start at approximately 0xC8 - 8 = 0xC0 */
-
-    uint8_t *ptr = trampoline + 0xC0;  /* Approximate location */
-
-    /* Search backward for the first zero dword (boot_pml4_placeholder = 0) */
-    while (ptr > trampoline) {
-        uint32_t *dword_ptr = (uint32_t *)ptr;
-        if (*dword_ptr == 0) {
-            /* Check if next dword is also 0 (ap_start_placeholder) */
-            if (*(dword_ptr + 1) == 0) {
-                break;
-            }
-        }
-        ptr--;
-    }
-
-    if (ptr <= trampoline) {
-        serial_puts("SMP: ERROR - Could not find placeholders in trampoline\n");
-        return;
-    }
-
-    /* Now ptr points to boot_pml4_placeholder */
-    uint32_t *boot_pml4_ptr = (uint32_t *)ptr;
-    uint32_t *ap_start_ptr = (uint32_t *)(ptr + 4);
-
-    /* Patch boot_pml4 placeholder with low 32 bits of address */
-    *boot_pml4_ptr = ((uint32_t)&boot_pml4);
-
-    /* Patch ap_start placeholder with low 32 bits of address */
-    *ap_start_ptr = ((uint32_t)&ap_start);
-
-    serial_puts("SMP: Trampoline patched successfully\n");
-    serial_puts("SMP: boot_pml4 = 0x");
-    uint32_t pml4_addr = (uint32_t)&boot_pml4;
-    for (int i = 28; i >= 0; i -= 4) {
-        uint8_t byte = (pml4_addr >> i) & 0xF;
-        serial_putc(byte < 10 ? '0' + byte : 'A' + byte - 10);
-    }
-    serial_puts("\n");
-
-    /* Copy trampoline to 0x7000 manually */
+    /* Copy trampoline to 0x7000 manually FIRST */
     serial_puts("SMP: Copying trampoline to 0x7000...\n");
     extern uint8_t _binary_build_ap_trampoline_bin_start[];
     extern uint8_t _binary_build_ap_trampoline_bin_end[];
@@ -379,4 +314,129 @@ void patch_ap_trampoline(void) {
         }
         serial_puts("\n");
     }
+
+    /* Trampoline is at physical address 0x7000 */
+    uint8_t *trampoline = (uint8_t *)0x7000;
+
+    /* The placeholders need to be patched in the MOV instructions
+     * From disassembly analysis (actual binary offsets):
+     * - mov $boot_pml4_placeholder, %ecx is at offset 0x4A
+     *   The immediate value (4 bytes) is at offset 0x4B
+     * - mov $ap_start_placeholder, %eax is at offset 0x92
+     *   The immediate value (4 bytes) is at offset 0x93
+     */
+
+    uint32_t *boot_pml4_ptr = (uint32_t *)(trampoline + 0x4B);
+    uint32_t *ap_start_ptr = (uint32_t *)(trampoline + 0x93);
+
+    /* Patch boot_pml4 placeholder with low 32 bits of address */
+    *boot_pml4_ptr = ((uint32_t)((uint64_t)&boot_pml4));
+
+    /* Patch ap_start placeholder with low 32 bits of address */
+    *ap_start_ptr = ((uint32_t)((uint64_t)&ap_start));
+
+    /* Verify patching worked */
+    serial_puts("SMP: Verifying patched values:\n");
+    serial_puts("SMP:   trampoline[0x4B] = 0x");
+    uint32_t verify_pml4 = *boot_pml4_ptr;
+    for (int i = 28; i >= 0; i -= 4) {
+        uint8_t byte = (verify_pml4 >> i) & 0xF;
+        serial_putc(byte < 10 ? '0' + byte : 'A' + byte - 10);
+    }
+    serial_puts("\n");
+    serial_puts("SMP:   trampoline[0x93] = 0x");
+    uint32_t verify_ap = *ap_start_ptr;
+    for (int i = 28; i >= 0; i -= 4) {
+        uint8_t byte = (verify_ap >> i) & 0xF;
+        serial_putc(byte < 10 ? '0' + byte : 'A' + byte - 10);
+    }
+    serial_puts("\n");
+
+    serial_puts("SMP: Placeholders patched at offsets 0x4B and 0x93\n");
+    serial_puts("SMP: boot_pml4 = 0x");
+    uint32_t pml4_addr = (uint32_t)((uint64_t)&boot_pml4);
+    for (int i = 28; i >= 0; i -= 4) {
+        uint8_t byte = (pml4_addr >> i) & 0xF;
+        serial_putc(byte < 10 ? '0' + byte : 'A' + byte - 10);
+    }
+    serial_puts("\n");
+
+    serial_puts("SMP: ap_start = 0x");
+    uint32_t ap_addr = (uint32_t)((uint64_t)&ap_start);
+    for (int i = 28; i >= 0; i -= 4) {
+        uint8_t byte = (ap_addr >> i) & 0xF;
+        serial_putc(byte < 10 ? '0' + byte : 'A' + byte - 10);
+    }
+    serial_puts("\n");
+
+    /* ============================================================
+     * Patch GDT pointers and descriptors with correct physical addresses
+     * ============================================================
+     * The GDT contains link-time addresses that are wrong when trampoline
+     * runs at physical 0x7000. We need to patch:
+     * 1. GDT pointer bases (addresses of the GDTs themselves)
+     *
+     * IMPORTANT: We do NOT patch GDT descriptor bases because in real mode,
+     * segments use absolute addresses. The descriptors are already correct.
+     *
+     * From new hexdump (without .org directive):
+     * - GDT32 data starts at offset 0xA0
+     * - GDT64 data starts at offset 0xB0
+     */
+
+    /* DO NOT patch GDT descriptor bases - they are correct as-is */
+
+    /* ============================================================
+     * Patch LGDT instruction displacements (16-bit values!)
+     * ============================================================
+     * lgdt [gdt32_ptr] is at offset 0x12, displacement at 0x15-0x16
+     * lgdt [gdt64_ptr] is at offset 0x77, displacement at 0x7A-0x7B
+     *
+     * The displacement is relative to DS. When DS=0x7000, we need
+     * displacement such that DS:disp = physical address of gdt_ptr.
+     * Since gdt32_ptr is at 0x70B8 and DS=0x7000, displacement=0x00B8.
+     * The original link-time value is already correct! No patching needed.
+     *
+     * However, we DO need to patch the GDT pointer BASE addresses in the
+     * pointer structures (the actual physical addresses of the GDTs).
+     */
+
+    /* GDT32 pointer structure is at offset 0xB8: limit (2 bytes) + base (4 bytes) */
+    uint16_t *gdt32_ptr_limit = (uint16_t *)(trampoline + 0xB8);
+    uint32_t *gdt32_ptr_base = (uint32_t *)(trampoline + 0xBA);
+    *gdt32_ptr_limit = 0x17;  /* 23 bytes = 3 descriptors * 8 bytes */
+    *gdt32_ptr_base = 0x000070A0;  /* GDT32 at physical 0x70A0 */
+
+    /* GDT64 pointer structure is at offset 0xD0: limit (2 bytes) + base (4 bytes) */
+    uint16_t *gdt64_ptr_limit = (uint16_t *)(trampoline + 0xD0);
+    uint32_t *gdt64_ptr_base = (uint32_t *)(trampoline + 0xD2);
+    *gdt64_ptr_limit = 0x17;  /* 23 bytes = 3 descriptors * 8 bytes */
+    *gdt64_ptr_base = 0x000070C0;  /* GDT64 at physical 0x70C0 */
+
+    /* Debug: Verify GDT pointer values after patching */
+    serial_puts("SMP: GDT32 pointer: limit=");
+    serial_putc('0' + ((*gdt32_ptr_limit >> 4) & 0xF));
+    serial_putc('0' + (*gdt32_ptr_limit & 0xF));
+    serial_puts(" base=0x");
+    uint32_t gdt32_base = *gdt32_ptr_base;
+    for (int i = 28; i >= 0; i -= 4) {
+        uint8_t byte = (gdt32_base >> i) & 0xF;
+        serial_putc(byte < 10 ? '0' + byte : 'A' + byte - 10);
+    }
+    serial_puts("\n");
+
+    /* Debug: Dump first 16 bytes of GDT32 to verify descriptors */
+    serial_puts("SMP: GDT32[0-15]: ");
+    uint8_t *gdt32_data = trampoline + 0xA0;
+    for (int i = 0; i < 16; i++) {
+        uint8_t byte = gdt32_data[i];
+        serial_putc((byte >> 4) & 0xF);
+        serial_putc(byte & 0xF);
+        serial_putc(' ');
+    }
+    serial_puts("\n");
+
+    serial_puts("SMP: GDT pointers and descriptors patched\n");
+
+    serial_puts("SMP: Trampoline ready at 0x7000\n");
 }
