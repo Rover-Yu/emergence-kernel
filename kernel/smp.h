@@ -7,7 +7,7 @@
 #include "arch/x86_64/apic.h"
 
 /* Maximum number of CPUs */
-#define SMP_MAX_CPUS    4
+#define SMP_MAX_CPUS    2
 
 /* CPU stack size */
 #define CPU_STACK_SIZE  16384  /* 16 KiB per CPU */

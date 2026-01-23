@@ -319,15 +319,15 @@ void patch_ap_trampoline(void) {
     uint8_t *trampoline = (uint8_t *)0x7000;
 
     /* The placeholders need to be patched in the MOV instructions
-     * From disassembly analysis (actual binary offsets):
-     * - mov $boot_pml4_placeholder, %ecx is at offset 0x4A
-     *   The immediate value (4 bytes) is at offset 0x4B
-     * - mov $ap_start_placeholder, %eax is at offset 0x92
-     *   The immediate value (4 bytes) is at offset 0x93
+     * From disassembly analysis (actual binary offsets after adding WBINVD and IDT):
+     * - mov $boot_pml4_placeholder, %ecx is at offset 0x54
+     *   The immediate value (4 bytes) is at offset 0x55
+     * - mov $ap_start_placeholder, %eax is at offset 0x9D
+     *   The immediate value (4 bytes) is at offset 0x9E
      */
 
-    uint32_t *boot_pml4_ptr = (uint32_t *)(trampoline + 0x4B);
-    uint32_t *ap_start_ptr = (uint32_t *)(trampoline + 0x93);
+    uint32_t *boot_pml4_ptr = (uint32_t *)(trampoline + 0x55);
+    uint32_t *ap_start_ptr = (uint32_t *)(trampoline + 0x9E);
 
     /* Patch boot_pml4 placeholder with low 32 bits of address */
     *boot_pml4_ptr = ((uint32_t)((uint64_t)&boot_pml4));
@@ -337,14 +337,14 @@ void patch_ap_trampoline(void) {
 
     /* Verify patching worked */
     serial_puts("SMP: Verifying patched values:\n");
-    serial_puts("SMP:   trampoline[0x4B] = 0x");
+    serial_puts("SMP:   trampoline[0x55] = 0x");
     uint32_t verify_pml4 = *boot_pml4_ptr;
     for (int i = 28; i >= 0; i -= 4) {
         uint8_t byte = (verify_pml4 >> i) & 0xF;
         serial_putc(byte < 10 ? '0' + byte : 'A' + byte - 10);
     }
     serial_puts("\n");
-    serial_puts("SMP:   trampoline[0x93] = 0x");
+    serial_puts("SMP:   trampoline[0x9E] = 0x");
     uint32_t verify_ap = *ap_start_ptr;
     for (int i = 28; i >= 0; i -= 4) {
         uint8_t byte = (verify_ap >> i) & 0xF;
@@ -352,7 +352,7 @@ void patch_ap_trampoline(void) {
     }
     serial_puts("\n");
 
-    serial_puts("SMP: Placeholders patched at offsets 0x4B and 0x93\n");
+    serial_puts("SMP: Placeholders patched at offsets 0x55 and 0x9E\n");
     serial_puts("SMP: boot_pml4 = 0x");
     uint32_t pml4_addr = (uint32_t)((uint64_t)&boot_pml4);
     for (int i = 28; i >= 0; i -= 4) {
@@ -412,6 +412,15 @@ void patch_ap_trampoline(void) {
     uint32_t *gdt64_ptr_base = (uint32_t *)(trampoline + 0xD2);
     *gdt64_ptr_limit = 0x17;  /* 23 bytes = 3 descriptors * 8 bytes */
     *gdt64_ptr_base = 0x000070C0;  /* GDT64 at physical 0x70C0 */
+
+    /* ============================================================
+     * Patch IDT pointer - zero IDT for safety
+     * ============================================================
+     * IDT pointer comes after GDT64 pointer
+     * From the new layout: idt_ptr is at offset 0xD8 (after gdt64_ptr at 0xD0)
+     * Zero IDT: limit=0, base=0 (no patching needed, already zero!)
+     */
+    serial_puts("SMP: IDT pointer (zero IDT) - no patching needed\n");
 
     /* Debug: Verify GDT pointer values after patching */
     serial_puts("SMP: GDT32 pointer: limit=");

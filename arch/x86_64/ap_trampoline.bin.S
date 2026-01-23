@@ -21,6 +21,9 @@ trampoline_start:
 
     cli
 
+    /* Write back and invalidate cache - critical for cache coherency */
+    wbinvd
+
     /* Debug: output '1' after CLI */
     mov $'1', %al
     out %al, %dx
@@ -37,11 +40,19 @@ trampoline_start:
      * ============================================================ */
     lgdt [gdt32_ptr]
 
+    /* Load zero IDT for safety - any exception will halt predictably */
+    lidt [idt_ptr]
+
     /* ============================================================
      * Step 4: Enable Protected Mode
-     * ============================================================ */
+     * ============================================================
+     * CR0 bits we set:
+     * - PE (bit 0): Protected Mode enable
+     * - MP (bit 1): Monitor Coprocessor (for FPU/SSE handling)
+     * - NE (bit 5): Native Error reporting (critical for FPU errors)
+     */
     mov %cr0, %eax
-    or $1, %al           /* Set PE bit */
+    or $0x27, %al        /* Set PE (bit 0) + MP (bit 1) + NE (bit 5) = 0x27 */
     mov %eax, %cr0
 
     /* ============================================================
@@ -68,6 +79,8 @@ protected_mode_entry:
     mov %ax, %ds
     mov %ax, %es
     mov %ax, %ss
+    mov %ax, %fs         /* Initialize FS (Linux also does this) */
+    mov %ax, %gs         /* Initialize GS (Linux also does this) */
 
     /* ============================================================
      * Step 7: Set up temporary stack
@@ -176,6 +189,17 @@ gdt64_end:
 gdt64_ptr:
     .word gdt64_end - gdt64 - 1
     .long gdt64
+
+/* ============================================================
+ * IDT (Interrupt Descriptor Table) - Zero IDT for safety
+ * ============================================================
+ * During AP boot, we set up a zero IDT (limit=0, base=0) to ensure
+ * any exception causes a predictable shutdown rather than jumping
+ * to garbage. Linux does the same thing.
+ */
+idt_ptr:
+    .word 0      /* Limit = 0 (no IDT entries) */
+    .long 0      /* Base = 0 */
 
     /* ============================================================
      * Placeholder values that will be patched by kernel at runtime
