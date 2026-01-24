@@ -277,6 +277,12 @@ boot_is_bsp:
     movl $ap_start+4, %eax               /* High 32 bits */
     movl %eax, 0x710C
 
+    /* Patch ap_stack_placeholder (at 0x7000 + 0x1100 = 0x8100) */
+    movl $ap_stack_end, %eax             /* Low 32 bits of ap_stack_end */
+    movl %eax, 0x8100
+    movl $ap_stack_end+4, %eax           /* High 32 bits */
+    movl %eax, 0x8104
+
     /* ---- CR Register Configuration ---- */
     /* Load PML4 base address into CR3
      * CR3 contains the physical address of the PML4 table
@@ -394,7 +400,7 @@ ap_halt:
 .global ap_trampoline_start
 ap_trampoline_start:
 
-/* Include the pre-built trampoline binary */
+/* Include the pre-built trampoline binary (includes stub at offset 0x1000) */
 .incbin "build/ap_trampoline.bin"
 
 /* Export symbol for C code to patch */
