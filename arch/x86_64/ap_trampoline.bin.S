@@ -1,15 +1,75 @@
 /* AP Trampoline - Real mode to Long Mode (64-bit) transition
  *
- * The AP starts in real mode at physical address 0x7000 via STARTUP IPI.
+ * The AP starts in real mode at physical address TRAMPOLINE_BASE (0x7000) via STARTUP IPI.
  * This trampoline transitions: Real Mode -> Protected Mode -> Long Mode (64-bit)
  * Then jumps to ap_start() in the kernel.
  *
  * CRITICAL: This code must be position-independent (works at physical 0x7000)
  *
- * RUNTIME PATCHING (done in boot.S during copy):
- * - boot_pml4_placeholder (8 bytes at offset 0x100): PML4 page table address
- * - ap_start_placeholder (8 bytes at offset 0x108): ap_start function address
+ * TRAMPOLINE MEMORY LAYOUT:
+ *   0x0000 - Real mode entry point
+ *   0x0100 - boot_pml4_placeholder (8 bytes) - patched with actual PML4 address
+ *   0x0108 - ap_start_placeholder (8 bytes) - patched with ap_start function address
+ *   0x01E0 - gdt32_gdtr - GDTR structure for 32-bit protected mode
+ *   0x01F0 - gdt64_gdtr - GDTR structure for 64-bit long mode
+ *   0x0E00 - GDT32 (3 descriptors: null, code, data)
+ *   0x0F00 - GDT64 (3 descriptors: null, code, data)
+ *   0x1000 - 64-bit stub entry point
+ *   0x1400 - ap_stack_placeholder (8 bytes) - patched with AP stack address
+ *   0x1500 - idt_ptr_placeholder (8 bytes) - patched with IDT pointer address
  */
+
+/* ========================================================================
+ * CONSTANTS - Hardware addresses and offsets
+ * ======================================================================== */
+
+/* Serial port (COM1) */
+.equ SERIAL_PORT,        0x03F8  /* COM1 base I/O address */
+
+/* Trampoline memory layout */
+.equ TRAMPOLINE_BASE,    0x7000  /* Physical address where trampoline is loaded */
+.equ REAL_MODE_STACK,    0x7C00  /* Stack pointer for real mode (just below trampoline) */
+
+/* Offsets within trampoline */
+.equ OFFSET_GDT32_GDTR,  0x01E0  /* GDTR for 32-bit protected mode GDT */
+.equ OFFSET_PML4_PlaceHOLDER, 0x0100  /* PML4 page table address placeholder */
+.equ OFFSET_AP_START_PLACEHOLDER, 0x0108 /* ap_start function address placeholder */
+.equ OFFSET_GDT64_GDTR,  0x01F0  /* GDTR for 64-bit long mode GDT */
+
+/* GDT base addresses */
+.equ GDT32_BASE,         0x07E00  /* 32-bit GDT base (offset 0x0E00 from trampoline) */
+.equ GDT64_BASE,         0x07F00  /* 64-bit GDT base (offset 0x0F00 from trampoline) */
+
+/* 64-bit stub (at offset 0x1000 = physical 0x8000) */
+.equ STUB_OFFSET,        0x1000  /* Stub offset within trampoline */
+.equ STUB_PHYSICAL,      0x8000  /* Stub physical address (0x7000 + 0x1000) */
+.equ OFFSET_STACK_PLACEHOLDER_FROM_STUB, 0x0400 /* Stack placeholder offset from stub base */
+.equ OFFSET_IDT_PTR_PLACEHOLDER_FROM_STUB, 0x0500 /* IDT placeholder offset from stub base */
+
+/* Alignment masks */
+.equ ALIGN_4KB_MASK,      0xFFFFF000  /* Mask for 4KB page alignment */
+.equ ALIGN_16B_MASK,      0xFFFFFFF0  /* Mask for 16-byte alignment */
+
+/* Control register bits */
+.equ CR4_PAE_BIT,        0x20    /* PAE enable bit in CR4 */
+.equ CR4_PSE_BIT,        0x10    /* PSE enable bit in CR4 */
+.equ EFER_LME_BIT,        0x1000  /* Long Mode Enable bit in IA32_EFER */
+.equ EFER_NXE_BIT,        0x800   /* No-Execute Enable bit in IA32_EFER */
+.equ CR0_PG_BIT,         0x80000000 /* Paging enable bit in CR0 */
+
+/* MSRs */
+.equ MSR_EFER,            0xC0000080  /* Extended Feature Enable Register MSR */
+
+/* Protected mode entry point */
+.equ PROTECTED_MODE_ENTRY, 0x703D /* Physical address of pm_entry */
+
+/* Code selectors */
+.selector = 0x0008
+
+/* Function addresses (these need to be updated when kernel is relinked) */
+.equ AP_START_ADDR,       0x1045d4 /* ap_start function address (after 4-byte endbr64) */
+.equ IDT_PTR_ADDR,        0x119020 /* Address of idt_ptr structure in kernel BSS */
+.equ AP_STACK_ADDR,       0x116000 /* AP stack top address (16KB stack at 0x112000-0x116000) */
 
     .code16
     .org 0
@@ -17,24 +77,26 @@
 trampoline_start:
     cli
 
-    /* ============================================================
+    /* ========================================================================
      * Real Mode Setup
-     * ============================================================ */
+     * ========================================================================
+     * Initialize segment registers and set up real mode stack
+     */
     mov %cs, %ax
     mov %ax, %ds
     mov %ax, %es
     mov %ax, %ss
-    mov $0x7C00, %sp
+    mov $REAL_MODE_STACK, %sp
 
-    /* Debug output "H" to serial (COM1 at 0x3F8) */
-    mov $0x3F8, %dx
+    /* Debug output "H" to serial (COM1) */
+    mov $SERIAL_PORT, %dx
     mov $'H', %al
     out %al, %dx
 
-    /* ============================================================
+    /* ========================================================================
      * Load GDT32 for Protected Mode using position-independent addressing
-     * ============================================================
-     * The GDTR structure is at offset 0x1E0 within the trampoline.
+     * ========================================================================
+     * The GDTR structure is at offset OFFSET_GDT32_GDTR within the trampoline.
      * We compute the actual address using call/pop to get current IP,
      * then mask to page boundary and add the GDTR offset.
      * This is necessary because the assembler incorrectly encodes
@@ -45,14 +107,14 @@ trampoline_start:
 get_eip_gdt:
     pop %si               /* SI = current IP */
     /* Round down to 4KB boundary (trampoline base) */
-    and $0xF000, %si      /* SI = 0x7000 in real mode */
-    /* Add offset to gdt32_gdtr (0x1E0) */
-    add $0x1E0, %si       /* SI = 0x71E0 (GDTR address) */
+    and $TRAMPOLINE_BASE, %si  /* SI = 0x7000 in real mode */
+    /* Add offset to gdt32_gdtr */
+    add $OFFSET_GDT32_GDTR, %si  /* SI = 0x71E0 (GDTR address) */
     /* Load GDTR from computed address */
     lgdt (%si)
 
     /* Debug: Output "G" */
-    mov $0x3F8, %dx
+    mov $SERIAL_PORT, %dx
     mov $'G', %al
     out %al, %dx
 
@@ -83,9 +145,9 @@ halt_loop:
      * ============================================================ */
     .code32
 pm_entry:
-    /* Debug: Output "P" - reached protected mode */
-    mov $0x3F8, %edx
-    mov $'P', %al
+    /* Debug: Output "3" - reached protected mode */
+    mov $SERIAL_PORT, %edx
+    mov $'3', %al
     out %al, %edx
 
     /* Set up data segments */
@@ -329,11 +391,11 @@ stack_continue:
     mov $'6', %al
     out %al, %edx
 
-    /* Load ap_start address using hardcoded value
-     * The kernel is always linked at the same address, so we can use
-     * a hardcoded value instead of runtime patching.
-     * ap_start is at 0x104500, and we skip the 4-byte endbr64 instruction */
-    movq $0x104504, %rbx     /* RBX = ap_start + 4 (skip endbr64) */
+    /* Load ap_start address using defined constant
+     * The kernel is always linked at the same address, so we use
+     * a constant value instead of runtime patching.
+     * AP_START_ADDR points to ap_start after the 4-byte endbr64 instruction */
+    movq $AP_START_ADDR, %rbx  /* RBX = ap_start + 4 (skip endbr64) */
 
     /* Debug: Output '8' - loaded ap_start address from placeholder */
     mov $'8', %al
@@ -461,9 +523,8 @@ load_idt_section:
      * The AP needs to load the same IDT to handle exceptions.
      * Without a valid IDT, any exception in C code causes a triple fault.
      *
-     * We use the fixed address of idt_ptr (0x119020) which is where
-     * the BSP's IDT pointer structure is located. This address is
-     * identity-mapped in the page tables.
+     * We use the fixed address IDT_PTR_ADDR where the BSP's IDT pointer
+     * structure is located. This address is identity-mapped in the page tables.
      */
 
     /* Debug: Output '1' - about to load IDT */
@@ -471,9 +532,9 @@ load_idt_section:
     out %al, %dx
 
     /* Load IDT using lidt instruction with fixed address
-     * idt_ptr is at virtual address 0x119020 in the kernel BSS
+     * IDT_PTR_ADDR is the address of idt_ptr in kernel BSS
      * This address is identity-mapped */
-    movq $0x119020, %rax         /* RAX = address of idt_ptr */
+    movq $IDT_PTR_ADDR, %rax      /* RAX = address of idt_ptr */
 
     /* Debug: Output '2' - loaded idt_ptr address into RAX */
     mov $'2', %al
@@ -512,9 +573,9 @@ load_idt_section:
     out %al, %dx
 
     /* But first, ensure we have a valid stack */
-    /* The AP stack is at 0x116000 (hardcoded for now) */
-    movq $0x116000, %rsp           /* Set up stack pointer */
-    movq $0x116000, %rbp           /* Set up base pointer */
+    /* Set up AP stack pointer (AP_STACK_ADDR = top of 16KB AP stack) */
+    movq $AP_STACK_ADDR, %rsp      /* Set up stack pointer */
+    movq $AP_STACK_ADDR, %rbp      /* Set up base pointer */
 
     /* Debug: Output 'L' - stack pointer set */
     mov $'L', %al

@@ -173,19 +173,29 @@ void smp_start_all_aps(void) {
     serial_puts("SMP: Disabling interrupts for AP startup...\n");
     asm volatile ("cli");
 
-    /* Start each AP using STARTUP IPI */
+    /* Signal APs that BSP initialization is complete BEFORE starting APs
+     * This prevents deadlock where:
+     * - AP waits for bsp_init_complete before proceeding
+     * - BSP waits for AP to become ready before continuing
+     * Setting this flag first allows APs to proceed without blocking */
+    bsp_init_complete = 1;
+
+    /* Start each AP sequentially using STARTUP IPI
+     * Sequential startup prevents multiple APs from executing the trampoline
+     * simultaneously, which causes serial output corruption and system instability. */
     for (int i = 1; i < SMP_MAX_CPUS; i++) {
         uint8_t apic_id = smp_get_apic_id_by_index(i);
 
-        /* Minimal output before AP startup - don't interfere with AP debug */
+        /* Log which AP we're starting (helps with debugging) */
         serial_puts("SMP: Starting AP ");
         serial_putc('0' + i);
         serial_puts("...\n");
 
-        /* Mark AP as booting */
+        /* Mark AP as booting - tracks AP initialization state */
         cpu_info[i].state = CPU_BOOTING;
 
-        /* Send STARTUP IPI to AP at physical address 0x7000 */
+        /* Send STARTUP IPI to AP at physical address TRAMPOLINE_PAGE (0x7000)
+         * The AP will begin executing at the trampoline entry point */
         int ret = ap_startup(apic_id, TRAMPOLINE_PAGE);
 
         if (ret < 0) {
@@ -193,38 +203,66 @@ void smp_start_all_aps(void) {
             serial_putc('0' + i);
             serial_puts(" startup FAILED!\n");
             cpu_info[i].state = CPU_OFFLINE;
+            continue;  /* Skip failed AP and try the next one */
         }
-        /* No success output here - ap_startup() already outputs */
+
+        /* Wait for this AP to complete initialization before starting the next one
+         * This prevents multiple APs from:
+         * - Competing for serial output (causes garbled debug text)
+         * - Simultaneously accessing shared trampoline code/data
+         * - Racing during CPU index assignment */
+        int timeout = SMP_AP_INIT_TIMEOUT;
+        while (cpu_info[i].state != CPU_READY && timeout > 0) {
+            asm volatile ("pause");  /* Reduce power consumption during busy-wait */
+            timeout--;
+        }
+
+        /* Small delay to let the AP fully halt and settle before starting the next
+         * This ensures the previous AP has completed all initialization and is
+         * in a stable halt state before the next AP begins booting */
+        for (volatile int j = 0; j < SMP_AP_SETTLE_DELAY; j++) {
+            asm volatile ("pause");
+        }
     }
 
-    /* Signal APs that BSP initialization is complete */
-    bsp_init_complete = 1;
-
-    /* Don't print anymore - let the AP finish initialization without interference
-     * The BSP will halt after this function returns to main.c */
+    /* All APs started - BSP will halt after returning to main.c
+     * Don't print anymore to avoid interfering with any remaining AP output */
 }
 
 /**
- * ap_start - Application Processor entry point
+ * ap_start - Application Processor (AP) entry point
+ *
+ * This function is called by the AP trampoline after the AP completes
+ * its mode transition (Real Mode → Protected Mode → Long Mode).
+ * The AP performs initialization, gets its CPU index, sets up its stack,
+ * and then halts.
+ *
+ * Context: Called with interrupts disabled, running on dedicated AP stack
  */
 void ap_start(void) {
     extern void serial_puts(const char *str);
     extern void serial_putc(char c);
 
-    /* Output "JIMI" to complete "HAJIMI" (trampoline outputs "HA") */
+    /* Debug marker "JIMI" - completes "HAJIMI" sequence for debugging
+     * The trampoline outputs "HA" before jumping here, allowing us to
+     * verify the trampoline→C transition completed successfully */
     serial_puts("JIMI");
 
-    /* Debug output to confirm AP reached this point */
+    /* Confirm AP reached C code - indicates trampoline worked correctly */
     serial_puts("[AP] ap_start() reached!\n");
 
-    /* Wait for BSP initialization */
+    /* Wait for BSP initialization to complete
+     * The BSP sets bsp_init_complete before starting any APs,
+     * so this should normally pass immediately */
     while (!bsp_init_complete) {
-        asm volatile ("pause");
+        asm volatile ("pause");  /* Wait efficiently */
     }
 
     serial_puts("[AP] BSP init complete, getting CPU ID...\n");
 
-    /* Get CPU ID */
+    /* Atomically allocate CPU index using fetch-and-add
+     * Each AP gets a unique index: 1, 2, 3, ... (BSP is always 0)
+     * Atomic operation prevents race conditions when multiple APs boot */
     int my_index = __sync_fetch_and_add(&next_cpu_id, 1);
 
     serial_puts("[AP] Got CPU index: ");

@@ -6,11 +6,15 @@
 #include <stdint.h>
 #include "arch/x86_64/apic.h"
 
-/* Maximum number of CPUs */
-#define SMP_MAX_CPUS    2
+/* Maximum number of CPUs supported by the kernel */
+#define SMP_MAX_CPUS    4
 
-/* CPU stack size */
-#define CPU_STACK_SIZE  16384  /* 16 KiB per CPU */
+/* CPU stack size - 16 KiB per CPU for interrupt handling and function calls */
+#define CPU_STACK_SIZE  16384  /* 16 KiB = 16 * 1024 bytes */
+
+/* SMP initialization timing constants (in iterations) */
+#define SMP_AP_INIT_TIMEOUT      10000000  /* Maximum iterations to wait for AP to initialize (~10ms at 1GHz) */
+#define SMP_AP_SETTLE_DELAY       100000   /* Delay iterations after AP completes before starting next (~0.1ms) */
 
 /* CPU states for SMP */
 typedef enum {
