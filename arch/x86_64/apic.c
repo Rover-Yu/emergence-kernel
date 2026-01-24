@@ -726,7 +726,13 @@ void lapic_send_ipi(uint8_t apic_id, uint32_t delivery_mode, uint8_t vector) {
     /* Set delivery mode and vector in ICR low */
     icr_low = delivery_mode | vector;
     icr_low |= LAPIC_ICR_DST_PHYSICAL;  /* Physical destination mode */
-    icr_low |= LAPIC_ICR_ASSERT;        /* Assert interrupt */
+
+    /* Set ASSERT bit for level-triggered IPIs (INIT, SMI), but NOT for STARTUP
+     * STARTUP IPI is edge-triggered and must NOT have ASSERT bit set */
+    if (delivery_mode == LAPIC_ICR_DM_INIT ||
+        delivery_mode == LAPIC_ICR_DM_SMI) {
+        icr_low |= LAPIC_ICR_ASSERT;
+    }
 
     /* Send IPI */
     lapic_write(LAPIC_ICR_LOW, icr_low);
@@ -937,8 +943,8 @@ int ap_startup(uint8_t apic_id, uint32_t startup_addr) {
     }
     serial_puts("[APIC] INIT deassert IPI sent successfully\n");
 
-    /* Step 4: Short delay before STARTUP (spec says 10ms, we use 1ms for QEMU) */
-    pit_delay_ms(1);
+    /* Step 4: Delay before STARTUP (spec says 10ms, use 10ms for reliability) */
+    pit_delay_ms(10);
 
     serial_puts("[APIC] Sending STARTUP IPI...\n");
 
@@ -956,17 +962,19 @@ int ap_startup(uint8_t apic_id, uint32_t startup_addr) {
     }
     /* No output here - let AP execute first */
 
-    /* Step 6: Short delay */
+    /* Step 6: Delay between STARTUP IPIs (spec says 200us, use 1ms for reliability) */
     pit_delay_ms(1);
 
-    /* Check ESR for errors (due to Pentium erratum 3AP) */
+    /* Check ESR for errors (due to Pentium erratum 3AP)
+     * Note: ESR bit 7 (0x80) is Send Accept Error, which QEMU may set spuriously.
+     * We log it but don't treat it as fatal. */
     if (maxlvt > 3) {
         uint32_t esr = lapic_read(LAPIC_ESR) & 0xEF;
         if (esr) {
-            serial_puts("[APIC] ERROR: ESR = 0x");
+            serial_puts("[APIC] WARNING: ESR = 0x");
             serial_putc('0' + (esr >> 4));
             serial_putc('0' + (esr & 0xF));
-            serial_puts("\n");
+            serial_puts(" (may be QEMU-specific, continuing)\n");
         }
     }
 
@@ -982,6 +990,17 @@ int ap_startup(uint8_t apic_id, uint32_t startup_addr) {
     if (lapic_wait_for_ipi() < 0) {
         serial_puts("[APIC] Second STARTUP IPI timeout!\n");
         return -1;
+    }
+
+    /* Check ESR after second STARTUP IPI */
+    if (maxlvt > 3) {
+        uint32_t esr = lapic_read(LAPIC_ESR) & 0xEF;
+        if (esr) {
+            serial_puts("[APIC] ESR after second SIPI: 0x");
+            serial_putc('0' + (esr >> 4));
+            serial_putc('0' + (esr & 0xF));
+            serial_puts("\n");
+        }
     }
 
     /* Wait for AP to start executing - give it time to output debug chars */

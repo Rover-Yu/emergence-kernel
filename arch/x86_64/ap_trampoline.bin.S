@@ -32,9 +32,24 @@ trampoline_start:
     out %al, %dx
 
     /* ============================================================
-     * Load GDT32 for Protected Mode
-     * ============================================================ */
-    lgdt 0x7BE0    /* GDTR at fixed address with pre-filled values */
+     * Load GDT32 for Protected Mode using position-independent addressing
+     * ============================================================
+     * The GDTR structure is at offset 0x1E0 within the trampoline.
+     * We compute the actual address using call/pop to get current IP,
+     * then mask to page boundary and add the GDTR offset.
+     * This is necessary because the assembler incorrectly encodes
+     * register-indirect LGDT as a hardcoded absolute address.
+     * Note: LGDT in 16-bit mode only accepts BX/BP/SI/DI as base regs.
+     */
+    call get_eip_gdt
+get_eip_gdt:
+    pop %si               /* SI = current IP */
+    /* Round down to 4KB boundary (trampoline base) */
+    and $0xF000, %si      /* SI = 0x7000 in real mode */
+    /* Add offset to gdt32_gdtr (0x1E0) */
+    add $0x1E0, %si       /* SI = 0x71E0 (GDTR address) */
+    /* Load GDTR from computed address */
+    lgdt (%si)
 
     /* Debug: Output "G" */
     mov $0x3F8, %dx
@@ -152,9 +167,12 @@ get_eip_pm:
 
     /* ============================================================
      * Load 64-bit GDT
-     * ============================================================ */
+     * ============================================================
+     * Use address 0x7F00 which is properly identity-mapped
+     * (within first 1GB, covered by identity-mapped page tables)
+     */
     .byte 0x66
-    mov $0x7BF0, %eax
+    mov $0x7F00, %eax
     lgdt (%eax)
 
     /* Debug: Output "D" */
