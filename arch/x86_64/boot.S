@@ -271,9 +271,17 @@ boot_is_bsp:
     movl $boot_pml4+4, %eax              /* High 32 bits */
     movl %eax, 0x7104
 
-    /* Patch ap_start_placeholder (at 0x7000 + 0x108 = 0x7108) */
+    /* Patch ap_start_placeholder (at 0x7000 + 0x108 = 0x7108)
+     * Debug: Output the value being patched to verify it's correct */
     movl $ap_start, %eax                 /* Low 32 bits of ap_start */
     movl %eax, 0x7108
+
+    /* Debug: Output first byte of ap_start address to serial */
+    mov $0x3F8, %dx
+    mov %al, %dl                         /* Output low byte */
+    mov $'@', %al
+    out %al, %dx
+
     movl $ap_start+4, %eax               /* High 32 bits */
     movl %eax, 0x710C
 

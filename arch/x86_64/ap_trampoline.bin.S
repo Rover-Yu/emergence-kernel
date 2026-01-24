@@ -310,29 +310,54 @@ stack_continue:
     mov $'T', %al
     out %al, %edx
 
-    /* Load ap_start address from placeholder */
-    /* ap_start_placeholder is at physical 0x7108 (0x7000 + 0x108) */
-    movq $0x7108, %rax        /* Absolute address of ap_start_placeholder */
-    mov (%rax), %rax          /* Load ap_start address */
-
-    /* Debug: Output '1' to confirm we loaded ap_start address */
-    mov $'1', %al
+    /* ============================================================
+     * TEST: Try a simple inline code execution first
+     * ============================================================
+     * Before jumping anywhere else, let's try executing code inline.
+     * If we can execute inline code after all the setup, the issue
+     * is specifically with the jump instruction.
+     */
+    /* Debug: Output '5' - entering test phase */
+    mov $'5', %al
     out %al, %edx
 
-    /* ============================================================
-     * Jump to ap_start using jmp instead of call
-     * ============================================================
-     * Using jmp avoids pushing to stack, which eliminates the
-     * stack dependency. The ap_start() function doesn't return
-     * anyway (it halts at the end), so jmp is appropriate here.
-     *
-     * If this works, we know the call instruction was the issue.
-     * If this fails, the problem is with ap_start itself.
-     */
-    cli                     /* Disable interrupts before jump */
-    jmp *%rax               /* Jump to ap_start (no return) */
+    /* Try executing some instructions inline */
+    movq $0xDEADBEEFCAFEBABE, %r8
 
-    /* Should never reach here */
+    /* Debug: Output '6' - inline execution worked */
+    mov $'6', %al
+    out %al, %edx
+
+    /* Now try an absolute jump to within the trampoline */
+    leaq ap_test_function(%rip), %rax  /* Get address of test function */
+
+    /* Debug: Output '7' - computed relative address */
+    mov $'7', %al
+    out %al, %edx
+
+    /* Disable interrupts */
+    cli
+
+    /* Debug: Output 'J' - about to jump */
+    mov $'J', %al
+    out %al, %edx
+
+    /* Jump using RIP-relative address */
+    jmp *%rax
+
+    /* ============================================================
+     * Previous code for reference - using absolute address
+     * ============================================================
+     * movq $0x9000, %rax        -- Absolute address: 0x7000 + 0x2000
+     */
+
+    /* If we reach here, the jump failed - halt */
+halt_after_jump:
+    mov $'F', %al
+    out %al, %edx
+    cli
+    hlt
+    jmp halt_after_jump
 
     /* Should never reach here */
 ap_stub_halt:
@@ -344,5 +369,25 @@ ap_stub_halt:
     .org 0x1100
 ap_stack_placeholder:
     .quad 0xDEADBEEFCAFEBABE  /* Patched with actual ap_stack_end address */
+
+    /* ============================================================
+     * Local Test Function - at offset 0x2000 (physical 0x9000)
+     * ============================================================
+     * This function is used to test if the jump mechanism works.
+     * If we can jump here and execute code, the jump is working.
+     * The issue would then be with jumping to ap_start in kernel code.
+     */
+    .org 0x2000
+    .code64
+ap_test_function:
+    /* Debug: Output 'K' to confirm we reached this function */
+    mov $0x3F8, %rdx
+    mov $'K', %al
+    out %al, %rdx
+
+    /* Halt */
+    cli
+    hlt
+    jmp ap_test_function
 
 trampoline_end:
