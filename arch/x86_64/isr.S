@@ -29,9 +29,6 @@
      * We don't need to save/restore %ds, %es, %fs, %gs */
 
     /* Call C handler */
-    call rtc_isr_handler
-
-    /* Call C handler */
     call \name##_handler
 
     /* Restore data segment */
@@ -276,9 +273,22 @@ irq_common_stub:
  * These just halt for now - proper exception handling can be added later
  * ============================================ */
 
+.extern serial_puts
+
 .section .text
 .global divide_error_isr_handler
 divide_error_isr_handler:
+    push %rax
+    push %rdi
+    push %rsi
+    movabs $0xFEE000B0, %rax      /* Load absolute EOI address */
+    movl $0, (%rax)              /* Write 0 to EOI register */
+    lea exception_msg(%rip), %rdi
+    mov $8, %rsi                 /* Vector 8 = dummy, but we use rdi as pointer */
+    call serial_puts
+    pop %rsi
+    pop %rdi
+    pop %rax
     cli
     hlt
     jmp divide_error_isr_handler
@@ -378,3 +388,6 @@ machine_check_isr_handler:
 .global simd_isr_handler
 simd_isr_handler:
     iretq
+
+exception_msg:
+    .asciz "[EXCEPTION] Divide Error\n"

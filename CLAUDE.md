@@ -8,6 +8,8 @@ JAKernel (gckernel) is an educational x86-64 operating system kernel implementin
 
 **Current Development Focus:** SMP boot implementation - getting Application Processors (APs) to start successfully via STARTUP IPIs.
 
+**Note:** The QEMU machine type was changed from `q35` to `pc` (commit 205e67b) and CPU count reduced to 2 (commit 1c4cc83) for APIC compatibility and easier SMP debugging.
+
 ## Build and Run Commands
 
 ```bash
@@ -26,7 +28,7 @@ make run-debug
 gdb -x .gdbinit
 ```
 
-**QEMU Flags:** `-M q35 -m 128M -nographic -cdrom jakernel.iso -smp 4`
+**QEMU Flags:** `-M pc -m 128M -nographic -cdrom jakernel.iso -smp 2`
 
 ## Architecture and Code Layout
 
@@ -42,7 +44,8 @@ arch/x86_64/           # Architecture-specific code
 ├── acpi.c/.h          # ACPI MADT parsing for CPU discovery
 ├── idt.c/.h           # Interrupt Descriptor Table
 ├── timer.c/.h         # Timer interrupt handler (demo quotes)
-├── rtc.c/.h           # RTC (Real Time Clock) for periodic interrupts
+├── rtc.c/.h           # RTC (Real Time Clock) driver
+├── pit.c/.h           # 8259 Programmable Interval Timer driver
 ├── serial_driver.c    # Serial port driver (COM1)
 └── vga.c/.h           # VGA text mode output
 
@@ -50,7 +53,12 @@ kernel/                # Architecture-independent kernel code
 ├── main.c             # Kernel entry point (kernel_main)
 ├── smp.c/.h           # SMP subsystem implementation
 └── device.c/.h        # Device/driver framework
+
+tests/                 # Test framework (reference code only)
+└── test.h             # Test framework header
 ```
+
+**Note:** The `tests/` directory contains reference test code but is not built by default (empty `TESTS_C_SRCS` in Makefile).
 
 ## Boot Flow
 
@@ -70,6 +78,9 @@ kernel/                # Architecture-independent kernel code
 **Critical:** The AP trampoline contains **placeholders** that are patched at runtime by `patch_ap_trampoline()`:
 - `boot_pml4_placeholder` - PML4 address for page tables
 - `ap_start_placeholder` - Address of `ap_start()` function
+- GDT placeholders (0xAA, 0xBB, 0xCC) - Stack-based GDT loading for position independence
+
+**Debug output:** Trampoline prints "HA" → "1" → "C" → "R" → "P" sequence to track boot stage progress.
 
 ## Memory Map
 
@@ -90,7 +101,7 @@ The kernel uses 4-level paging for x86-64 Long Mode:
 
 ## SMP Subsystem
 
-- **Maximum CPUs:** 4 (`SMP_MAX_CPUS` in `kernel/smp.h`)
+- **Maximum CPUs:** 2 (`SMP_MAX_CPUS` in `kernel/smp.h`) - reduced from 4 for debugging
 - **CPU Stack Size:** 16 KB per CPU (`CPU_STACK_SIZE`)
 - **CPU States:** OFFLINE, BOOTING, ONLINE, READY
 - **Per-CPU Info:** `smp_cpu_info_t` stores apic_id, cpu_index, state, stack_top
@@ -119,6 +130,8 @@ The kernel uses 4-level paging for x86-64 Long Mode:
 | 33     | IPI                      |
 | 40     | RTC (IRQ 8, PIC-based)   |
 
+**Note:** PIC (8259 Programmable Interrupt Controller) is remapped and all IRQs are masked by default in `idt_init()`. RTC interrupts are explicitly disabled due to causing system resets.
+
 ## Debugging
 
 Serial port (COM1, 0x3F8) is heavily used for debug output:
@@ -126,6 +139,10 @@ Serial port (COM1, 0x3F8) is heavily used for debug output:
 - `serial_putc(char c)` - Print character
 
 GDB debugging: Use `.gdbinit` which connects to QEMU (`target remote :1234`) and sets breakpoint at `kernel_main`.
+
+**Build artifacts:** Object files are organized in `build/` with prefixes `boot_*`, `arch_*`, `kernel_*` for easy identification.
+
+**Code navigation:** Cscope and ctags files are generated in the root directory for code navigation.
 
 ## Important Conventions
 

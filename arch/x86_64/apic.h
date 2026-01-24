@@ -69,25 +69,6 @@
 /* Default Local APIC base address (will be detected from MSR) */
 #define LAPIC_DEFAULT_BASE   0xFEE00000
 
-/* Maximum number of CPUs supported */
-#define MAX_CPUS             4
-
-/* CPU states */
-typedef enum {
-    CPU_STATE_UNINITIALIZED,    /* CPU not yet started */
-    CPU_STATE_STARTING,         /* CPU is being started */
-    CPU_STATE_RUNNING,          /* CPU is running */
-    CPU_STATE_READY             /* CPU completed initialization */
-} cpu_state_t;
-
-/* CPU information structure */
-typedef struct {
-    uint8_t id;                 /* Local APIC ID */
-    uint8_t acpi_id;            /* ACPI processor ID */
-    cpu_state_t state;          /* Current state */
-    void *stack_top;            /* Top of stack for this CPU */
-} cpu_info_t;
-
 /* APIC function prototypes */
 
 /* Read/write Local APIC registers */

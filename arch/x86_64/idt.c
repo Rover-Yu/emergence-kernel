@@ -111,6 +111,10 @@ void idt_init(void) {
     /* Remap PIC interrupts to avoid conflicts with exceptions */
     pic_remap();
 
+    /* Mask all PIC interrupts to prevent spurious interrupts */
+    outb(PIC1_DATA, 0xFF);  /* Mask all IRQs on master PIC */
+    outb(PIC2_DATA, 0xFF);  /* Mask all IRQs on slave PIC */
+
     /* Clear IDT */
     for (int i = 0; i < IDT_ENTRIES; i++) {
         idt_set_gate(i, 0, 0, 0);
@@ -134,6 +138,7 @@ void idt_init(void) {
     idt_set_gate(12, (uint64_t)stack_isr, kernel_cs, IDT_GATE_INTERRUPT);
     idt_set_gate(13, (uint64_t)general_protection_isr, kernel_cs, IDT_GATE_INTERRUPT);
     idt_set_gate(14, (uint64_t)page_fault_isr, kernel_cs, IDT_GATE_INTERRUPT);
+    idt_set_gate(15, 0, kernel_cs, IDT_GATE_INTERRUPT);  /* Reserved */
     idt_set_gate(16, (uint64_t)x87_fpu_isr, kernel_cs, IDT_GATE_INTERRUPT);
     idt_set_gate(17, (uint64_t)alignment_isr, kernel_cs, IDT_GATE_INTERRUPT);
     idt_set_gate(18, (uint64_t)machine_check_isr, kernel_cs, IDT_GATE_INTERRUPT);
@@ -154,7 +159,8 @@ void idt_init(void) {
     /* Load IDT using lidt instruction */
     asm volatile ("lidt %0" : : "m"(idt_ptr));
 
-    /* Enable IRQ 8 (RTC) on both PICs */
-    outb(PIC2_DATA, inb(PIC2_DATA) & ~0x01);  /* Enable IRQ 8 on slave PIC */
-    outb(PIC1_DATA, inb(PIC1_DATA) & ~0x04);  /* Enable IRQ 2 (cascade) on master PIC */
+    /* Disable RTC interrupt (IRQ 8) for now - causes system resets
+     * Only enable when RTC is properly initialized */
+    /* outb(PIC2_DATA, inb(PIC2_DATA) & ~0x01);   Enable IRQ 8 on slave PIC */
+    /* outb(PIC1_DATA, inb(PIC1_DATA) & ~0x04);   Enable IRQ 2 (cascade) on master PIC */
 }

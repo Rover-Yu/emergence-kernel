@@ -44,7 +44,7 @@ extern uint64_t boot_pml4;
  * Returns: Number of CPUs
  */
 int smp_get_cpu_count(void) {
-    return SMP_MAX_CPUS;  /* Always 4 in this implementation */
+    return SMP_MAX_CPUS;  /* Configurable in smp.h */
 }
 
 /**
@@ -177,11 +177,10 @@ void smp_start_all_aps(void) {
     for (int i = 1; i < SMP_MAX_CPUS; i++) {
         uint8_t apic_id = smp_get_apic_id_by_index(i);
 
-        serial_puts("SMP: AP ");
+        /* Minimal output before AP startup - don't interfere with AP debug */
+        serial_puts("SMP: Starting AP ");
         serial_putc('0' + i);
-        serial_puts(" (APIC ID ");
-        serial_putc('0' + apic_id);
-        serial_puts(") - sending STARTUP IPI...\n");
+        serial_puts("...\n");
 
         /* Mark AP as booting */
         cpu_info[i].state = CPU_BOOTING;
@@ -194,11 +193,8 @@ void smp_start_all_aps(void) {
             serial_putc('0' + i);
             serial_puts(" startup FAILED!\n");
             cpu_info[i].state = CPU_OFFLINE;
-        } else {
-            serial_puts("SMP: AP ");
-            serial_putc('0' + i);
-            serial_puts(" STARTUP IPI sent successfully\n");
         }
+        /* No success output here - ap_startup() already outputs */
     }
 
     /* Signal APs that BSP initialization is complete */
@@ -281,7 +277,7 @@ void ap_start(void) {
  * patch_ap_trampoline - Patch the AP trampoline with runtime values
  *
  * This function patches the placeholder values in the AP trampoline
- * with the correct addresses for boot_pml4 and ap_start.
+ * with the correct addresses for boot_pml4, ap_start, and GDT base addresses.
  */
 void patch_ap_trampoline(void) {
     extern void serial_puts(const char *str);
@@ -302,150 +298,197 @@ void patch_ap_trampoline(void) {
     /* Verify trampoline is loaded at 0x7000 */
     serial_puts("SMP: Verifying trampoline at 0x7000...\n");
     uint8_t *tramp_check = (uint8_t *)0x7000;
-    if (tramp_check[0] == 0xBA && tramp_check[1] == 0xF8) {
-        serial_puts("SMP: Trampoline signature OK (mov dx, 0x3F8)\n");
+    /* Check for FA (cli) followed by BA F8 03 (mov dx, 0x3F8) */
+    if (tramp_check[0] == 0xFA && tramp_check[1] == 0xBA && tramp_check[2] == 0xF8) {
+        serial_puts("SMP: Trampoline signature OK\n");
     } else {
         serial_puts("SMP: ERROR - Trampoline signature mismatch!\n");
-        serial_puts("SMP: First bytes: ");
-        for (int i = 0; i < 16; i++) {
-            serial_putc('0' + ((tramp_check[i] >> 4) & 0xF));
-            serial_putc('0' + (tramp_check[i] & 0xF));
-            serial_putc(' ');
-        }
-        serial_puts("\n");
     }
 
-    /* Trampoline is at physical address 0x7000 */
     uint8_t *trampoline = (uint8_t *)0x7000;
 
-    /* The placeholders need to be patched in the MOV instructions
-     * From disassembly analysis (actual binary offsets after adding WBINVD and IDT):
-     * - mov $boot_pml4_placeholder, %ecx is at offset 0x54
-     *   The immediate value (4 bytes) is at offset 0x55
-     * - mov $ap_start_placeholder, %eax is at offset 0x9D
-     *   The immediate value (4 bytes) is at offset 0x9E
+    /* ============================================================
+     * Patch GDT32 and GDT64 base addresses
+     * ============================================================
+     * The trampoline uses "mov $GDTxx_BASE_PATCH, %eax" instructions
+     * where GDTxx_BASE_PATCH is a placeholder that needs patching.
+     *
+     * We need to find where gdt32 and gdt64 actually are in the binary
+     * and patch the mov immediate values.
      */
 
-    uint32_t *boot_pml4_ptr = (uint32_t *)(trampoline + 0x55);
-    uint32_t *ap_start_ptr = (uint32_t *)(trampoline + 0x9E);
+    /* Find gdt32 by searching for the GDT signature pattern */
+    /* GDT32: null quad (8 zeros) + 32-bit code descriptor + 32-bit data descriptor */
+    /* Pattern: 00 00 00 00 00 00 00 00 00 9A CF 00 00 00 00 00 00 92 CF 00 */
+    uint32_t gdt32_offset = 0;
+    uint32_t gdt64_offset = 0;
 
-    /* Patch boot_pml4 placeholder with low 32 bits of address */
-    *boot_pml4_ptr = ((uint32_t)((uint64_t)&boot_pml4));
+    serial_puts("SMP: Searching for GDTs...\n");
 
-    /* Patch ap_start placeholder with low 32 bits of address */
-    *ap_start_ptr = ((uint32_t)((uint64_t)&ap_start));
+    for (uint32_t i = 0x80; i < trampoline_size - 32; i++) {
+        /* Look for GDT32 pattern with new format
+         * Pattern: [8 zeros (null)][code: FF FF 00 00 00 9A CF 00][data: FF FF 00 00 00 92 CF 00]
+         */
+        if (i + 24 < trampoline_size &&
+            trampoline[i] == 0x00 &&
+            trampoline[i+1] == 0x00 &&
+            trampoline[i+2] == 0x00 &&
+            trampoline[i+3] == 0x00 &&
+            trampoline[i+4] == 0x00 &&
+            trampoline[i+5] == 0x00 &&
+            trampoline[i+6] == 0x00 &&
+            trampoline[i+7] == 0x00 &&
+            trampoline[i+8] == 0xFF &&
+            trampoline[i+9] == 0xFF &&
+            trampoline[i+10] == 0x00 &&
+            trampoline[i+11] == 0x00 &&
+            trampoline[i+12] == 0x00 &&
+            trampoline[i+13] == 0x9A &&
+            trampoline[i+14] == 0xCF &&
+            trampoline[i+15] == 0x00 &&
+            trampoline[i+16] == 0xFF &&
+            trampoline[i+17] == 0xFF &&
+            trampoline[i+18] == 0x00 &&
+            trampoline[i+19] == 0x00 &&
+            trampoline[i+20] == 0x00 &&
+            trampoline[i+21] == 0x92 &&
+            trampoline[i+22] == 0xCF &&
+            trampoline[i+23] == 0x00) {
+            gdt32_offset = i;
+            serial_puts("SMP: Found GDT32 at offset ");
+            if (i >= 100) serial_putc('0' + (i / 100));
+            if (i >= 10) serial_putc('0' + ((i / 10) % 10));
+            serial_putc('0' + (i % 10));
+            serial_puts("\n");
+        }
+
+        /* Look for GDT64 pattern with new format
+         * Pattern: [8 zeros (null)][code: FF FF 00 00 00 9A AF 00][data: FF FF 00 00 00 92 CF 00]
+         */
+        if (i + 24 < trampoline_size &&
+            trampoline[i] == 0x00 &&
+            trampoline[i+1] == 0x00 &&
+            trampoline[i+2] == 0x00 &&
+            trampoline[i+3] == 0x00 &&
+            trampoline[i+4] == 0x00 &&
+            trampoline[i+5] == 0x00 &&
+            trampoline[i+6] == 0x00 &&
+            trampoline[i+7] == 0x00 &&
+            trampoline[i+8] == 0xFF &&
+            trampoline[i+9] == 0xFF &&
+            trampoline[i+10] == 0x00 &&
+            trampoline[i+11] == 0x00 &&
+            trampoline[i+12] == 0x00 &&
+            trampoline[i+13] == 0x9A &&
+            trampoline[i+14] == 0xAF &&
+            trampoline[i+15] == 0x00 &&
+            trampoline[i+16] == 0xFF &&
+            trampoline[i+17] == 0xFF &&
+            trampoline[i+18] == 0x00 &&
+            trampoline[i+19] == 0x00 &&
+            trampoline[i+20] == 0x00 &&
+            trampoline[i+21] == 0x92 &&
+            trampoline[i+22] == 0xCF &&
+            trampoline[i+23] == 0x00) {
+            gdt64_offset = i;
+            serial_puts("SMP: Found GDT64 at offset ");
+            if (i >= 100) serial_putc('0' + (i / 100));
+            if (i >= 10) serial_putc('0' + ((i / 10) % 10));
+            serial_putc('0' + (i % 10));
+            serial_puts("\n");
+        }
+    }
+
+    /* Patch GDT32 code descriptor base to 0x7000 */
+    if (gdt32_offset > 0) {
+        uint32_t desc_offset = gdt32_offset + 8;  /* Code descriptor */
+        trampoline[desc_offset + 2] = 0x00;  /* base_low low byte */
+        trampoline[desc_offset + 3] = 0x70;  /* base_low high byte */
+        serial_puts("SMP: Patched GDT32 base to 0x7000\n");
+    }
+
+    /* Now patch the specific placeholder values:
+     * - 0xAA00 is the GDT32 base placeholder (in 16-bit code section)
+     * - 0xBB is the GDT64 limit placeholder (in 32-bit code section)
+     * - 0xCC00 is the GDT64 base placeholder (in 32-bit code section)
+     */
+    if (gdt32_offset > 0) {
+        /* Find 0xAA00 pattern (B8 00 AA) in 16-bit section (around offset 0x1C) */
+        for (uint32_t i = 0x10; i < 0x50; i++) {
+            if (trampoline[i] == 0xB8 && trampoline[i+1] == 0x00 && trampoline[i+2] == 0xAA) {
+                uint32_t patched_base = 0x7000 + gdt32_offset;
+                trampoline[i+1] = patched_base & 0xFF;
+                trampoline[i+2] = (patched_base >> 8) & 0xFF;
+                serial_puts("SMP: Patched GDT32_BASE to 0x");
+                /* Print patched base in hex */
+                for (int shift = 12; shift >= 0; shift -= 4) {
+                    uint8_t nibble = (patched_base >> shift) & 0xF;
+                    serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
+                }
+                serial_puts("\n");
+                break;
+            }
+        }
+    }
+
+    if (gdt64_offset > 0) {
+        /* Find 0xBB pattern (B8 BB 00 00 00) - GDT64 limit */
+        for (uint32_t i = 0x50; i < trampoline_size - 32; i++) {
+            if (trampoline[i] == 0xB8 && trampoline[i+1] == 0xBB &&
+                trampoline[i+2] == 0x00 && trampoline[i+3] == 0x00 && trampoline[i+4] == 0x00) {
+                /* GDT64 limit = (3 entries * 8 bytes) - 1 = 24 - 1 = 0x17 */
+                trampoline[i+1] = 0x17;
+                serial_puts("SMP: Patched GDT64_LIMIT to 0x17\n");
+                break;
+            }
+        }
+
+        /* Find 0xCC00 pattern (B8 00 CC 00 00) - GDT64 base */
+        for (uint32_t i = 0x50; i < trampoline_size - 32; i++) {
+            if (trampoline[i] == 0xB8 && trampoline[i+1] == 0x00 && trampoline[i+2] == 0xCC &&
+                trampoline[i+3] == 0x00 && trampoline[i+4] == 0x00) {
+                uint32_t patched_base = 0x7000 + gdt64_offset;
+                trampoline[i+1] = patched_base & 0xFF;
+                trampoline[i+2] = (patched_base >> 8) & 0xFF;
+                trampoline[i+3] = (patched_base >> 16) & 0xFF;
+                trampoline[i+4] = (patched_base >> 24) & 0xFF;
+                serial_puts("SMP: Patched GDT64_BASE to 0x");
+                /* Print patched base in hex */
+                for (int shift = 12; shift >= 0; shift -= 4) {
+                    uint8_t nibble = (patched_base >> shift) & 0xF;
+                    serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
+                }
+                serial_puts("\n");
+                break;
+            }
+        }
+    }
+
+    /* Patch boot_pml4_value and ap_start_value at end of trampoline */
+    serial_puts("SMP: Patching boot_pml4_value...\n");
+    uint64_t *boot_pml4_ptr = (uint64_t *)(trampoline + trampoline_size - 16);
+    *boot_pml4_ptr = (uint64_t)&boot_pml4;
+
+    serial_puts("SMP: Patching ap_start_value...\n");
+    uint64_t *ap_start_ptr = (uint64_t *)(trampoline + trampoline_size - 8);
+    *ap_start_ptr = (uint64_t)&ap_start;
 
     /* Verify patching worked */
     serial_puts("SMP: Verifying patched values:\n");
-    serial_puts("SMP:   trampoline[0x55] = 0x");
-    uint32_t verify_pml4 = *boot_pml4_ptr;
-    for (int i = 28; i >= 0; i -= 4) {
+    serial_puts("SMP:   boot_pml4_value = 0x");
+    uint64_t verify_pml4 = *boot_pml4_ptr;
+    for (int i = 60; i >= 0; i -= 4) {
         uint8_t byte = (verify_pml4 >> i) & 0xF;
         serial_putc(byte < 10 ? '0' + byte : 'A' + byte - 10);
     }
     serial_puts("\n");
-    serial_puts("SMP:   trampoline[0x9E] = 0x");
-    uint32_t verify_ap = *ap_start_ptr;
-    for (int i = 28; i >= 0; i -= 4) {
+    serial_puts("SMP:   ap_start_value = 0x");
+    uint64_t verify_ap = *ap_start_ptr;
+    for (int i = 60; i >= 0; i -= 4) {
         uint8_t byte = (verify_ap >> i) & 0xF;
         serial_putc(byte < 10 ? '0' + byte : 'A' + byte - 10);
     }
     serial_puts("\n");
-
-    serial_puts("SMP: Placeholders patched at offsets 0x55 and 0x9E\n");
-    serial_puts("SMP: boot_pml4 = 0x");
-    uint32_t pml4_addr = (uint32_t)((uint64_t)&boot_pml4);
-    for (int i = 28; i >= 0; i -= 4) {
-        uint8_t byte = (pml4_addr >> i) & 0xF;
-        serial_putc(byte < 10 ? '0' + byte : 'A' + byte - 10);
-    }
-    serial_puts("\n");
-
-    serial_puts("SMP: ap_start = 0x");
-    uint32_t ap_addr = (uint32_t)((uint64_t)&ap_start);
-    for (int i = 28; i >= 0; i -= 4) {
-        uint8_t byte = (ap_addr >> i) & 0xF;
-        serial_putc(byte < 10 ? '0' + byte : 'A' + byte - 10);
-    }
-    serial_puts("\n");
-
-    /* ============================================================
-     * Patch GDT pointers and descriptors with correct physical addresses
-     * ============================================================
-     * The GDT contains link-time addresses that are wrong when trampoline
-     * runs at physical 0x7000. We need to patch:
-     * 1. GDT pointer bases (addresses of the GDTs themselves)
-     *
-     * IMPORTANT: We do NOT patch GDT descriptor bases because in real mode,
-     * segments use absolute addresses. The descriptors are already correct.
-     *
-     * From new hexdump (without .org directive):
-     * - GDT32 data starts at offset 0xA0
-     * - GDT64 data starts at offset 0xB0
-     */
-
-    /* DO NOT patch GDT descriptor bases - they are correct as-is */
-
-    /* ============================================================
-     * Patch LGDT instruction displacements (16-bit values!)
-     * ============================================================
-     * lgdt [gdt32_ptr] is at offset 0x12, displacement at 0x15-0x16
-     * lgdt [gdt64_ptr] is at offset 0x77, displacement at 0x7A-0x7B
-     *
-     * The displacement is relative to DS. When DS=0x7000, we need
-     * displacement such that DS:disp = physical address of gdt_ptr.
-     * Since gdt32_ptr is at 0x70B8 and DS=0x7000, displacement=0x00B8.
-     * The original link-time value is already correct! No patching needed.
-     *
-     * However, we DO need to patch the GDT pointer BASE addresses in the
-     * pointer structures (the actual physical addresses of the GDTs).
-     */
-
-    /* GDT32 pointer structure is at offset 0xB8: limit (2 bytes) + base (4 bytes) */
-    uint16_t *gdt32_ptr_limit = (uint16_t *)(trampoline + 0xB8);
-    uint32_t *gdt32_ptr_base = (uint32_t *)(trampoline + 0xBA);
-    *gdt32_ptr_limit = 0x17;  /* 23 bytes = 3 descriptors * 8 bytes */
-    *gdt32_ptr_base = 0x000070A0;  /* GDT32 at physical 0x70A0 */
-
-    /* GDT64 pointer structure is at offset 0xD0: limit (2 bytes) + base (4 bytes) */
-    uint16_t *gdt64_ptr_limit = (uint16_t *)(trampoline + 0xD0);
-    uint32_t *gdt64_ptr_base = (uint32_t *)(trampoline + 0xD2);
-    *gdt64_ptr_limit = 0x17;  /* 23 bytes = 3 descriptors * 8 bytes */
-    *gdt64_ptr_base = 0x000070C0;  /* GDT64 at physical 0x70C0 */
-
-    /* ============================================================
-     * Patch IDT pointer - zero IDT for safety
-     * ============================================================
-     * IDT pointer comes after GDT64 pointer
-     * From the new layout: idt_ptr is at offset 0xD8 (after gdt64_ptr at 0xD0)
-     * Zero IDT: limit=0, base=0 (no patching needed, already zero!)
-     */
-    serial_puts("SMP: IDT pointer (zero IDT) - no patching needed\n");
-
-    /* Debug: Verify GDT pointer values after patching */
-    serial_puts("SMP: GDT32 pointer: limit=");
-    serial_putc('0' + ((*gdt32_ptr_limit >> 4) & 0xF));
-    serial_putc('0' + (*gdt32_ptr_limit & 0xF));
-    serial_puts(" base=0x");
-    uint32_t gdt32_base = *gdt32_ptr_base;
-    for (int i = 28; i >= 0; i -= 4) {
-        uint8_t byte = (gdt32_base >> i) & 0xF;
-        serial_putc(byte < 10 ? '0' + byte : 'A' + byte - 10);
-    }
-    serial_puts("\n");
-
-    /* Debug: Dump first 16 bytes of GDT32 to verify descriptors */
-    serial_puts("SMP: GDT32[0-15]: ");
-    uint8_t *gdt32_data = trampoline + 0xA0;
-    for (int i = 0; i < 16; i++) {
-        uint8_t byte = gdt32_data[i];
-        serial_putc((byte >> 4) & 0xF);
-        serial_putc(byte & 0xF);
-        serial_putc(' ');
-    }
-    serial_puts("\n");
-
-    serial_puts("SMP: GDT pointers and descriptors patched\n");
 
     serial_puts("SMP: Trampoline ready at 0x7000\n");
 }

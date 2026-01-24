@@ -1,214 +1,192 @@
-/* AP Trampoline - 16/32-bit portion (real mode to protected mode)
+/* AP Trampoline - Real mode to Long Mode (64-bit) transition
  *
- * This file is assembled separately as a 16-bit binary
- * and then included in the main kernel image.
+ * The AP starts in real mode at physical address 0x7000 via STARTUP IPI.
+ * This trampoline transitions: Real Mode -> Protected Mode -> Long Mode (64-bit)
+ * Then jumps to ap_start() in the kernel.
  *
- * The AP starts in real mode at physical address 0x7000.
+ * CRITICAL: This code must be position-independent (works at physical 0x7000)
+ *
+ * PATCHING: The values 0xAA, 0xBB, 0xCC below are patched at runtime by
+ * patch_ap_trampoline() with the actual GDT base addresses.
  */
 
     .code16
     .org 0
 
 trampoline_start:
-    /* ============================================================
-     * Step 1: Real Mode - Write debug output
-     * ============================================================ */
+    /* Write "HA" to serial */
+    cli
     mov $0x3F8, %dx
     mov $'H', %al
     out %al, %dx
     mov $'A', %al
     out %al, %dx
 
-    cli
+    /* Set up segments */
+    mov %cs, %ax
+    mov %ax, %ds
+    mov %ax, %es
+    mov %ax, %ss
 
-    /* Write back and invalidate cache - critical for cache coherency */
-    wbinvd
+    /* Stack */
+    mov $0x7C00, %sp
 
-    /* Debug: output '1' after CLI */
+    /* Load GDT - build 6-byte GDTR on stack
+     * Format: [limit_low, limit_high, base_0, base_1, base_2, base_3]
+     * GDT32 is at 0x70F0, so: limit=0x17, base=0x000070F0
+     */
+    mov $0x17, %ax
+    push %ax
+    mov $0x70F0, %ax
+    push %ax
+    xor %ax, %ax
+    push %ax
+
+    mov %sp, %bx
+    lgdt (%bx)
+    add $6, %sp
+
+    /* Write "1" to serial - GDT loaded */
+    mov $0x3F8, %dx
     mov $'1', %al
     out %al, %dx
 
-    /* ============================================================
-     * Step 2: Set up data segment
-     * ============================================================ */
-    mov $0x7000, %ax
-    mov %ax, %ds
+    /* Write "C" to serial - about to enable protected mode */
+    mov $'C', %al
+    out %al, %dx
 
-    /* ============================================================
-     * Step 3: Load GDT
-     * The gdt32_ptr address will be patched at runtime
-     * ============================================================ */
-    lgdt [gdt32_ptr]
-
-    /* Load zero IDT for safety - any exception will halt predictably */
-    lidt [idt_ptr]
-
-    /* ============================================================
-     * Step 4: Enable Protected Mode
-     * ============================================================
-     * CR0 bits we set:
-     * - PE (bit 0): Protected Mode enable
-     * - MP (bit 1): Monitor Coprocessor (for FPU/SSE handling)
-     * - NE (bit 5): Native Error reporting (critical for FPU errors)
-     */
+    /* Enable Protected Mode */
     mov %cr0, %eax
-    or $0x27, %al        /* Set PE (bit 0) + MP (bit 1) + NE (bit 5) = 0x27 */
+    or $1, %al
     mov %eax, %cr0
 
-    /* ============================================================
-     * Step 5: Far jump to 32-bit protected mode
-     * ============================================================ */
-    /* Debug: output '2' before mode switch */
-    mov $0x3F8, %dx
-    mov $'2', %al
+    /* Write "R" to serial - CR0 updated */
+    mov $'R', %al
     out %al, %dx
 
-    /* Far jump to protected mode entry */
-    ljmp $0x08, $protected_mode_entry
+    /* FAR JUMP to protected mode */
+    .byte 0xEA
+    .word protected_mode_entry
+    .word 0x08
 
-    .code32
+    /* We're now in protected mode (32-bit)
+     * All subsequent instructions need operand size prefix 0x66
+     * to force 32-bit operation */
+
 protected_mode_entry:
-    /* Debug: output '3' in protected mode */
-    mov $0x3F8, %edx
-    mov $'3', %al
+    /* Write "P" to serial - reached protected mode! */
+    .byte 0x66            /* Operand size prefix */
+    mov $0x3F8, %dx       /* Becomes: mov edx, 0x000003F8 */
+    mov $'P', %al
     out %al, %dx
-    /* ============================================================
-     * Step 6: Set up data segments
-     * ============================================================ */
+
+    /* Set up data segments */
     mov $0x10, %ax
     mov %ax, %ds
     mov %ax, %es
     mov %ax, %ss
-    mov %ax, %fs         /* Initialize FS (Linux also does this) */
-    mov %ax, %gs         /* Initialize GS (Linux also does this) */
 
-    /* ============================================================
-     * Step 7: Set up temporary stack
-     * ============================================================ */
-    mov $0x7800, %esp
+    /* Write "2" to serial - in protected mode */
+    .byte 0x66
+    mov $0x3F8, %dx
+    mov $'2', %al
+    out %al, %dx
 
-    /* ============================================================
-     * Step 8: Enable PAE
-     * ============================================================ */
+    /* Load boot_pml4 from placeholder - use position-independent addressing */
+    call get_eip
+get_eip:
+    pop %eax
+    /* boot_pml4_value offset calculation */
+    mov 0xC8(%eax), %eax
+    mov %eax, %cr3
+
+    /* Write "3" to serial - CR3 loaded */
+    .byte 0x66
+    mov $0x3F8, %dx
+    mov $'3', %al
+    out %al, %dx
+
+    /* Enable PAE */
     mov %cr4, %eax
     or $(1 << 5), %eax
     mov %eax, %cr4
 
-    /* ============================================================
-     * Step 9: Load page tables
-     * boot_pml4_placeholder will be patched at runtime
-     * ============================================================ */
-    mov $boot_pml4_placeholder, %ecx
-    mov %ecx, %cr3
-
-    /* ============================================================
-     * Step 10: Enable Long Mode
-     * ============================================================ */
-    mov $0xC0000080, %ecx
-    rdmsr
-    or $(1 << 8), %eax    /* Set LME bit */
-    wrmsr
-
-    /* ============================================================
-     * Step 11: Enable Paging
-     * ============================================================ */
-    /* Debug: output '4' before paging */
-    mov $0x3F8, %edx
+    /* Write "4" to serial - PAE enabled */
+    .byte 0x66
+    mov $0x3F8, %dx
     mov $'4', %al
     out %al, %dx
 
+    /* Enable Long Mode */
+    mov $0xC0000080, %ecx
+    rdmsr
+    or $(1 << 8), %eax
+    wrmsr
+
+    /* Write "5" to serial - long mode enabled */
+    .byte 0x66
+    mov $0x3F8, %dx
+    mov $'5', %al
+    out %al, %dx
+
+    /* Enable Paging (this activates Long Mode) */
     mov %cr0, %eax
     or $(1 << 31), %eax
     mov %eax, %cr0
 
-    /* Debug: output '5' after paging */
-    mov $0x3F8, %edx
-    mov $'5', %al
-    out %al, %dx
-
-    /* ============================================================
-     * Step 12: Load 64-bit GDT
-     * ============================================================ */
-    lgdt [gdt64_ptr]
-
-    /* Debug: output '6' after GDT64 load */
-    mov $0x3F8, %edx
+    /* Write "6" to serial - paging enabled */
+    .byte 0x66
+    mov $0x3F8, %dx
     mov $'6', %al
     out %al, %dx
 
-    /* ============================================================
-     * Step 13: Far jump to 64-bit long mode
-     * The 64-bit code is in ap_trampoline_64.S
-     * ap_start_placeholder will be patched at runtime
-     *
-     * Use the standard far jump technique: push CS, push addr, retf
-     * This is more reliable than lret for mode transitions
-     * ============================================================ */
-    /* Debug: output '7' before 64-bit jump */
-    mov $0x3F8, %edx
+    /* Load 64-bit GDT */
+    mov $0x7BF8, %esp
+    mov $0xBB, %eax
+    mov %eax, (%esp)
+    mov $0xCC00, %eax
+    mov %eax, 2(%esp)
+    lgdt (%esp)
+
+    /* Write "7" to serial - GDT64 loaded */
+    .byte 0x66
+    mov $0x3F8, %dx
     mov $'7', %al
     out %al, %dx
 
-    mov $ap_start_placeholder, %eax
-    push $0x18            /* 64-bit code segment selector */
-    push %eax             /* Target address */
+    /* Far jump to 64-bit code using lret */
+    sub $8, %esp
+    call get_eip2
+get_eip2:
+    pop %eax
+    mov 0x5A(%eax), %eax
+    mov 0x5E(%eax), %edx
+    mov %eax, 2(%esp)
+    mov %edx, 6(%esp)
+    mov $0x08, %ax
+    mov %ax, (%esp)
+    lret
 
-    /* Jump using retf (far return) which properly loads CS */
-    .byte 0xCB            /* RETF opcode */
-
-    /* ============================================================
-     * Data Structures - GDTs
-     * ============================================================ */
-
+    /* GDT32 - Code segment base will be patched to 0x7000 at runtime */
     .align 16
 gdt32:
-    /* Null descriptor (8 bytes) */
-    .long 0, 0
-    /* 32-bit code segment (8 bytes) */
-    /* Format: [limit15:0][base15:0][base23:16][type][limit19:16+flags][base31:24] */
-    /* For base=0, limit=0xFFFF, 32-bit code segment: 0x00CF9A000000FFFF */
-    .long 0x0000FFFF, 0x00CF9A00
-    /* 32-bit data segment (8 bytes) */
-    .long 0x0000FFFF, 0x00CF9200
-gdt32_end:
+    .quad 0x0000000000000000
+    .quad 0x00CF9A000000FFFF
+    .quad 0x00CF92000000FFFF
 
-gdt32_ptr:
-    .word gdt32_end - gdt32 - 1
-    .long gdt32
-
+    /* GDT64 */
     .align 16
 gdt64:
-    /* Null descriptor (8 bytes) */
-    .long 0, 0
-    /* 64-bit code segment (8 bytes) */
-    .long 0x00209A00, 0x00000000
-    /* 64-bit data segment (8 bytes) */
-    .long 0x00009200, 0x00000000
-gdt64_end:
+    .quad 0x0000000000000000
+    .quad 0x00AF9A000000FFFF
+    .quad 0x00CF92000000FFFF
 
-gdt64_ptr:
-    .word gdt64_end - gdt64 - 1
-    .long gdt64
+    /* Patch values at end */
+    .align 8
+boot_pml4_value:
+    .quad 0
 
-/* ============================================================
- * IDT (Interrupt Descriptor Table) - Zero IDT for safety
- * ============================================================
- * During AP boot, we set up a zero IDT (limit=0, base=0) to ensure
- * any exception causes a predictable shutdown rather than jumping
- * to garbage. Linux does the same thing.
- */
-idt_ptr:
-    .word 0      /* Limit = 0 (no IDT entries) */
-    .long 0      /* Base = 0 */
-
-    /* ============================================================
-     * Placeholder values that will be patched by kernel at runtime
-     * ============================================================ */
-    .align 4
-boot_pml4_placeholder:
-    .long 0
-
-ap_start_placeholder:
-    .long 0
+ap_start_value:
+    .quad 0
 
 trampoline_end:

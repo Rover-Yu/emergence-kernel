@@ -954,7 +954,7 @@ int ap_startup(uint8_t apic_id, uint32_t startup_addr) {
         serial_puts("[APIC] STARTUP IPI timeout!\n");
         return -1;
     }
-    serial_puts("[APIC] STARTUP IPI sent successfully\n");
+    /* No output here - let AP execute first */
 
     /* Step 6: Short delay */
     pit_delay_ms(1);
@@ -971,7 +971,6 @@ int ap_startup(uint8_t apic_id, uint32_t startup_addr) {
     }
 
     /* Step 7: Send second STARTUP IPI (recommended by Intel) */
-    serial_puts("[APIC] Sending second STARTUP IPI...\n");
 
     /* Clear ESR before second STARTUP IPI */
     if (maxlvt > 3) {
@@ -984,7 +983,11 @@ int ap_startup(uint8_t apic_id, uint32_t startup_addr) {
         serial_puts("[APIC] Second STARTUP IPI timeout!\n");
         return -1;
     }
-    serial_puts("[APIC] Second STARTUP IPI sent successfully\n");
+
+    /* Wait for AP to start executing - give it time to output debug chars */
+    pit_delay_ms(100);
+
+    serial_puts("[APIC] STARTUP IPI sent, waiting for AP...\n");
 
     return 0;
 }

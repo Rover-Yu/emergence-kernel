@@ -101,6 +101,10 @@ void kernel_main(void) {
         enable_interrupts();
         /* Timer disabled - serial_puts("Timer started. Quotes will print every 0.5 seconds.\n"); */
 
+        /* Disable interrupts for AP startup - re-enable after APs are ready */
+        serial_puts("Disabling interrupts for AP startup...\n");
+        asm volatile ("cli");
+
         /* Run IPI self-test (after interrupts are enabled) */
         /* NOTE: IPI test function not yet implemented - to be added */
         serial_puts("IPI test not yet implemented (IPI handler EOI fix verified)\n");
