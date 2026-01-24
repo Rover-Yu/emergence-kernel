@@ -60,7 +60,4 @@ void ap_start(void);
 /* Start all APs */
 void smp_start_all_aps(void);
 
-/* Patch AP trampoline with runtime values */
-void patch_ap_trampoline(void);
-
 #endif /* JAKERNEL_KERNEL_SMP_H */

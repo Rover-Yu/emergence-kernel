@@ -112,10 +112,8 @@ void kernel_main(void) {
         /* Mark BSP as ready */
         smp_mark_cpu_ready(0);
 
-        /* Patch AP trampoline with correct addresses */
-        extern void patch_ap_trampoline(void);
-        serial_puts("SMP: Patching AP trampoline...\n");
-        patch_ap_trampoline();
+        /* Trampoline was already copied to 0x7000 during BSP boot (in boot.S) */
+        serial_puts("SMP: AP trampoline ready at 0x7000 (copied during boot)\n");
 
         /* Start all APs */
         serial_puts("SMP: Starting all Application Processors...\n");

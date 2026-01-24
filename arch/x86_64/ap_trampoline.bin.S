@@ -6,11 +6,9 @@
  *
  * CRITICAL: This code must be position-independent (works at physical 0x7000)
  *
- * PATCHING: The values below are patched at runtime by patch_ap_trampoline():
- * - GDTR base bytes at 0x7BE0 (GDT32) and 0x7BF0 (GDT64)
- * - GDT descriptor base addresses for position independence
- * - boot_pml4_value: Address of PML4 page table
- * - ap_start_value: Address of ap_start() function
+ * RUNTIME PATCHING (done in boot.S during copy):
+ * - boot_pml4_placeholder (8 bytes at offset 0x100): PML4 page table address
+ * - ap_start_placeholder (8 bytes at offset 0x108): ap_start function address
  */
 
     .code16
@@ -18,13 +16,6 @@
 
 trampoline_start:
     cli
-
-    /* Debug output "HA" to serial (COM1 at 0x3F8) */
-    mov $0x3F8, %dx
-    mov $'H', %al
-    out %al, %dx
-    mov $'A', %al
-    out %al, %dx
 
     /* ============================================================
      * Real Mode Setup
@@ -35,23 +26,15 @@ trampoline_start:
     mov %ax, %ss
     mov $0x7C00, %sp
 
-    /* Debug: Output "1" */
+    /* Debug output "H" to serial (COM1 at 0x3F8) */
     mov $0x3F8, %dx
-    mov $'1', %al
+    mov $'H', %al
     out %al, %dx
 
     /* ============================================================
      * Load GDT32 for Protected Mode
-     * ============================================================
-     * Build GDTR at fixed location 0x7BE0:
-     * - Limit = 0x17 (23 bytes for 3 descriptors)
-     * - Base = patched at runtime (bytes 2-5)
-     */
-    mov $0x7BE0, %bx
-    movb $0x20, (%bx)      /* Limit = 32 (extra room, ensures we don't have limit issues) */
-    movb $0x00, 1(%bx)
-    /* Bytes 2-5 are patched by patch_ap_trampoline() */
-    lgdt (%bx)
+     * ============================================================ */
+    lgdt 0x7BE0    /* GDTR at fixed address with pre-filled values */
 
     /* Debug: Output "G" */
     mov $0x3F8, %dx
@@ -65,26 +48,11 @@ trampoline_start:
     or $1, %eax    /* Set PE (Protected Mode Enable) */
     mov %eax, %cr0
 
-    /* Short jump to serialize */
-    jmp 1f
-1:
-    /* Debug: Output "E" */
-    mov $0x3F8, %dx
-    mov $'E', %al
-    out %al, %dx
-
-    /* Ensure stack is valid before far jump */
-    mov $0x7C00, %sp
-
-    /* Far jump to protected mode
-     * Use 32-bit far jump like Linux does:
-     * 0x66 = operand size prefix (for 32-bit offset)
-     * 0xEA = far jump opcode
-     */
-    .byte 0x66
-    .byte 0xEA
-    .long pm_entry_offset    /* 32-bit offset */
-    .word 0x08               /* Selector */
+    /* Far jump to protected mode (flushes instruction queue) */
+    .byte 0x66        /* 32-bit operand size prefix */
+    .byte 0xEA        /* far jump opcode */
+    .word pm_entry    /* offset */
+    .word 0x08        /* selector */
 
     /* Should never reach here */
     cli
@@ -94,50 +62,27 @@ halt_loop:
 
     /* ============================================================
      * Protected Mode (32-bit) Entry Point
-     * ============================================================
-     * NOTE: Keep everything in .code16 and use 0x66 prefix for 32-bit operands
-     * This prevents the assembler from inserting padding at mode boundaries
-     */
+     * ============================================================ */
     .code16
 pm_entry:
-    /* First, test if we actually got here - output a unique pattern */
-    .byte 0x66           /* operand size prefix for 32-bit */
-    mov $0x3F8, %dx
-    mov $'!', %al
-    out %al, %dx
-    mov $'!', %al
-    out %al, %dx
-    mov $'!', %al
-    out %al, %dx
-
-    /* Then halt */
-    hlt
-
-    /* Debug: Output "R" */
+    /* Debug: Output "P" - reached protected mode */
     .byte 0x66
     mov $0x3F8, %dx
-    mov $'R', %al
+    mov $'P', %al
     out %al, %dx
 
+    /* Set up data segments */
     mov $0x10, %ax
     mov %ax, %ds
     mov %ax, %es
     mov %ax, %ss
 
-    /* Debug: Output "S" */
-    .byte 0x66
-    mov $0x3F8, %dx
-    mov $'S', %al
-    out %al, %dx
-
     /* ============================================================
      * Load Page Tables
+     * boot_pml4_placeholder is patched at runtime
      * ============================================================ */
     .byte 0x66
-    mov $0x7000, %eax
-    add $boot_pml4_offset, %eax
-    .byte 0x67           /* address size prefix for 32-bit address */
-    mov (%eax), %eax
+    mov $boot_pml4_placeholder, %eax
     mov %eax, %cr3
 
     /* Debug: Output "3" */
@@ -147,12 +92,26 @@ pm_entry:
     out %al, %dx
 
     /* ============================================================
+     * Enable PAE (Required for Long Mode)
+     * ============================================================ */
+    .byte 0x66
+    mov %cr4, %eax
+    or $(1 << 5), %eax    /* Set PAE bit (bit 5) */
+    mov %eax, %cr4
+
+    /* Debug: Output "A" */
+    .byte 0x66
+    mov $0x3F8, %dx
+    mov $'A', %al
+    out %al, %dx
+
+    /* ============================================================
      * Enable Long Mode
      * ============================================================ */
     .byte 0x66
     mov $0xC0000080, %ecx
     rdmsr
-    or $(1 << 8), %eax
+    or $(1 << 8), %eax    /* Set LME bit (bit 8) */
     wrmsr
 
     /* Debug: Output "L" */
@@ -162,11 +121,11 @@ pm_entry:
     out %al, %dx
 
     /* ============================================================
-     * Enable Paging
+     * Enable Paging (activates Long Mode)
      * ============================================================ */
     .byte 0x66
     mov %cr0, %eax
-    or $(1 << 31), %eax
+    or $(1 << 31), %eax   /* Set PG bit (bit 31) */
     mov %eax, %cr0
 
     /* Debug: Output "X" */
@@ -179,11 +138,8 @@ pm_entry:
      * Load 64-bit GDT
      * ============================================================ */
     .byte 0x66
-    mov $0x7BF0, %ebx
-    .byte 0x66
-    mov $0x17, %eax
-    mov %eax, (%ebx)
-    lgdt (%ebx)
+    mov $0x7BF0, %eax
+    lgdt (%eax)
 
     /* Debug: Output "D" */
     .byte 0x66
@@ -193,22 +149,13 @@ pm_entry:
 
     /* ============================================================
      * Far Jump to 64-bit Mode
+     * ap_start_placeholder is patched at runtime
      * ============================================================ */
     .byte 0x66
-    mov $0x7000, %eax
-    add $ap_start_offset, %eax
-    .byte 0x67
-    mov (%eax), %eax
+    mov $ap_start_placeholder, %eax
 
     pushw $0x08
     push %eax
-
-    /* Debug: Output "J" */
-    .byte 0x66
-    mov $0x3F8, %dx
-    mov $'J', %al
-    out %al, %dx
-
     lret
 
     .code64
@@ -217,45 +164,45 @@ halt:
     jmp halt
 
     /* ============================================================
+     * Placeholder Values (patched by boot.S during copy)
+     * ============================================================ */
+    .org 0x100
+boot_pml4_placeholder:
+    .quad 0xDEADBEEFCAFEBABE  /* Patched with actual boot_pml4 address */
+
+    .org 0x108
+ap_start_placeholder:
+    .quad 0xDEADBEEFCAFEBABE  /* Patched with actual ap_start address */
+
+    /* ============================================================
+     * GDTR Structures (at fixed addresses)
+     * ============================================================ */
+    .org 0x1E0
+gdt32_gdtr:
+    .word 0x17        /* Limit = 23 bytes (3 descriptors) */
+    .long 0x00007E00  /* Base = 0x7E00 */
+
+    .org 0x1F0
+gdt64_gdtr:
+    .word 0x17        /* Limit = 23 bytes (3 descriptors) */
+    .long 0x00007F00  /* Base = 0x7F00 */
+
+    /* ============================================================
      * GDT32 - For 32-bit Protected Mode
      * ============================================================ */
-    .align 16
+    .org 0xE00
 gdt32:
-    .quad 0x0000000000000000
-    .quad 0x00CF9A000000FFFF
-    .quad 0x00CF92000000FFFF
+    .quad 0x0000000000000000                       /* Null descriptor */
+    .quad 0x00CF9A000000FFFF                      /* 32-bit code segment */
+    .quad 0x00CF92000000FFFF                      /* 32-bit data segment */
 
     /* ============================================================
      * GDT64 - For 64-bit Long Mode
      * ============================================================ */
-    .align 16
+    .org 0xF00
 gdt64:
-    .quad 0x0000000000000000
-    .quad 0x00209A0000000000
-    .quad 0x0000920000000000
-
-    /* ============================================================
-     * Patchable Values
-     * ============================================================ */
-    .align 8
-boot_pml4_value:
-    .quad 0
-
-ap_start_value:
-    .quad 0
+    .quad 0x0000000000000000                       /* Null descriptor */
+    .quad 0x00209A0000000000                       /* 64-bit code segment */
+    .quad 0x0000920000000000                       /* 64-bit data segment */
 
 trampoline_end:
-
-/* These are bytes that will be patched at runtime */
-gdt32_base_byte:
-    .byte 0
-
-gdt64_base_byte:
-    .byte 0
-
-/* Assembly-time constants */
-.set boot_pml4_offset, boot_pml4_value - trampoline_start
-.set ap_start_offset, ap_start_value - trampoline_start
-.set gdt32_offset, gdt32 - trampoline_start
-.set gdt64_offset, gdt64 - trampoline_start
-.set pm_entry_offset, pm_entry - trampoline_start

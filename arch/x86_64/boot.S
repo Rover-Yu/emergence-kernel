@@ -248,6 +248,35 @@ boot_is_bsp:
     movl %eax, boot_pd + 503*8  /* PD entry 503 (not 504!) - APIC MMIO region, uncached */
     movl $0, boot_pd + 503*8 + 4  /* High 32 bits */
 
+    /* ============================================================
+     * Copy AP Trampoline to 0x7000
+     * ============================================================
+     * The AP trampoline is included in the kernel binary and needs
+     * to be copied to physical address 0x7000 where the AP will boot.
+     *
+     * After copying, we patch two 64-bit placeholder values:
+     * - boot_pml4_placeholder at offset 0x100
+     * - ap_start_placeholder at offset 0x108
+     */
+    movl $ap_trampoline_start, %esi      /* Source */
+    movl $0x7000, %edi                   /* Destination */
+    movl $ap_trampoline_end, %ecx
+    subl $ap_trampoline_start, %ecx      /* Size = end - start */
+    cld
+    rep movsb                            /* Copy trampoline to 0x7000 */
+
+    /* Patch boot_pml4_placeholder (at 0x7000 + 0x100 = 0x7100) */
+    movl $boot_pml4, %eax                /* Low 32 bits of boot_pml4 */
+    movl %eax, 0x7100
+    movl $boot_pml4+4, %eax              /* High 32 bits */
+    movl %eax, 0x7104
+
+    /* Patch ap_start_placeholder (at 0x7000 + 0x108 = 0x7108) */
+    movl $ap_start, %eax                 /* Low 32 bits of ap_start */
+    movl %eax, 0x7108
+    movl $ap_start+4, %eax               /* High 32 bits */
+    movl %eax, 0x710C
+
     /* ---- CR Register Configuration ---- */
     /* Load PML4 base address into CR3
      * CR3 contains the physical address of the PML4 table
