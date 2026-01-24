@@ -28,6 +28,7 @@ SECTIONS
 
     .data ALIGN(4K) : {
         *(.data*)
+        *(.ap_trampoline)   /* Include AP trampoline section */
     } :data
 
     .bss ALIGN(4K) : {

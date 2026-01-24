@@ -668,10 +668,10 @@ void lapic_init(void) {
         serial_puts("[APIC]   WARNING: Page tables may not be working!\n");
     }
 
-    /* Try ESR write/read test */
-    lapic_write(LAPIC_ESR, 0x12345678);
+    /* Try ESR write/read test - clear ESR first */
+    lapic_write(LAPIC_ESR, 0);  /* Clear all errors */
     uint32_t test_read = lapic_read(LAPIC_ESR);
-    serial_puts("[APIC] ESR write/read test: wrote=0x12345678 read=0x");
+    serial_puts("[APIC] ESR after clear: 0x");
     for (int i = 28; i >= 0; i -= 4) {
         uint8_t nibble = (test_read >> i) & 0xF;
         serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
@@ -708,6 +708,18 @@ uint8_t lapic_get_id(void) {
     uint32_t id = lapic_read(LAPIC_ID);
     /* APIC ID is in bits 24-31 for xAPIC */
     return (uint8_t)(id >> 24);
+}
+
+/**
+ * print_hex_byte - Print a byte as hex
+ * @val: Value to print
+ */
+static void print_hex_byte(uint8_t val) {
+    extern void serial_putc(char c);
+    serial_putc('0');
+    serial_putc('x');
+    serial_putc('0' + ((val >> 4) & 0xF));
+    serial_putc('0' + (val & 0xF));
 }
 
 /**
@@ -789,7 +801,7 @@ void lapic_send_nmi(uint8_t apic_id) {
  */
 int lapic_wait_for_ipi(void) {
     /* Wait for delivery status bit to clear, with timeout */
-    int timeout = 100000;  /* Increased timeout */
+    int timeout = 1000000;  /* Increased timeout */
     uint32_t icr_low;
     int first = 1;
 
@@ -855,6 +867,14 @@ static void pit_delay_ms(uint32_t ms) {
 int ap_startup(uint8_t apic_id, uint32_t startup_addr) {
     uint32_t icr_low, icr_high;
     uint32_t ver, maxlvt;
+
+    /* Debug: Print BSP's APIC ID (from hardware) and target APIC ID */
+    uint8_t my_apic_id = lapic_get_id();
+    serial_puts("[APIC] BSP APIC ID = ");
+    print_hex_byte(my_apic_id);
+    serial_puts(", Target APIC ID = ");
+    print_hex_byte(apic_id);
+    serial_puts("\n");
 
     serial_puts("[APIC] ap_startup: APIC ID=");
     serial_putc('0' + apic_id);
@@ -922,7 +942,7 @@ int ap_startup(uint8_t apic_id, uint32_t startup_addr) {
 
     /* Step 2: Wait - reduced delay for QEMU */
     serial_puts("[APIC] Waiting for INIT deassert...\n");
-    pit_delay_ms(1);  /* Reduced from 10ms to 1ms for QEMU */
+    pit_delay_ms(100);  /* Reduced from 10ms to 1ms for QEMU */
 
     /* Step 3: Send INIT IPI (DEASSERT, level-triggered)
      * This is CRITICAL! INIT must be deasserted or the AP stays in INIT state */
@@ -955,7 +975,44 @@ int ap_startup(uint8_t apic_id, uint32_t startup_addr) {
     }
 
     /* Step 5: Send first STARTUP IPI (edge-triggered, no LEVELTRIG) */
-    lapic_send_ipi(apic_id, LAPIC_ICR_DM_STARTUP, startup_addr);
+    serial_puts("[APIC] Sending STARTUP IPI...\n");
+
+    /* Clear ESR before STARTUP IPI (due to Pentium erratum 3AP) */
+    if (maxlvt > 3) {
+        lapic_write(LAPIC_ESR, 0);
+        lapic_read(LAPIC_ESR);  /* Dummy read to flush */
+    }
+
+    /* Verify trampoline is at 0x7000 by checking the signature */
+    uint16_t *trampoline_ptr = (uint16_t *)0x7000;
+    uint16_t sig = *trampoline_ptr;
+    serial_puts("[APIC] Trampoline at 0x7000: first word = 0x");
+    for (int i = 12; i >= 0; i -= 4) {
+        uint8_t nibble = (sig >> i) & 0xF;
+        serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
+    }
+    serial_puts(" (should be 0xFA00 = cli)\n");
+
+    /* Send STARTUP IPI using explicit APIC ID in ICR_HIGH */
+    icr_high = (uint32_t)apic_id << 24;
+    icr_low = LAPIC_ICR_DM_STARTUP | startup_addr;
+    icr_low |= LAPIC_ICR_DST_PHYSICAL;
+
+    serial_puts("[APIC] ICR_HIGH = 0x");
+    for (int i = 28; i >= 0; i -= 4) {
+        uint8_t nibble = (icr_high >> i) & 0xF;
+        serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
+    }
+    serial_puts(" ICR_LOW = 0x");
+    for (int i = 28; i >= 0; i -= 4) {
+        uint8_t nibble = (icr_low >> i) & 0xF;
+        serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
+    }
+    serial_puts("\n");
+
+    lapic_write(LAPIC_ICR_HIGH, icr_high);
+    lapic_write(LAPIC_ICR_LOW, icr_low);
+
     if (lapic_wait_for_ipi() < 0) {
         serial_puts("[APIC] STARTUP IPI timeout!\n");
         return -1;
@@ -986,7 +1043,15 @@ int ap_startup(uint8_t apic_id, uint32_t startup_addr) {
         lapic_read(LAPIC_ESR);
     }
 
-    lapic_send_ipi(apic_id, LAPIC_ICR_DM_STARTUP, startup_addr);
+    /* Re-set destination APIC ID (may have been cleared) */
+    icr_high = (uint32_t)apic_id << 24;
+    icr_low = LAPIC_ICR_DM_STARTUP | startup_addr;
+    icr_low |= LAPIC_ICR_DST_PHYSICAL;
+
+    serial_puts("[APIC] Sending second STARTUP IPI...\n");
+    lapic_write(LAPIC_ICR_HIGH, icr_high);
+    lapic_write(LAPIC_ICR_LOW, icr_low);
+
     if (lapic_wait_for_ipi() < 0) {
         serial_puts("[APIC] Second STARTUP IPI timeout!\n");
         return -1;
