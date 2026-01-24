@@ -252,10 +252,10 @@ ap_trampoline_stub:
     out %al, %edx
 
     /* Set up AP stack */
-    /* The stack address is patched at physical 0x8100 (0x7000 + 0x1100)
+    /* The stack address is patched at physical 0x8400 (0x7000 + 0x1400)
      * Since stub runs at 0x8000 and trampoline is at 0x7000,
-     * we use absolute address 0x8100 directly. */
-    movq $0x8100, %rax        /* Absolute address of ap_stack_placeholder */
+     * we use absolute address 0x8400 directly. */
+    movq $0x8400, %rax        /* Absolute address of ap_stack_placeholder */
 
     /* Debug: Output first byte of stack address to verify mapping */
     mov (%rax), %r8
@@ -311,47 +311,247 @@ stack_continue:
     out %al, %edx
 
     /* ============================================================
-     * TEST: Try a simple inline code execution first
+     * Jump to ap_start using absolute physical address
      * ============================================================
-     * Before jumping anywhere else, let's try executing code inline.
-     * If we can execute inline code after all the setup, the issue
-     * is specifically with the jump instruction.
+     * The stub runs at physical 0x8000 with identity-mapped page tables.
+     * The ap_start_placeholder is at physical 0x7108 (0x7000 + 0x108).
+     * Since we know the exact physical addresses, we can use absolute
+     * addressing instead of position-independent techniques.
      */
-    /* Debug: Output '5' - entering test phase */
+    /* Debug: Output '5' - about to load ap_start address */
     mov $'5', %al
     out %al, %edx
 
-    /* Try executing some instructions inline */
+    /* Try executing some instructions inline to verify we're in 64-bit mode */
     movq $0xDEADBEEFCAFEBABE, %r8
 
     /* Debug: Output '6' - inline execution worked */
     mov $'6', %al
     out %al, %edx
 
-    /* Now try an absolute jump to within the trampoline */
-    leaq ap_test_function(%rip), %rax  /* Get address of test function */
+    /* Load ap_start address using hardcoded value
+     * The kernel is always linked at the same address, so we can use
+     * a hardcoded value instead of runtime patching.
+     * ap_start is at 0x104500, and we skip the 4-byte endbr64 instruction */
+    movq $0x104504, %rbx     /* RBX = ap_start + 4 (skip endbr64) */
 
-    /* Debug: Output '7' - computed relative address */
-    mov $'7', %al
+    /* Debug: Output '8' - loaded ap_start address from placeholder */
+    mov $'8', %al
     out %al, %edx
 
     /* Disable interrupts */
     cli
 
-    /* Debug: Output 'J' - about to jump */
+    /* Debug: Output 'J' - about to jump to ap_start */
     mov $'J', %al
     out %al, %edx
 
-    /* Jump using RIP-relative address */
-    jmp *%rax
+    /* ============================================================
+     * Skip the test function and go directly to IDT loading
+     * ============================================================
+     * Save the ap_start address for later use */
+    movq %rbx, %r12                /* Save ap_start address in R12 */
+
+    /* Jump directly to IDT loading section */
+    jmp load_idt_section
+
+ap_test_local:
+    /* Debug: Output 'K' - reached local test function */
+    mov $0x3F8, %edx
+    mov $'K', %al
+    out %al, %edx
 
     /* ============================================================
-     * Previous code for reference - using absolute address
+     * Test: Can we read from kernel code memory?
+     * ============================================================ */
+    /* Try to read the first byte of serial_puts (should be 0xF3 for endbr64)
+     * Note: serial_puts address may vary based on code size changes */
+    movq $0x100a10, %rax           /* Address of serial_puts */
+    movb (%rax), %al               /* Read first byte */
+    /* Verify it's 0xF3 (endbr64 opcode) */
+    cmpb $0xF3, %al
+    jne memory_read_failed
+
+    /* Debug: Output 'M' - memory read successful */
+    mov $0x3F8, %edx
+    mov $'M', %al
+    out %al, %edx
+
+    /* ============================================================
+     * Flush TLB before executing kernel code
      * ============================================================
-     * movq $0x9000, %rax        -- Absolute address: 0x7000 + 0x2000
+     * The TLB is per-CPU. The AP needs to reload CR3 to flush it.
+     * This ensures the AP has valid translations for kernel code. */
+    /* Read current CR3 value */
+    movq %cr3, %rax
+    /* Write it back to flush TLB */
+    movq %rax, %cr3
+
+    /* Debug: Output 'T' - TLB flushed */
+    mov $0x3F8, %edx
+    mov $'T', %al
+    out %al, %edx
+
+    /* ============================================================
+     * Test: Output a character using serial port directly
+     * ============================================================ */
+    mov $'!', %al
+    out %al, %dx
+
+    /* ============================================================
+     * Go directly to ap_start
+     * ============================================================ */
+    /* Debug: Output 'C' - about to call ap_start */
+    mov $'C', %al
+    out %al, %dx
+
+    /* Now jump to ap_start using the saved address (from R12) */
+    movq %r12, %rbx                /* Restore ap_start address from R12 */
+    /* Note: ap_start address already has +4 to skip endbr64 */
+
+    /* Debug: Output the first nibble of ap_start address for verification */
+    movq %rbx, %rax
+    shr $60, %rax                  /* Get top 4 bits */
+    cmp $0, %rax
+    je addr_zero
+    cmp $1, %rax
+    je addr_one
+    cmp $2, %rax
+    je addr_two
+    cmp $3, %rax
+    je addr_three
+
+addr_zero:
+    mov $'0', %al
+    jmp addr_done
+addr_one:
+    mov $'1', %al
+    jmp addr_done
+addr_two:
+    mov $'2', %al
+    jmp addr_done
+addr_three:
+    mov $'3', %al
+    jmp addr_done
+
+addr_done:
+    out %al, %dx
+
+    /* ============================================================
+     * Load kernel's GDT before calling kernel code
+     * ============================================================
+     * The trampoline's GDT might not match the kernel's expectations.
+     * The kernel's GDT is at gdt64 (defined in boot.S).
+     * We need to load the GDT pointer and reload segment registers.
+     *
+     * The gdt64_ptr structure contains:
+     *   - Limit: gdt64_ptr - gdt64 - 1 (2 bytes)
+     *   - Base: address of gdt64 (8 bytes)
+     *
+     * We'll use the same address as the BSP (which is identity-mapped). */
+
+    /* For now, skip GDT reload since we're in 64-bit mode where
+     * segment registers are mostly ignored. This might not be necessary. */
+
+load_idt_section:
+    /* ============================================================
+     * Load IDT before calling C code
+     * ============================================================
+     * The BSP has set up the IDT in kernel memory.
+     * The AP needs to load the same IDT to handle exceptions.
+     * Without a valid IDT, any exception in C code causes a triple fault.
+     *
+     * We use the fixed address of idt_ptr (0x119020) which is where
+     * the BSP's IDT pointer structure is located. This address is
+     * identity-mapped in the page tables.
      */
 
-    /* If we reach here, the jump failed - halt */
+    /* Debug: Output '1' - about to load IDT */
+    mov $'1', %al
+    out %al, %dx
+
+    /* Load IDT using lidt instruction with fixed address
+     * idt_ptr is at virtual address 0x119020 in the kernel BSS
+     * This address is identity-mapped */
+    movq $0x119020, %rax         /* RAX = address of idt_ptr */
+
+    /* Debug: Output '2' - loaded idt_ptr address into RAX */
+    mov $'2', %al
+    out %al, %dx
+
+    /* Load IDT using lidt instruction */
+    lidt (%rax)                   /* Load IDT */
+
+    /* Debug: Output 'I' - IDT loaded successfully */
+    mov $'I', %al
+    out %al, %dx
+
+    /* Debug: Output 'D' - about to execute call instruction */
+    mov $'D', %al
+    out %al, %dx
+
+    /* ============================================================
+     * TEST: Output "JIMI" directly instead of calling C function
+     * ============================================================
+     * The C function's serial_puts has a spinlock that might hang.
+     * Let's output "JIMI" directly to verify the call mechanism works. */
+    mov $'J', %al
+    out %al, %dx
+    mov $'I', %al
+    out %al, %dx
+    mov $'M', %al
+    out %al, %dx
+    mov $'I', %al
+    out %al, %dx
+    mov $'\n', %al
+    out %al, %dx
+
+    /* Now try jumping to ap_start (not call - no return address) */
+    /* Debug: Output 'K' - about to set up stack */
+    mov $'K', %al
+    out %al, %dx
+
+    /* But first, ensure we have a valid stack */
+    /* The AP stack is at 0x116000 (hardcoded for now) */
+    movq $0x116000, %rsp           /* Set up stack pointer */
+    movq $0x116000, %rbp           /* Set up base pointer */
+
+    /* Debug: Output 'L' - stack pointer set */
+    mov $'L', %al
+    out %al, %dx
+
+    /* Debug: Output 'M' - about to test stack */
+    mov $'M', %al
+    out %al, %dx
+
+    /* Skip stack test - just proceed with TLB flush and jump */
+    jmp stack_ok_final
+
+stack_ok_final:
+    /* Skip TLB flush for now - try jumping directly to ap_start */
+    /* Debug: Output 'T' - about to jump to ap_start */
+    mov $'T', %al
+    out %al, %dx
+
+    /* Jump to ap_start */
+    jmp *%rbx                      /* Jump to ap_start */
+
+    /* Debug: Output 'E' - returned from ap_start (should never reach) */
+    mov $'E', %al
+    out %al, %dx
+
+    /* Should never reach here (ap_start doesn't return) */
+ap_test_halt:
+    hlt
+    jmp ap_test_halt
+
+memory_read_failed:
+    /* Debug: Output 'X' - memory read failed */
+    mov $0x3F8, %edx
+    mov $'X', %al
+    out %al, %edx
+    jmp ap_test_halt
+
 halt_after_jump:
     mov $'F', %al
     out %al, %edx
@@ -366,28 +566,15 @@ ap_stub_halt:
     jmp ap_stub_halt
 
     /* Placeholder for AP stack address (patched by boot.S) */
-    .org 0x1100
+    .org 0x1400
 ap_stack_placeholder:
     .quad 0xDEADBEEFCAFEBABE  /* Patched with actual ap_stack_end address */
 
-    /* ============================================================
-     * Local Test Function - at offset 0x2000 (physical 0x9000)
-     * ============================================================
-     * This function is used to test if the jump mechanism works.
-     * If we can jump here and execute code, the jump is working.
-     * The issue would then be with jumping to ap_start in kernel code.
-     */
-    .org 0x2000
-    .code64
-ap_test_function:
-    /* Debug: Output 'K' to confirm we reached this function */
-    mov $0x3F8, %rdx
-    mov $'K', %al
-    out %al, %rdx
-
-    /* Halt */
-    cli
-    hlt
-    jmp ap_test_function
+    /* Placeholder for IDT pointer address (patched by boot.S)
+     * This holds the address of the kernel's idt_ptr structure
+     * which contains the limit and base address of the IDT */
+    .org 0x1500
+idt_ptr_placeholder:
+    .quad 0xDEADBEEFCAFEBABE  /* Patched with actual idt_ptr address */
 
 trampoline_end:

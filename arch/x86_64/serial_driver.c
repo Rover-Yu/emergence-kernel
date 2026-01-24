@@ -210,3 +210,13 @@ void serial_puts(const char *str) {
     }
     serial_lock_release();
 }
+
+/**
+ * serial_unlock - Release the serial spinlock (for SMP handoff)
+ *
+ * This function is used during AP startup to release the serial lock
+ * before starting APs, preventing deadlock when AP tries to use serial.
+ */
+void serial_unlock(void) {
+    serial_lock_release();
+}

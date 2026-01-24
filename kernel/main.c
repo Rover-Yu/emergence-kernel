@@ -10,6 +10,7 @@
 #include "arch/x86_64/timer.h"
 #include "arch/x86_64/rtc.h"
 #include "arch/x86_64/ipi.h"
+#include "arch/x86_64/serial.h"
 
 /* External driver initialization functions */
 extern int serial_driver_init(void);
@@ -58,13 +59,25 @@ void kernel_main(void) {
 
     /* Note: Local APIC initialization skipped for now
      * QEMU may have APIC enabled by default */
+
+    /* BSP specific initialization - must complete BEFORE starting APs */
+    /* Get CPU ID first to determine if we're BSP or AP */
+    cpu_id = smp_get_cpu_index();
+
+    if (cpu_id == 0) {
+        serial_puts("BSP: Initializing IDT...\n");
+        idt_init();
+
+        serial_puts("BSP: Initializing Local APIC...\n");
+        lapic_init();
+    }
+
     serial_puts("Initializing SMP...\n");
 
     /* Initialize SMP subsystem */
     smp_init();
 
     serial_puts("SMP initialized, getting CPU ID...\n");
-    cpu_id = smp_get_cpu_index();
 
     /* Print CPU boot message in English */
     serial_puts("CPU ");
@@ -76,14 +89,6 @@ void kernel_main(void) {
     /* BSP specific initialization */
     if (cpu_id == 0) {
         serial_puts("SMP: BSP initialization complete.\n");
-
-        /* Initialize IDT (Interrupt Descriptor Table) */
-        serial_puts("Initializing IDT...\n");
-        idt_init();
-
-        /* Initialize Local APIC */
-        serial_puts("Initializing Local APIC...\n");
-        lapic_init();
 
         /* Initialize and start timer on BSP using RTC (Real Time Clock)
          * RTC can generate periodic interrupts without needing APIC memory mapping
@@ -117,13 +122,17 @@ void kernel_main(void) {
 
         /* Start all APs */
         serial_puts("SMP: Starting all Application Processors...\n");
+
+        /* CRITICAL: Release serial lock before starting APs to prevent deadlock.
+         * The AP will try to call serial_puts() which will deadlock if the BSP
+         * still holds the serial lock. */
+        serial_unlock();
+
         smp_start_all_aps();
 
-        /* Skip waiting for APs since they're disabled */
-        serial_puts("SMP: Running BSP only, APs disabled\n");
-        serial_puts("System initialization complete\n");
-
-        /* Halt the BSP */
+        /* BSP halts immediately after starting AP to avoid interference
+         * The AP will complete its initialization and halt on its own */
+        asm volatile ("cli");  /* Ensure interrupts stay disabled */
         kernel_halt();
     } else {
         /* AP: print boot message and halt */

@@ -199,26 +199,9 @@ void smp_start_all_aps(void) {
 
     /* Signal APs that BSP initialization is complete */
     bsp_init_complete = 1;
-    serial_puts("SMP: bsp_init_complete flag set\n");
 
-    /* Re-enable interrupts */
-    serial_puts("SMP: Re-enabling interrupts...\n");
-    asm volatile ("sti");
-
-    /* Wait a bit more */
-    for (int j = 0; j < 10000000; j++) {
-        asm volatile ("pause");
-    }
-
-    /* Final check */
-    serial_puts("SMP: Final CPU status:\n");
-    for (int i = 0; i < SMP_MAX_CPUS; i++) {
-        serial_puts("  CPU ");
-        serial_putc('0' + i);
-        serial_puts(" state=");
-        serial_putc('0' + cpu_info[i].state);
-        serial_puts("\n");
-    }
+    /* Don't print anymore - let the AP finish initialization without interference
+     * The BSP will halt after this function returns to main.c */
 }
 
 /**
