@@ -157,6 +157,22 @@ pm_entry:
     mov %eax, %ss
 
     /* ============================================================
+     * Enable PAE (Required for Long Mode) - DO THIS FIRST!
+     * ============================================================
+     * CRITICAL: PAE must be enabled BEFORE loading CR3.
+     * When PAE is disabled, CR3 is interpreted as a 32-bit page directory address.
+     * When PAE is enabled, CR3 is interpreted as a PML4 address for Long Mode.
+     * Loading CR3 while PAE is disabled causes incorrect interpretation. */
+    mov %cr4, %eax
+    or $(1 << 5), %eax    /* Set PAE bit (bit 5) */
+    mov %eax, %cr4
+
+    /* Debug: Output "A" */
+    mov $0x3F8, %edx
+    mov $'A', %al
+    out %al, %edx
+
+    /* ============================================================
      * Load Page Tables using position-independent addressing
      * ============================================================
      * We need to compute the address of boot_pml4_placeholder (at 0x7100)
@@ -176,18 +192,6 @@ get_eip_pm:
     /* Debug: Output "3" */
     mov $0x3F8, %edx
     mov $'3', %al
-    out %al, %edx
-
-    /* ============================================================
-     * Enable PAE (Required for Long Mode)
-     * ============================================================ */
-    mov %cr4, %eax
-    or $(1 << 5), %eax    /* Set PAE bit (bit 5) */
-    mov %eax, %cr4
-
-    /* Debug: Output "A" */
-    mov $0x3F8, %edx
-    mov $'A', %al
     out %al, %edx
 
     /* ============================================================
