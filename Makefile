@@ -104,10 +104,10 @@ $(ISO): $(KERNEL_ELF) | $(ISO_DIR)
 	$(GRUB_MKRESCUE) -o $@ $(ISO_DIR)
 
 run: $(ISO)
-	qemu-system-x86_64 -M pc -m 128M -nographic -cdrom $(ISO) -smp 2
+	qemu-system-x86_64 -M pc -m 128M -nographic -cdrom $(ISO) -smp 4
 
 run-debug: $(ISO)
-	qemu-system-x86_64 -M pc -m 128M -nographic -cdrom $(ISO) -smp 2 -s -S
+	qemu-system-x86_64 -M pc -m 128M -nographic -cdrom $(ISO) -smp 4 -s -S
 
 clean:
 	rm -rf $(BUILD_DIR) $(ISO_DIR) $(ISO)

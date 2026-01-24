@@ -942,7 +942,7 @@ int ap_startup(uint8_t apic_id, uint32_t startup_addr) {
 
     /* Step 2: Wait - reduced delay for QEMU */
     serial_puts("[APIC] Waiting for INIT deassert...\n");
-    pit_delay_ms(100);  /* Reduced from 10ms to 1ms for QEMU */
+    pit_delay_ms(400);  /* Reduced from 10ms to 1ms for QEMU */
 
     /* Step 3: Send INIT IPI (DEASSERT, level-triggered)
      * This is CRITICAL! INIT must be deasserted or the AP stays in INIT state */
@@ -964,7 +964,7 @@ int ap_startup(uint8_t apic_id, uint32_t startup_addr) {
     serial_puts("[APIC] INIT deassert IPI sent successfully\n");
 
     /* Step 4: Delay before STARTUP (spec says 10ms, use 10ms for reliability) */
-    pit_delay_ms(10);
+    pit_delay_ms(100);
 
     serial_puts("[APIC] Sending STARTUP IPI...\n");
 

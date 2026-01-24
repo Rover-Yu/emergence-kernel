@@ -9,7 +9,8 @@
 static idt_entry_t idt[IDT_ENTRIES];
 
 /* IDT pointer for lidt instruction */
-static idt_ptr_t idt_ptr;
+/* NOT static so AP trampoline can access it */
+idt_ptr_t idt_ptr;
 
 /* External ISR assembly wrappers */
 extern void timer_isr(void);
