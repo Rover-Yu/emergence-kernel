@@ -48,11 +48,15 @@ trampoline_start:
     or $1, %eax    /* Set PE (Protected Mode Enable) */
     mov %eax, %cr0
 
-    /* Far jump to protected mode (flushes instruction queue) */
-    .byte 0x66        /* 32-bit operand size prefix */
-    .byte 0xEA        /* far jump opcode */
-    .word pm_entry    /* offset */
-    .word 0x08        /* selector */
+    /* Far jump to protected mode
+     * Must use absolute linear address 0x7031 (0x7000 + offset to pm_entry)
+     * The 0x66 prefix makes it a 32-bit offset jump
+     * Format: 0x66 0xEA [4-byte offset] [2-byte selector]
+     */
+    .byte 0x66
+    .byte 0xEA
+    .long 0x702D    /* Absolute linear address of pm_entry (0x7000 + 0x2D) */
+    .word 0x0008    /* Selector for GDT entry 1 (code segment) */
 
     /* Should never reach here */
     cli
