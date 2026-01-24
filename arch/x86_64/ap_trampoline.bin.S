@@ -49,14 +49,13 @@ trampoline_start:
     mov %eax, %cr0
 
     /* Far jump to protected mode
-     * Must use absolute linear address 0x7031 (0x7000 + offset to pm_entry)
-     * The 0x66 prefix makes it a 32-bit offset jump
-     * Format: 0x66 0xEA [4-byte offset] [2-byte selector]
+     * Target address = 0x702D (pm_entry location)
+     * Must use absolute linear address for 32-bit offset
      */
     .byte 0x66
     .byte 0xEA
-    .long 0x702D    /* Absolute linear address of pm_entry (0x7000 + 0x2D) */
-    .word 0x0008    /* Selector for GDT entry 1 (code segment) */
+    .long 0x702D
+    .word 0x0008
 
     /* Should never reach here */
     cli
@@ -82,11 +81,24 @@ pm_entry:
     mov %ax, %ss
 
     /* ============================================================
-     * Load Page Tables
-     * boot_pml4_placeholder is patched at runtime
-     * ============================================================ */
+     * Load Page Tables using position-independent addressing
+     * ============================================================
+     * We need to compute the address of boot_pml4_placeholder (at 0x7100)
+     * Use call/pop to get current EIP, then adjust to trampoline base
+     */
+    .byte 0x66           /* 32-bit operand size */
+    call get_eip_pm
+get_eip_pm:
+    pop %eax             /* EAX = address after the call (approx 0x7043) */
+    /* Round down to nearest 4KB boundary to get trampoline base (0x7000) */
     .byte 0x66
-    mov $boot_pml4_placeholder, %eax
+    and $0xFFFFF000, %eax
+    /* Add offset to boot_pml4_placeholder (0x100) to get 0x7100 */
+    .byte 0x66
+    add $0x100, %eax
+    /* Load the 64-bit value at boot_pml4_placeholder */
+    .byte 0x67           /* address size prefix for 32-bit address */
+    mov (%eax), %eax
     mov %eax, %cr3
 
     /* Debug: Output "3" */
@@ -152,11 +164,20 @@ pm_entry:
     out %al, %dx
 
     /* ============================================================
-     * Far Jump to 64-bit Mode
-     * ap_start_placeholder is patched at runtime
+     * Far Jump to 64-bit Mode using position-independent addressing
      * ============================================================ */
     .byte 0x66
-    mov $ap_start_placeholder, %eax
+    call get_eip_lm
+get_eip_lm:
+    pop %eax             /* EAX = current EIP */
+    /* Round down to 0x7000 */
+    .byte 0x66
+    and $0xFFFFF000, %eax
+    /* Add offset to ap_start_placeholder (0x7000 + 0x108 = 0x7108) */
+    .byte 0x66
+    add $0x108, %eax
+    .byte 0x67
+    mov (%eax), %eax     /* Load the 64-bit value at ap_start_placeholder */
 
     pushw $0x08
     push %eax
