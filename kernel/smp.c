@@ -278,6 +278,12 @@ void ap_start(void) {
  *
  * This function patches the placeholder values in the AP trampoline
  * with the correct addresses for boot_pml4, ap_start, and GDT base addresses.
+ *
+ * The new trampoline format uses:
+ * - gdt32_base_byte: Byte at offset (trampoline_size - 4) - GDT32 base >> 8
+ * - gdt64_base_byte: Byte at offset (trampoline_size - 3) - GDT64 base >> 8
+ * - boot_pml4_value: 64-bit value at offset (trampoline_size - 24)
+ * - ap_start_value: 64-bit value at offset (trampoline_size - 16)
  */
 void patch_ap_trampoline(void) {
     extern void serial_puts(const char *str);
@@ -308,52 +314,31 @@ void patch_ap_trampoline(void) {
     uint8_t *trampoline = (uint8_t *)0x7000;
 
     /* ============================================================
-     * Patch GDT32 and GDT64 base addresses
+     * Find GDT32 and GDT64 offsets by searching for their patterns
      * ============================================================
-     * The trampoline uses "mov $GDTxx_BASE_PATCH, %eax" instructions
-     * where GDTxx_BASE_PATCH is a placeholder that needs patching.
-     *
-     * We need to find where gdt32 and gdt64 actually are in the binary
-     * and patch the mov immediate values.
+     * GDT32: null quad + 32-bit code + 32-bit data
+     * GDT64: null quad + 64-bit code + 64-bit data
      */
-
-    /* Find gdt32 by searching for the GDT signature pattern */
-    /* GDT32: null quad (8 zeros) + 32-bit code descriptor + 32-bit data descriptor */
-    /* Pattern: 00 00 00 00 00 00 00 00 00 9A CF 00 00 00 00 00 00 92 CF 00 */
     uint32_t gdt32_offset = 0;
     uint32_t gdt64_offset = 0;
 
     serial_puts("SMP: Searching for GDTs...\n");
 
     for (uint32_t i = 0x80; i < trampoline_size - 32; i++) {
-        /* Look for GDT32 pattern with new format
-         * Pattern: [8 zeros (null)][code: FF FF 00 00 00 9A CF 00][data: FF FF 00 00 00 92 CF 00]
-         */
+        /* GDT32 pattern: [null 8 bytes][code: FF FF 00 00 00 9A CF][data: FF FF 00 00 00 92 CF] */
         if (i + 24 < trampoline_size &&
-            trampoline[i] == 0x00 &&
-            trampoline[i+1] == 0x00 &&
-            trampoline[i+2] == 0x00 &&
-            trampoline[i+3] == 0x00 &&
-            trampoline[i+4] == 0x00 &&
-            trampoline[i+5] == 0x00 &&
-            trampoline[i+6] == 0x00 &&
-            trampoline[i+7] == 0x00 &&
-            trampoline[i+8] == 0xFF &&
-            trampoline[i+9] == 0xFF &&
-            trampoline[i+10] == 0x00 &&
-            trampoline[i+11] == 0x00 &&
-            trampoline[i+12] == 0x00 &&
-            trampoline[i+13] == 0x9A &&
+            trampoline[i] == 0x00 && trampoline[i+1] == 0x00 &&
+            trampoline[i+2] == 0x00 && trampoline[i+3] == 0x00 &&
+            trampoline[i+4] == 0x00 && trampoline[i+5] == 0x00 &&
+            trampoline[i+6] == 0x00 && trampoline[i+7] == 0x00 &&
+            trampoline[i+8] == 0xFF && trampoline[i+9] == 0xFF &&
+            trampoline[i+10] == 0x00 && trampoline[i+11] == 0x00 &&
+            trampoline[i+12] == 0x00 && trampoline[i+13] == 0x9A &&
             trampoline[i+14] == 0xCF &&
-            trampoline[i+15] == 0x00 &&
-            trampoline[i+16] == 0xFF &&
-            trampoline[i+17] == 0xFF &&
-            trampoline[i+18] == 0x00 &&
-            trampoline[i+19] == 0x00 &&
-            trampoline[i+20] == 0x00 &&
-            trampoline[i+21] == 0x92 &&
-            trampoline[i+22] == 0xCF &&
-            trampoline[i+23] == 0x00) {
+            trampoline[i+16] == 0xFF && trampoline[i+17] == 0xFF &&
+            trampoline[i+18] == 0x00 && trampoline[i+19] == 0x00 &&
+            trampoline[i+20] == 0x00 && trampoline[i+21] == 0x92 &&
+            trampoline[i+22] == 0xCF) {
             gdt32_offset = i;
             serial_puts("SMP: Found GDT32 at offset ");
             if (i >= 100) serial_putc('0' + (i / 100));
@@ -362,34 +347,20 @@ void patch_ap_trampoline(void) {
             serial_puts("\n");
         }
 
-        /* Look for GDT64 pattern with new format
-         * Pattern: [8 zeros (null)][code: FF FF 00 00 00 9A AF 00][data: FF FF 00 00 00 92 CF 00]
-         */
+        /* GDT64 pattern: [null 8 bytes][code: 00 00 00 00 00 9A 20][data: 00 00 00 00 00 92 00] */
         if (i + 24 < trampoline_size &&
-            trampoline[i] == 0x00 &&
-            trampoline[i+1] == 0x00 &&
-            trampoline[i+2] == 0x00 &&
-            trampoline[i+3] == 0x00 &&
-            trampoline[i+4] == 0x00 &&
-            trampoline[i+5] == 0x00 &&
-            trampoline[i+6] == 0x00 &&
-            trampoline[i+7] == 0x00 &&
-            trampoline[i+8] == 0xFF &&
-            trampoline[i+9] == 0xFF &&
-            trampoline[i+10] == 0x00 &&
-            trampoline[i+11] == 0x00 &&
-            trampoline[i+12] == 0x00 &&
-            trampoline[i+13] == 0x9A &&
-            trampoline[i+14] == 0xAF &&
-            trampoline[i+15] == 0x00 &&
-            trampoline[i+16] == 0xFF &&
-            trampoline[i+17] == 0xFF &&
-            trampoline[i+18] == 0x00 &&
-            trampoline[i+19] == 0x00 &&
-            trampoline[i+20] == 0x00 &&
-            trampoline[i+21] == 0x92 &&
-            trampoline[i+22] == 0xCF &&
-            trampoline[i+23] == 0x00) {
+            trampoline[i] == 0x00 && trampoline[i+1] == 0x00 &&
+            trampoline[i+2] == 0x00 && trampoline[i+3] == 0x00 &&
+            trampoline[i+4] == 0x00 && trampoline[i+5] == 0x00 &&
+            trampoline[i+6] == 0x00 && trampoline[i+7] == 0x00 &&
+            trampoline[i+8] == 0x00 && trampoline[i+9] == 0x00 &&
+            trampoline[i+10] == 0x00 && trampoline[i+11] == 0x00 &&
+            trampoline[i+12] == 0x00 && trampoline[i+13] == 0x00 &&
+            trampoline[i+14] == 0x9A && trampoline[i+15] == 0x20 &&
+            trampoline[i+16] == 0x00 && trampoline[i+17] == 0x00 &&
+            trampoline[i+18] == 0x00 && trampoline[i+19] == 0x00 &&
+            trampoline[i+20] == 0x00 && trampoline[i+21] == 0x92 &&
+            trampoline[i+22] == 0x00) {
             gdt64_offset = i;
             serial_puts("SMP: Found GDT64 at offset ");
             if (i >= 100) serial_putc('0' + (i / 100));
@@ -399,78 +370,131 @@ void patch_ap_trampoline(void) {
         }
     }
 
-    /* Patch GDT32 code descriptor base to 0x7000 */
-    if (gdt32_offset > 0) {
-        uint32_t desc_offset = gdt32_offset + 8;  /* Code descriptor */
-        trampoline[desc_offset + 2] = 0x00;  /* base_low low byte */
-        trampoline[desc_offset + 3] = 0x70;  /* base_low high byte */
-        serial_puts("SMP: Patched GDT32 base to 0x7000\n");
-    }
-
-    /* Now patch the specific placeholder values:
-     * - 0xAA00 is the GDT32 base placeholder (in 16-bit code section)
-     * - 0xBB is the GDT64 limit placeholder (in 32-bit code section)
-     * - 0xCC00 is the GDT64 base placeholder (in 32-bit code section)
+    /* ============================================================
+     * Patch the GDT base bytes in the GDTR setup code
+     * ============================================================
+     * The trampoline stores GDTR at fixed locations in memory
+     * We need to patch byte 2 of the base address
+     *
+     * For GDT32: GDTR is at 0x7BE0, byte 2 (offset 2 from 0x7BE0) needs patching
+     * For GDT64: GDTR is at 0x7BF0, byte 2 (offset 2 from 0x7BF0) needs patching
      */
+
+    /* Calculate the byte 2 values for GDT base addresses
+     * Base = 0x7000 + gdt_offset
+     * Byte 2 = (Base >> 8) & 0xFF = 0x70 + (gdt_offset >> 8)
+     */
+
     if (gdt32_offset > 0) {
-        /* Find 0xAA00 pattern (B8 00 AA) in 16-bit section (around offset 0x1C) */
-        for (uint32_t i = 0x10; i < 0x50; i++) {
-            if (trampoline[i] == 0xB8 && trampoline[i+1] == 0x00 && trampoline[i+2] == 0xAA) {
-                uint32_t patched_base = 0x7000 + gdt32_offset;
-                trampoline[i+1] = patched_base & 0xFF;
-                trampoline[i+2] = (patched_base >> 8) & 0xFF;
-                serial_puts("SMP: Patched GDT32_BASE to 0x");
-                /* Print patched base in hex */
-                for (int shift = 12; shift >= 0; shift -= 4) {
-                    uint8_t nibble = (patched_base >> shift) & 0xF;
-                    serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
-                }
-                serial_puts("\n");
-                break;
-            }
+        /* Calculate the full GDT32 base address = 0x7000 + gdt32_offset */
+        uint32_t gdt32_base = 0x7000 + gdt32_offset;
+
+        /* GDT32 GDTR is at 0x7BE0 in trampoline
+         * GDTR format: [limit 16-bit] [base 32-bit little-endian]
+         * Bytes 0-1: limit
+         * Bytes 2-5: base (byte 2 = base[7:0], byte 3 = base[15:8], etc.)
+         */
+        uint8_t *gdt32_gdtr = (uint8_t *)0x7BE0;
+        gdt32_gdtr[2] = gdt32_base & 0xFF;          /* Base 7:0 */
+        gdt32_gdtr[3] = (gdt32_base >> 8) & 0xFF;  /* Base 15:8 */
+        gdt32_gdtr[4] = (gdt32_base >> 16) & 0xFF; /* Base 23:16 */
+        gdt32_gdtr[5] = (gdt32_base >> 24) & 0xFF; /* Base 31:24 */
+
+        serial_puts("SMP: Patched GDT32 GDTR base to 0x");
+        for (int i = 28; i >= 0; i -= 4) {
+            uint8_t nibble = (gdt32_base >> i) & 0xF;
+            serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
         }
+        serial_puts("\n");
+
+        /* Also patch the GDT32 code descriptor base to 0x7000
+         * The code descriptor is at gdt32_offset + 8 (second descriptor)
+         * GDT descriptor format for 32-bit code:
+         *   [0-1]: Limit 15:00
+         *   [2]: Base 7:0
+         *   [3]: Base 15:8 <- This needs to be 0x70 for 0x7000 base
+         *   [4]: Base 23:16
+         *   [5]: Access byte
+         *   [6]: Flags + Limit 19:16
+         *   [7]: Base 31:24 <- This is 0x00 for 0x7000 base
+         */
+        uint8_t *gdt32_code_desc = (uint8_t *)0x7000 + gdt32_offset + 8;
+        gdt32_code_desc[2] = 0x00;  /* Base 7:0 = 0x00 */
+        gdt32_code_desc[3] = 0x70;  /* Base 15:8 = 0x70 */
+        gdt32_code_desc[4] = 0x00;  /* Base 23:16 = 0x00 */
+        gdt32_code_desc[7] = 0x00;  /* Base 31:24 = 0x00 */
+        serial_puts("SMP: Patched GDT32 code descriptor base to 0x7000\n");
+        /* Verify the descriptor bytes */
+        serial_puts("SMP: Code descriptor bytes: ");
+        for (int i = 0; i < 8; i++) {
+            serial_putc('0' + ((gdt32_code_desc[i] >> 4) & 0xF));
+            serial_putc('0' + (gdt32_code_desc[i] & 0xF));
+            serial_putc(' ');
+        }
+        serial_puts("\n");
+
+        uint8_t *gdt32_data_desc = (uint8_t *)0x7000 + gdt32_offset + 16;
+        gdt32_data_desc[2] = 0x00;  /* Base 7:0 = 0x00 */
+        gdt32_data_desc[3] = 0x70;  /* Base 15:8 = 0x70 */
+        gdt32_data_desc[4] = 0x00;  /* Base 23:16 = 0x00 */
+        gdt32_data_desc[7] = 0x00;  /* Base 31:24 = 0x00 */
+        serial_puts("SMP: Patched GDT32 data descriptor base to 0x7000\n");
+    } else {
+        serial_puts("SMP: WARNING - GDT32 not found, using default offset\n");
+        /* Fallback: GDT32 should be at offset 0x110 (272) due to .align 16 */
+        uint32_t gdt32_base = 0x7000 + 272;
+        uint8_t *gdt32_gdtr = (uint8_t *)0x7BE0;
+        gdt32_gdtr[2] = gdt32_base & 0xFF;
+        gdt32_gdtr[3] = (gdt32_base >> 8) & 0xFF;
+        gdt32_gdtr[4] = (gdt32_base >> 16) & 0xFF;
+        gdt32_gdtr[5] = (gdt32_base >> 24) & 0xFF;
+        uint8_t *gdt32_code_desc = (uint8_t *)0x7000 + 256 + 8;
+        gdt32_code_desc[2] = 0x00;  /* Base 7:0 = 0x00 */
+        gdt32_code_desc[3] = 0x70;  /* Base 15:8 = 0x70 */
+        gdt32_code_desc[4] = 0x00;  /* Base 23:16 = 0x00 */
+        gdt32_code_desc[7] = 0x00;  /* Base 31:24 = 0x00 */
+        uint8_t *gdt32_data_desc = (uint8_t *)0x7000 + 256 + 16;
+        gdt32_data_desc[2] = 0x00;  /* Base 7:0 = 0x00 */
+        gdt32_data_desc[3] = 0x70;  /* Base 15:8 = 0x70 */
+        gdt32_data_desc[4] = 0x00;  /* Base 23:16 = 0x00 */
+        gdt32_data_desc[7] = 0x00;  /* Base 31:24 = 0x00 */
     }
 
     if (gdt64_offset > 0) {
-        /* Find 0xBB pattern (B8 BB 00 00 00) - GDT64 limit */
-        for (uint32_t i = 0x50; i < trampoline_size - 32; i++) {
-            if (trampoline[i] == 0xB8 && trampoline[i+1] == 0xBB &&
-                trampoline[i+2] == 0x00 && trampoline[i+3] == 0x00 && trampoline[i+4] == 0x00) {
-                /* GDT64 limit = (3 entries * 8 bytes) - 1 = 24 - 1 = 0x17 */
-                trampoline[i+1] = 0x17;
-                serial_puts("SMP: Patched GDT64_LIMIT to 0x17\n");
-                break;
-            }
-        }
+        /* Calculate the full GDT64 base address = 0x7000 + gdt64_offset */
+        uint32_t gdt64_base = 0x7000 + gdt64_offset;
 
-        /* Find 0xCC00 pattern (B8 00 CC 00 00) - GDT64 base */
-        for (uint32_t i = 0x50; i < trampoline_size - 32; i++) {
-            if (trampoline[i] == 0xB8 && trampoline[i+1] == 0x00 && trampoline[i+2] == 0xCC &&
-                trampoline[i+3] == 0x00 && trampoline[i+4] == 0x00) {
-                uint32_t patched_base = 0x7000 + gdt64_offset;
-                trampoline[i+1] = patched_base & 0xFF;
-                trampoline[i+2] = (patched_base >> 8) & 0xFF;
-                trampoline[i+3] = (patched_base >> 16) & 0xFF;
-                trampoline[i+4] = (patched_base >> 24) & 0xFF;
-                serial_puts("SMP: Patched GDT64_BASE to 0x");
-                /* Print patched base in hex */
-                for (int shift = 12; shift >= 0; shift -= 4) {
-                    uint8_t nibble = (patched_base >> shift) & 0xF;
-                    serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
-                }
-                serial_puts("\n");
-                break;
-            }
+        /* GDT64 GDTR is at 0x7BF0 in trampoline
+         * GDTR format: [limit 16-bit] [base 32-bit little-endian]
+         */
+        uint8_t *gdt64_gdtr = (uint8_t *)0x7BF0;
+        gdt64_gdtr[2] = gdt64_base & 0xFF;
+        gdt64_gdtr[3] = (gdt64_base >> 8) & 0xFF;
+        gdt64_gdtr[4] = (gdt64_base >> 16) & 0xFF;
+        gdt64_gdtr[5] = (gdt64_base >> 24) & 0xFF;
+
+        serial_puts("SMP: Patched GDT64 GDTR base to 0x");
+        for (int i = 28; i >= 0; i -= 4) {
+            uint8_t nibble = (gdt64_base >> i) & 0xF;
+            serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
         }
+        serial_puts("\n");
     }
 
-    /* Patch boot_pml4_value and ap_start_value at end of trampoline */
+    /* ============================================================
+     * Patch boot_pml4_value and ap_start_value at end of trampoline
+     * ============================================================
+     * In the new format:
+     * - boot_pml4_value is at trampoline_size - 24
+     * - ap_start_value is at trampoline_size - 16
+     */
+
     serial_puts("SMP: Patching boot_pml4_value...\n");
-    uint64_t *boot_pml4_ptr = (uint64_t *)(trampoline + trampoline_size - 16);
+    uint64_t *boot_pml4_ptr = (uint64_t *)(trampoline + trampoline_size - 24);
     *boot_pml4_ptr = (uint64_t)&boot_pml4;
 
     serial_puts("SMP: Patching ap_start_value...\n");
-    uint64_t *ap_start_ptr = (uint64_t *)(trampoline + trampoline_size - 8);
+    uint64_t *ap_start_ptr = (uint64_t *)(trampoline + trampoline_size - 16);
     *ap_start_ptr = (uint64_t)&ap_start;
 
     /* Verify patching worked */
