@@ -19,6 +19,7 @@ SECTIONS
      * We start with the kernel at 1MB, then place the trampoline separately.
      */
     . = 1M;
+    _kernel_start = .;
 
     /* Text section - multiboot header first, then code */
     .text ALIGN(4K) : {

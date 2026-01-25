@@ -350,6 +350,7 @@ long_mode_start:
 
     /* Call kernel main */
     /* Note: bsp_init_done will be set by kernel code when ready */
+    mov %rsi, %rdi        /* Pass multiboot info in %rdi (first argument) */
     call kernel_main
 
     /* Halt if kernel returns */

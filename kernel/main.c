@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include "kernel/device.h"
 #include "kernel/smp.h"
+#include "kernel/pmm.h"
 #include "arch/x86_64/vga.h"
 #include "arch/x86_64/apic.h"
 #include "arch/x86_64/acpi.h"
@@ -25,8 +26,32 @@ static void kernel_halt(void) {
     }
 }
 
+/* Helper: Print hex value to serial */
+static void serial_put_hex(uint64_t value) {
+    const char hex_chars[] = "0123456789ABCDEF";
+    char buf[17];
+    int i;
+
+    if (value == 0) {
+        serial_puts("0");
+        return;
+    }
+
+    for (i = 15; i >= 0; i--) {
+        buf[i] = hex_chars[value & 0xF];
+        value >>= 4;
+        if (value == 0) break;
+    }
+
+    while (i < 15 && buf[i] == '0') i++;
+
+    while (i <= 15) {
+        serial_putc(buf[i++]);
+    }
+}
+
 /* Kernel main entry point - called from boot.S */
-void kernel_main(void) {
+void kernel_main(uint32_t multiboot_info_addr) {
     uint8_t color = VGA_COLOR(VGA_COLOR_BLACK, VGA_COLOR_WHITE);
     int cpu_id;
 
@@ -43,11 +68,55 @@ void kernel_main(void) {
     /* Step 3: Initialize all devices in priority order */
     device_init_all();
 
+    /* Initialize Physical Memory Manager (must be early, before any dynamic allocation) */
+    pmm_init(multiboot_info_addr);
+    serial_puts("PMM: Initialized\n");
+
     /* Print greeting message to VGA */
     vga_puts("Hello, JAKernel!", 0, 0, color);
 
     /* Print boot message */
     serial_puts("Hello, JAKernel!\n");
+
+    /* PMM Tests */
+    serial_puts("PMM: Running allocation tests...\n");
+
+    /* Test 1: Single page allocation */
+    void *page1 = pmm_alloc(0);
+    void *page2 = pmm_alloc(0);
+    serial_puts("PMM: Allocated page1 at 0x");
+    serial_put_hex((uint64_t)page1);
+    serial_puts(", page2 at 0x");
+    serial_put_hex((uint64_t)page2);
+    serial_puts("\n");
+
+    /* Test 2: Multi-page allocation (order 3 = 8 pages = 32KB) */
+    void *block = pmm_alloc(3);
+    serial_puts("PMM: Allocated 32KB block at 0x");
+    serial_put_hex((uint64_t)block);
+    serial_puts("\n");
+
+    /* Test 3: Free and coalesce */
+    pmm_free(page1, 0);
+    pmm_free(page2, 0);
+    serial_puts("PMM: Freed pages (buddy coalescing)\n");
+
+    /* Test 4: Statistics */
+    uint64_t free = pmm_get_free_pages();
+    uint64_t total = pmm_get_total_pages();
+    serial_puts("PMM: Free: ");
+    serial_put_hex(free);
+    serial_puts(" / Total: ");
+    serial_put_hex(total);
+    serial_puts("\n");
+
+    /* Test 5: Allocate adjacent pages to verify they were coalesced */
+    void *page3 = pmm_alloc(1);  /* Request 2 pages */
+    serial_puts("PMM: Allocated 2-page block at 0x");
+    serial_put_hex((uint64_t)page3);
+    serial_puts(" (should be same as page1 if coalesced)\n");
+
+    serial_puts("PMM: Tests complete\n");
 
     /* BSP specific initialization - must complete BEFORE starting APs */
     /* Get CPU ID first to determine if we're BSP or AP */

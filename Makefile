@@ -27,7 +27,8 @@ TRAMPOLINE_OBJ := $(BUILD_DIR)/ap_trampoline.o
 
 # Architecture-independent kernel sources
 KERNEL_DIR := kernel
-KERNEL_C_SRCS := $(KERNEL_DIR)/main.c $(KERNEL_DIR)/device.c $(KERNEL_DIR)/smp.c
+KERNEL_C_SRCS := $(KERNEL_DIR)/main.c $(KERNEL_DIR)/device.c $(KERNEL_DIR)/smp.c \
+                 $(KERNEL_DIR)/pmm.c $(KERNEL_DIR)/multiboot2.c
 
 # Test sources (reference only, not compiled into kernel)
 # These test files are kept for documentation purposes
