@@ -21,12 +21,16 @@ multiboot_header_start:
 multiboot_header_end:
 
 /* External symbols from C code
- * These are resolved at link time and patched into the trampoline */
+ * These are resolved at link time via the GOT in the trampoline */
 .extern ap_start              /* AP entry point function */
-.extern ap_start_minimal      /* Minimal test function for debugging */
 .extern idt_ptr                /* IDT pointer structure in kernel BSS */
 .extern boot_pml4              /* PML4 page table address */
 .extern ap_stack_end           /* End of AP stack (top address) */
+
+/* External placeholder symbols from AP trampoline
+ * These are patched at runtime with the actual addresses */
+.extern ap_start_placeholder   /* ap_start address placeholder in trampoline */
+.extern idt_ptr_placeholder    /* idt_ptr address placeholder in trampoline */
 
 /* BSP initialization flag - APs wait until BSP sets this */
 .section .bss
@@ -65,6 +69,8 @@ boot_pt_apic:
 /* AP stacks (one for each AP) */
 .section .bss
 .align 16
+.global ap_stack_bottom
+.global ap_stack_end
 ap_stack_bottom:
     .skip 16384  /* 16 KiB for APs */
 ap_stack_end:
@@ -257,59 +263,12 @@ boot_is_bsp:
     movl $0, boot_pd + 503*8 + 4  /* High 32 bits */
 
     /* ============================================================
-     * Copy AP Trampoline to 0x7000
+     * AP Trampoline is linked into kernel at physical 0x7000
      * ============================================================
-     * The AP trampoline is included in the kernel binary and needs
-     * to be copied to physical address 0x7000 where the AP will boot.
-     *
-     * After copying, we patch two 64-bit placeholder values:
-     * - boot_pml4_placeholder at offset 0x100
-     * - ap_start_placeholder at offset 0x108
+     * No runtime patching needed - symbols resolved by linker via GOT.
+     * The trampoline uses PIC with GOT-based addressing for all
+     * kernel symbols (boot_pml4, ap_start, idt_ptr, ap_stack_end).
      */
-    movl $ap_trampoline_start, %esi      /* Source */
-    movl $0x7000, %edi                   /* Destination */
-    movl $ap_trampoline_end, %ecx
-    subl $ap_trampoline_start, %ecx      /* Size = end - start */
-    cld
-    rep movsb                            /* Copy trampoline to 0x7000 */
-
-    /* Patch boot_pml4_placeholder (at 0x7000 + 0x100 = 0x7100) */
-    movl $boot_pml4, %eax                /* Low 32 bits of boot_pml4 */
-    movl %eax, 0x7100
-    movl $boot_pml4+4, %eax              /* High 32 bits */
-    movl %eax, 0x7104
-
-    /* Patch ap_start_placeholder (at 0x7000 + 0x108 = 0x7108)
-     * Revert to using ap_start now that we know C code execution works */
-    movl $ap_start, %eax                 /* Low 32 bits of ap_start */
-    movl %eax, 0x7108
-    movl $ap_start+4, %eax               /* High 32 bits */
-    movl %eax, 0x710C
-
-    /* Patch ap_stack_placeholder (at 0x7000 + 0x1400 = 0x8400) */
-    movl $ap_stack_end, %eax             /* Low 32 bits of ap_stack_end */
-    movl %eax, 0x8400
-    movl $ap_stack_end+4, %eax           /* High 32 bits */
-    movl %eax, 0x8404
-
-    /* DEBUG: Verify ap_stack_end is non-zero */
-    test %eax, %eax
-    jnz stack_addr_ok
-    /* ap_stack_end+4 is zero - this is an error! */
-    mov $'S', %al
-    out %al, $0x3F8
-    jmp stack_patch_done
-stack_addr_ok:
-    mov $'s', %al
-    out %al, $0x3F8
-stack_patch_done:
-
-    /* Patch idt_ptr_placeholder (at 0x7000 + 0x1500 = 0x8500)
-     * The AP needs to load the BSP's IDT to handle exceptions */
-    movl $idt_ptr, %eax                  /* Low 32 bits of idt_ptr */
-    movl %eax, 0x8500
-    movl $idt_ptr+4, %eax                /* High 32 bits */
-    movl %eax, 0x8504
 
     /* ---- CR Register Configuration ---- */
     /* Load PML4 base address into CR3
@@ -374,6 +333,21 @@ long_mode_start:
     mov %ax, %fs
     mov %ax, %gs
 
+    /* ============================================================
+     * Patch AP Trampoline Placeholders
+     * ============================================================
+     * The GOT-based approach has a linker bug where addresses get corrupted.
+     * Instead, we patch placeholders in the trampoline with the correct
+     * addresses at runtime. The trampoline is at physical 0x7000.
+     */
+    /* Patch ap_start_placeholder with actual ap_start address */
+    movabs $ap_start, %rax          /* Load actual ap_start address */
+    mov %rax, ap_start_placeholder  /* Patch the placeholder */
+
+    /* Patch idt_ptr_placeholder with actual idt_ptr address */
+    movabs $idt_ptr, %rax           /* Load actual idt_ptr address */
+    mov %rax, idt_ptr_placeholder   /* Patch the placeholder */
+
     /* Call kernel main */
     /* Note: bsp_init_done will be set by kernel code when ready */
     call kernel_main
@@ -419,18 +393,3 @@ ap_halt:
     cli
     hlt
     jmp ap_halt
-
-/* ============================================================================
- * AP Trampoline - placed at physical address 0x7000
- * ============================================================================ */
-.section .ap_trampoline
-.align 4096
-.global ap_trampoline_start
-ap_trampoline_start:
-
-/* Include the pre-built trampoline binary (includes stub at offset 0x1000) */
-.incbin "build/ap_trampoline.bin"
-
-/* Export symbol for C code to patch */
-.global ap_trampoline_end
-ap_trampoline_end:

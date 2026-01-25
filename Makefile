@@ -21,9 +21,8 @@ ARCH_BOOT_SRC := $(ARCH_DIR)/boot.S $(ARCH_DIR)/isr.S
 ARCH_LINKER := $(ARCH_DIR)/linker.ld
 ARCH_C_SRCS := $(ARCH_DIR)/vga.c $(ARCH_DIR)/serial_driver.c $(ARCH_DIR)/apic.c $(ARCH_DIR)/acpi.c $(ARCH_DIR)/idt.c $(ARCH_DIR)/timer.c $(ARCH_DIR)/rtc.c $(ARCH_DIR)/ipi.c
 
-# AP Trampoline (built as 16-bit binary, included via incbin)
-TRAMPOLINE_SRC := $(ARCH_DIR)/ap_trampoline.bin.S
-TRAMPOLINE_BIN := $(BUILD_DIR)/ap_trampoline.bin
+# AP Trampoline (assembled as part of kernel, uses PIC)
+TRAMPOLINE_SRC := $(ARCH_DIR)/ap_trampoline.S
 TRAMPOLINE_OBJ := $(BUILD_DIR)/ap_trampoline.o
 
 # Architecture-independent kernel sources
@@ -44,7 +43,7 @@ ARCH_BOOT_OBJ := $(patsubst $(ARCH_DIR)/%.S,$(BUILD_DIR)/boot_%.o,$(ARCH_DIR)/bo
 ARCH_OBJS := $(patsubst $(ARCH_DIR)/%.c,$(BUILD_DIR)/arch_%.o,$(ARCH_C_SRCS))
 KERNEL_OBJS := $(patsubst $(KERNEL_DIR)/%.c,$(BUILD_DIR)/kernel_%.o,$(KERNEL_C_SRCS))
 TESTS_OBJS := $(patsubst $(TESTS_DIR)/%.c,$(BUILD_DIR)/test_%.o,$(TESTS_C_SRCS))
-OBJS := $(ARCH_BOOT_OBJ) $(ARCH_OBJS) $(KERNEL_OBJS) $(TESTS_OBJS)
+OBJS := $(ARCH_BOOT_OBJ) $(ARCH_OBJS) $(KERNEL_OBJS) $(TESTS_OBJS) $(TRAMPOLINE_OBJ)
 KERNEL_ELF := $(BUILD_DIR)/$(KERNEL).elf
 
 .PHONY: all clean run
@@ -58,7 +57,7 @@ $(ISO_DIR):
 	mkdir -p $(ISO_DIR)/boot/grub
 
 # Compile architecture-specific boot assembly
-$(BUILD_DIR)/boot_%.o: $(ARCH_DIR)/boot.S $(TRAMPOLINE_BIN) | $(BUILD_DIR)
+$(BUILD_DIR)/boot_%.o: $(ARCH_DIR)/boot.S | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Compile ISR assembly
@@ -77,19 +76,12 @@ $(BUILD_DIR)/kernel_%.o: $(KERNEL_DIR)/%.c | $(BUILD_DIR)
 $(BUILD_DIR)/test_%.o: $(TESTS_DIR)/%.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Build AP trampoline (as 16-bit binary)
-$(TRAMPOLINE_BIN): $(TRAMPOLINE_SRC) $(ARCH_DIR)/ap_trampoline.ld | $(BUILD_DIR)
-	as --32 -o $(BUILD_DIR)/ap_trampoline.tmp.o $<
-	ld -m elf_i386 -T $(ARCH_DIR)/ap_trampoline.ld -o $(BUILD_DIR)/ap_trampoline.elf $(BUILD_DIR)/ap_trampoline.tmp.o
-	objcopy -O binary $(BUILD_DIR)/ap_trampoline.elf $@
-	rm $(BUILD_DIR)/ap_trampoline.tmp.o $(BUILD_DIR)/ap_trampoline.elf
+# Compile AP trampoline (as 64-bit assembly, uses PIC)
+$(TRAMPOLINE_OBJ): $(TRAMPOLINE_SRC) | $(BUILD_DIR)
+	$(AS) $(ASFLAGS) -c $< -o $@
 
-# Convert trampoline binary to object file for _binary_ symbols
-$(TRAMPOLINE_OBJ): $(TRAMPOLINE_BIN)
-	objcopy -I binary -O elf64-x86-64 -B i386 --rename-section .data=.ap_trampoline_incbin $< $@
-
-# Link (trampoline object included for _binary_ symbols)
-$(KERNEL_ELF): $(OBJS) $(TRAMPOLINE_OBJ)
+# Link kernel (trampoline is included as regular object)
+$(KERNEL_ELF): $(OBJS)
 	$(LD) $(LDFLAGS) -T $(ARCH_LINKER) $^ -o $@
 
 # Create ISO
