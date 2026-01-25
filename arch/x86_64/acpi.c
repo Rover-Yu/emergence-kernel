@@ -159,23 +159,62 @@ uint8_t acpi_get_apic_id(void) {
 }
 
 /**
+ * get_cpu_count_cpuid - Get CPU count using CPUID instruction
+ *
+ * Uses CPUID leaf 0x01 to get logical processor count from EBX[23:16].
+ * This is a hardware-based method that works regardless of ACPI availability.
+ *
+ * Returns: Number of logical processors in the system
+ */
+static int get_cpu_count_cpuid(void) {
+    uint32_t eax, ebx, ecx, edx;
+
+    /* CPUID leaf 0x01: Processor Info and Feature Bits
+     * EBX[23:16] contains the maximum number of addressable IDs for logical processors */
+    asm volatile ("cpuid"
+                  : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx)
+                  : "a"(0x01));
+
+    /* Extract logical processor count from EBX bits 16-23 */
+    int count = (ebx >> 16) & 0xFF;
+
+    /* Sanity check: ensure count is valid */
+    if (count < 1 || count > 256) {
+        return 1;  /* At least 1 CPU (BSP) */
+    }
+
+    return count;
+}
+
+/**
  * acpi_get_apic_count - Get number of APICs from ACPI MADT
  *
- * Returns: Number of APICs found
+ * Returns: Number of APICs found (using CPUID as fallback if ACPI unavailable)
  */
 int acpi_get_apic_count(void) {
-    return apic_count;
+    /* If ACPI parsing succeeded, use that count */
+    if (apic_count > 0) {
+        return apic_count;
+    }
+
+    /* Fallback: use CPUID to get actual CPU count from hardware */
+    return get_cpu_count_cpuid();
 }
 
 /**
  * acpi_get_apic_id_by_index - Get APIC ID by index
  * @index: Index into APIC list (0-based)
  *
- * Returns: APIC ID at given index, or 0 if index out of range
+ * Returns: APIC ID at given index (using sequential IDs as fallback)
  */
 uint8_t acpi_get_apic_id_by_index(int index) {
-    if (index >= 0 && index < apic_count && index < 4) {
-        return apic_ids[index];
+    if (index >= 0 && index < 4) {
+        /* If ACPI parsed successfully, use those APIC IDs */
+        if (apic_count > 0 && index < apic_count) {
+            return apic_ids[index];
+        }
+        /* Fallback: use sequential APIC IDs (0, 1, 2, 3) */
+        return index;
     }
     return 0;
 }

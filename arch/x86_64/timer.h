@@ -5,10 +5,13 @@
 
 #include <stdint.h>
 
-/* Timer interrupt handler (called from ISR) */
+/* APIC Timer interrupt handler (called from timer_isr) */
+void apic_timer_handler(void);
+
+/* Legacy timer handler (for compatibility, deprecated) */
 void timer_handler(void);
 
-/* Timer control functions */
+/* APIC Timer control functions */
 void timer_start(void);
 void timer_stop(void);
 int timer_is_active(void);

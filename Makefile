@@ -46,7 +46,7 @@ TESTS_OBJS := $(patsubst $(TESTS_DIR)/%.c,$(BUILD_DIR)/test_%.o,$(TESTS_C_SRCS))
 OBJS := $(ARCH_BOOT_OBJ) $(ARCH_OBJS) $(KERNEL_OBJS) $(TESTS_OBJS) $(TRAMPOLINE_OBJ)
 KERNEL_ELF := $(BUILD_DIR)/$(KERNEL).elf
 
-.PHONY: all clean run
+.PHONY: all clean run test test-all test-boot test-apic-timer test-rtc-timer test-both-timers test-smp test-integration
 
 all: $(ISO)
 
@@ -103,3 +103,34 @@ run-debug: $(ISO)
 
 clean:
 	rm -rf $(BUILD_DIR) $(ISO_DIR) $(ISO)
+
+# Test targets
+test: test-all
+
+test-all:
+	@echo "Running JAKernel test suite..."
+	@cd tests && ./run_all_tests.sh
+
+test-boot:
+	@echo "Running Basic Kernel Boot Test..."
+	@cd tests && ./boot_test.sh
+
+test-apic-timer:
+	@echo "Running APIC Timer Test..."
+	@cd tests && ./apic_timer_test.sh
+
+test-rtc-timer:
+	@echo "Running RTC Timer Test..."
+	@cd tests && ./rtc_timer_test.sh
+
+test-both-timers:
+	@echo "Running Dual Timer Test..."
+	@cd tests && ./both_timers_test.sh
+
+test-smp:
+	@echo "Running SMP Boot Test..."
+	@cd tests && ./smp_boot_test.sh 2
+
+test-integration:
+	@echo "Running SMP + Timers Integration Test..."
+	@cd tests && ./smp_with_timers_test.sh 2

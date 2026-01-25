@@ -14,55 +14,77 @@ static const char *math_quotes[] = {
 
 #define NUM_QUOTES (sizeof(math_quotes) / sizeof(math_quotes[0]))
 
-/* Timer state */
-static volatile int timer_count = 0;
-static volatile int timer_active = 0;
+/* APIC Timer state */
+static volatile int apic_timer_count = 0;
+static volatile int apic_timer_active = 0;
 
 /* External serial output functions */
 extern void serial_puts(const char *str);
 extern void serial_putc(char c);
 
 /**
- * timer_handler - Timer interrupt handler
+ * apic_timer_handler - APIC Timer interrupt handler
  *
- * Called from timer_isr in isr.S every time the timer expires.
+ * Called from timer_isr in isr.S every time the APIC timer expires.
  * Prints a mathematician quote every 0.5 seconds, up to 5 quotes total.
+ * The timer runs at high frequency (approx 1000Hz).
  */
-void timer_handler(void) {
-    if (timer_active && timer_count < (int)NUM_QUOTES) {
-        serial_puts(math_quotes[timer_count]);
+void apic_timer_handler(void) {
+    if (apic_timer_active && apic_timer_count < (int)NUM_QUOTES) {
+        serial_puts("[APIC] ");
+        serial_puts(math_quotes[apic_timer_count]);
         serial_puts("\n");
-        timer_count++;
+        apic_timer_count++;
 
         /* Stop timer after 5 quotes */
-        if (timer_count >= (int)NUM_QUOTES) {
-            timer_active = 0;
+        if (apic_timer_count >= (int)NUM_QUOTES) {
+            apic_timer_active = 0;
         }
     }
 }
 
 /**
- * timer_start - Start the timer for quote printing
+ * timer_handler - Legacy timer interrupt handler (for compatibility)
  *
- * Resets the counter and activates the timer.
+ * This is the original handler that is now deprecated.
+ * Use apic_timer_handler instead.
+ */
+void timer_handler(void) {
+    if (apic_timer_active && apic_timer_count < (int)NUM_QUOTES) {
+        serial_puts("[TIMER] ");
+        serial_puts(math_quotes[apic_timer_count]);
+        serial_puts("\n");
+        apic_timer_count++;
+
+        /* Stop timer after 5 quotes */
+        if (apic_timer_count >= (int)NUM_QUOTES) {
+            apic_timer_active = 0;
+        }
+    }
+}
+
+/**
+ * timer_start - Start the APIC timer for quote printing
+ *
+ * Resets the counter and activates the APIC timer.
  */
 void timer_start(void) {
-    timer_count = 0;
-    timer_active = 1;
+    apic_timer_count = 0;
+    apic_timer_active = 1;
 }
 
 /**
- * timer_stop - Stop the timer
+ * timer_stop - Stop the APIC timer
  */
 void timer_stop(void) {
-    timer_active = 0;
+    apic_timer_active = 0;
 }
 
 /**
- * timer_is_active - Check if timer is still active
+ * timer_is_active - Check if APIC timer is still active
  *
  * Returns: 1 if active, 0 if stopped
  */
 int timer_is_active(void) {
-    return timer_active;
+    return apic_timer_active;
 }

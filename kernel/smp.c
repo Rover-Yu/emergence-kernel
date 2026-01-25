@@ -18,6 +18,9 @@ static smp_cpu_info_t cpu_info[SMP_MAX_CPUS];
 /* Number of CPUs that have completed initialization */
 static volatile int ready_cpus = 0;
 
+/* Actual number of CPUs in the system (from ACPI or runtime detection) */
+static int actual_cpu_count = 0;
+
 /* CPU ID assignment - atomically incremented by each CPU */
 static volatile int next_cpu_id = 0;
 
@@ -87,6 +90,12 @@ void smp_init(void) {
 
     ready_cpus = 0;
 
+    /* Get actual CPU count from ACPI, fallback to SMP_MAX_CPUS */
+    actual_cpu_count = acpi_get_apic_count();
+    if (actual_cpu_count <= 0 || actual_cpu_count > SMP_MAX_CPUS) {
+        actual_cpu_count = SMP_MAX_CPUS;
+    }
+
     /* Initialize CPU info with real APIC IDs from ACPI */
     for (int i = 0; i < SMP_MAX_CPUS; i++) {
         cpu_info[i].cpu_index = i;
@@ -122,7 +131,7 @@ void smp_start_all_aps(void) {
 
     /* Debug: Print CPU info */
     serial_puts("SMP: CPU info:\n");
-    for (int i = 0; i < SMP_MAX_CPUS; i++) {
+    for (int i = 0; i < actual_cpu_count; i++) {
         serial_puts("  CPU ");
         serial_putc('0' + i);
         serial_puts(" -> APIC ID ");
@@ -144,7 +153,7 @@ void smp_start_all_aps(void) {
     /* Start each AP sequentially using STARTUP IPI
      * Sequential startup prevents multiple APs from executing the trampoline
      * simultaneously, which causes serial output corruption and system instability. */
-    for (int i = 1; i < SMP_MAX_CPUS; i++) {
+    for (int i = 1; i < actual_cpu_count; i++) {
         uint8_t apic_id = smp_get_apic_id_by_index(i);
 
         /* Log which AP we're starting (helps with debugging) */
@@ -188,7 +197,8 @@ void smp_start_all_aps(void) {
 
     /* All APs started - report status */
     int ap_ready_count = 0;
-    for (int i = 1; i < SMP_MAX_CPUS; i++) {
+    int expected_aps = actual_cpu_count - 1;  /* BSP is not an AP */
+    for (int i = 1; i < actual_cpu_count; i++) {
         if (cpu_info[i].state == CPU_READY) {
             ap_ready_count++;
         }
@@ -197,7 +207,7 @@ void smp_start_all_aps(void) {
     serial_puts("SMP: All APs startup complete. ");
     serial_putc('0' + ap_ready_count);
     serial_puts("/");
-    serial_putc('0' + (SMP_MAX_CPUS - 1));
+    serial_putc('0' + expected_aps);
     serial_puts(" APs ready\n");
 
     /* BSP will halt after returning to main.c */

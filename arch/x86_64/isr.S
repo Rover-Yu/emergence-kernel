@@ -101,6 +101,16 @@ ISR_HANDLER simd_isr
 .global timer_isr
 .type timer_isr, @function
 timer_isr:
+    /* EMERGENCY DEBUG: Output 'A' for APIC Timer before doing anything else
+     * This helps distinguish APIC timer interrupts from RTC interrupts */
+    push %rax
+    push %rdx
+    mov $0x3F8, %dx
+    mov $'A', %al
+    out %al, %dx
+    pop %rdx
+    pop %rax
+
     /* Save all general-purpose registers (x86-64 has no pusha)
      * Save in order: r15 first, rax last (reverse restore) */
     push %r15
@@ -123,7 +133,7 @@ timer_isr:
      * We don't need to save/restore %ds, %es, %fs, %gs */
 
     /* Call C handler */
-    call timer_handler
+    call apic_timer_handler
 
     /* Send EOI to Local APIC */
     /* LAPIC EOI is at offset 0xB0 from base (0xFEE00000) */
@@ -151,63 +161,6 @@ timer_isr:
     /* Return from interrupt */
     iretq
 .size timer_isr, . - timer_isr
-
-/* RTC ISR - Real Time Clock for periodic interrupts */
-.global rtc_isr
-.type rtc_isr, @function
-rtc_isr:
-    /* Save all general-purpose registers (x86-64 has no pusha)
-     * Save in order: r15 first, rax last (reverse restore) */
-    push %r15
-    push %r14
-    push %r13
-    push %r12
-    push %r11
-    push %r10
-    push %r9
-    push %r8
-    push %rbp
-    push %rdi
-    push %rsi
-    push %rdx
-    push %rcx
-    push %rbx
-    push %rax
-
-    /* In x86-64 long mode, segment registers are fixed to flat model
-     * We don't need to save/restore %ds, %es, %fs, %gs */
-
-    /* Call C handler */
-    call rtc_isr_handler
-
-    /* Send EOI to PIC (8259 Programmable Interrupt Controller)
-     * RTC uses IRQ 8, which goes to the slave PIC
-     * We need to send EOI to both slave and master PICs */
-    movb $0x20, %al           /* Generic EOI signal */
-    outb %al, $0xA0           /* Send to slave PIC (command port at 0xA0) */
-    outb %al, $0x20           /* Send to master PIC (command port at 0x20) */
-
-    /* Restore all general-purpose registers
-     * Restore in reverse order: r15 first, rax last */
-    pop %r15
-    pop %r14
-    pop %r13
-    pop %r12
-    pop %r11
-    pop %r10
-    pop %r9
-    pop %r8
-    pop %rbp
-    pop %rdi
-    pop %rsi
-    pop %rdx
-    pop %rcx
-    pop %rbx
-    pop %rax
-
-    /* Return from interrupt */
-    iretq
-.size rtc_isr, . - rtc_isr
 
 /* IPI ISR - Inter-Processor Interrupt */
 .global ipi_isr

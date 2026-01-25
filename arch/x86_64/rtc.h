@@ -39,7 +39,4 @@ uint8_t rtc_read(uint8_t reg);
 /* Write RTC register */
 void rtc_write(uint8_t reg, uint8_t value);
 
-/* RTC interrupt handler (IRQ 8) */
-extern void rtc_isr_handler(void);
-
 #endif /* JAKERNEL_ARCH_X86_64_RTC_H */

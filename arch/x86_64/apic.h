@@ -63,11 +63,28 @@
 /* SVR (Spurious Interrupt Vector Register) bits */
 #define LAPIC_SVR_ENABLE     0x100   /* APIC enable bit */
 
-/* Timer interrupt vector */
-#define TIMER_VECTOR         32      /* Timer interrupt vector */
+/* Timer interrupt vectors */
+#define TIMER_VECTOR         32      /* APIC Timer interrupt vector */
+#define RTC_VECTOR           40      /* RTC interrupt vector (IRQ 8) */
 
 /* Default Local APIC base address (will be detected from MSR) */
 #define LAPIC_DEFAULT_BASE   0xFEE00000
+
+/* APIC Timer LVT (Local Vector Table) bits */
+#define LAPIC_TIMER_LVT_MASK      0x10000  /* Timer mask */
+#define LAPIC_TIMER_LVT_PERIODIC  0x20000  /* Periodic mode */
+#define LAPIC_TIMER_LVT_ONESHOT   0x00000  /* One-shot mode */
+#define LAPIC_TIMER_LVT_TSCDEADLINE 0x40000 /* TSC deadline mode */
+
+/* APIC Timer Divide Configuration */
+#define LAPIC_TIMER_DIV_BY_1   0xB    /* Divide by 1 */
+#define LAPIC_TIMER_DIV_BY_2   0x0    /* Divide by 2 */
+#define LAPIC_TIMER_DIV_BY_4   0x1    /* Divide by 4 */
+#define LAPIC_TIMER_DIV_BY_8   0x2    /* Divide by 8 */
+#define LAPIC_TIMER_DIV_BY_16  0x3    /* Divide by 16 */
+#define LAPIC_TIMER_DIV_BY_32  0x8    /* Divide by 32 */
+#define LAPIC_TIMER_DIV_BY_64  0x9    /* Divide by 64 */
+#define LAPIC_TIMER_DIV_BY_128 0xA    /* Divide by 128 */
 
 /* APIC function prototypes */
 
@@ -95,5 +112,8 @@ int lapic_wait_for_ipi(void);
 
 /* BSP (Boot Strap Processor) detection */
 int is_bsp(void);
+
+/* APIC Timer initialization */
+void apic_timer_init(void);
 
 #endif /* JAKERNEL_ARCH_X86_64_APIC_H */

@@ -8,9 +8,9 @@
 #include "arch/x86_64/acpi.h"
 #include "arch/x86_64/idt.h"
 #include "arch/x86_64/timer.h"
-#include "arch/x86_64/rtc.h"
 #include "arch/x86_64/ipi.h"
 #include "arch/x86_64/serial.h"
+#include "arch/x86_64/io.h"
 
 /* External driver initialization functions */
 extern int serial_driver_init(void);
@@ -57,6 +57,13 @@ void kernel_main(void) {
         idt_init();
         lapic_init();
         smp_init();
+
+        /* Initialize APIC Timer for high-frequency interrupts */
+        apic_timer_init();
+
+        /* Activate APIC timer */
+        timer_start();
+
         serial_puts("BSP: Initialization complete\n");
     }
 
@@ -86,9 +93,12 @@ void kernel_main(void) {
         serial_unlock();
         smp_start_all_aps();
 
-        /* BSP halts immediately after starting AP to avoid interference
-         * The AP will complete its initialization and halt on its own */
-        asm volatile ("cli");  /* Ensure interrupts stay disabled */
+        /* Re-enable interrupts after AP startup to allow APIC timer to fire
+         * This allows the APIC timer to generate interrupts */
+        enable_interrupts();
+
+        /* BSP waits with interrupts enabled for timer interrupts to fire
+         * The HLT instruction will wake up on each interrupt */
         kernel_halt();
     } else {
         /* AP: print boot message and halt */

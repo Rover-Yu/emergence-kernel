@@ -869,3 +869,51 @@ int is_bsp(void) {
     return (apic_base & (1 << 8)) ? 1 : 0;
 }
 
+/**
+ * apic_timer_init - Initialize APIC Timer for periodic interrupts
+ *
+ * Configures the Local APIC timer to generate periodic interrupts
+ * at approximately 1000 Hz (1ms period).
+ *
+ * The APIC timer runs at the bus clock frequency. The actual frequency
+ * varies by CPU, but dividing by 1 and using a reasonable initial count
+ * gives us a predictable interrupt rate.
+ */
+void apic_timer_init(void) {
+    uint32_t lvt_value;
+
+    serial_puts("[APIC_TIMER] Initializing APIC timer...\n");
+
+    /* Step 1: Set divide configuration register
+     * 0xB = divide by 1 (highest frequency)
+     * Other options: 0x0=div2, 0x1=div4, 0x2=div8, 0x3=div16, etc.
+     */
+    serial_puts("[APIC_TIMER] Setting divide configuration (divide by 1)...\n");
+    lapic_write(LAPIC_TIMER_DCR, LAPIC_TIMER_DIV_BY_1);
+
+    /* Step 2: Configure timer LVT (Local Vector Table)
+     * Set timer vector to TIMER_VECTOR (32)
+     * Set periodic mode bit (bit 17)
+     * Unmask the timer (clear bit 16)
+     */
+    serial_puts("[APIC_TIMER] Configuring timer LVT (periodic mode)...\n");
+    lvt_value = TIMER_VECTOR;              /* Interrupt vector */
+    lvt_value |= LAPIC_TIMER_LVT_PERIODIC; /* Periodic mode */
+    /* Timer is unmasked by default (LAPIC_TIMER_LVT_MASK = 0) */
+    lapic_write(LAPIC_TIMER_LVT, lvt_value);
+
+    /* Step 3: Set initial count to start the timer
+     * The actual interrupt frequency depends on the bus clock.
+     * For typical systems:
+     * - Bus clock ~ 100-200 MHz
+     * - Divide by 1
+     * - Initial count 100000 gives ~1000-2000 Hz
+     *
+     * Using a conservative value of 100000 for reliable interrupts.
+     */
+    serial_puts("[APIC_TIMER] Setting initial count (100000)...\n");
+    lapic_write(LAPIC_TIMER_ICR, 100000);
+
+    serial_puts("[APIC_TIMER] APIC timer initialized successfully\n");
+}
+
