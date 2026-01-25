@@ -11,6 +11,7 @@
 #include "arch/x86_64/ipi.h"
 #include "arch/x86_64/serial.h"
 #include "arch/x86_64/io.h"
+#include "arch/x86_64/power.h"
 
 /* External driver initialization functions */
 extern int serial_driver_init(void);
@@ -99,7 +100,7 @@ void kernel_main(void) {
 
         /* BSP waits with interrupts enabled for timer interrupts to fire
          * The HLT instruction will wake up on each interrupt */
-        kernel_halt();
+        system_shutdown();
     } else {
         /* AP: print boot message and halt */
         serial_puts("SMP: AP ");

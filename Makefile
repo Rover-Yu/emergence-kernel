@@ -19,7 +19,7 @@ LDFLAGS := -nostdlib -m elf_x86_64
 ARCH_DIR := arch/x86_64
 ARCH_BOOT_SRC := $(ARCH_DIR)/boot.S $(ARCH_DIR)/isr.S
 ARCH_LINKER := $(ARCH_DIR)/linker.ld
-ARCH_C_SRCS := $(ARCH_DIR)/vga.c $(ARCH_DIR)/serial_driver.c $(ARCH_DIR)/apic.c $(ARCH_DIR)/acpi.c $(ARCH_DIR)/idt.c $(ARCH_DIR)/timer.c $(ARCH_DIR)/rtc.c $(ARCH_DIR)/ipi.c
+ARCH_C_SRCS := $(ARCH_DIR)/vga.c $(ARCH_DIR)/serial_driver.c $(ARCH_DIR)/apic.c $(ARCH_DIR)/acpi.c $(ARCH_DIR)/idt.c $(ARCH_DIR)/timer.c $(ARCH_DIR)/rtc.c $(ARCH_DIR)/ipi.c $(ARCH_DIR)/power.c
 
 # AP Trampoline (assembled as part of kernel, uses PIC)
 TRAMPOLINE_SRC := $(ARCH_DIR)/ap_trampoline.S
@@ -96,10 +96,10 @@ $(ISO): $(KERNEL_ELF) | $(ISO_DIR)
 	$(GRUB_MKRESCUE) -o $@ $(ISO_DIR)
 
 run: $(ISO)
-	qemu-system-x86_64 -M pc -m 128M -nographic -cdrom $(ISO) -smp 4
+	qemu-system-x86_64 -M pc -m 128M -nographic -cdrom $(ISO) -smp 4 -device isa-debug-exit,iobase=0xB004,iosize=1 || exit 0
 
 run-debug: $(ISO)
-	qemu-system-x86_64 -M pc -m 128M -nographic -cdrom $(ISO) -smp 4 -s -S
+	qemu-system-x86_64 -M pc -m 128M -nographic -cdrom $(ISO) -smp 4 -s -S -device isa-debug-exit,iobase=0xB004,iosize=1 || exit 0
 
 clean:
 	rm -rf $(BUILD_DIR) $(ISO_DIR) $(ISO)

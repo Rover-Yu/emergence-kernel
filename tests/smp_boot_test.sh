@@ -88,7 +88,7 @@ run_qemu() {
     echo ""
 
     # Run QEMU with serial output to file, timeout after specified seconds
-    # Exit code 124 from timeout is expected (kernel doesn't halt)
+    # Include shutdown device for clean VM exit after SMP startup completes (8-bit I/O)
     timeout ${QEMU_TIMEOUT} qemu-system-x86_64 \
         -M pc \
         -m 128M \
@@ -96,6 +96,7 @@ run_qemu() {
         -monitor none \
         -smp ${EXPECTED_CPU_COUNT} \
         -cdrom "${KERNEL_ISO}" \
+        -device isa-debug-exit,iobase=0xB004,iosize=1 \
         -serial file:"${SERIAL_OUTPUT}" >/dev/null 2>&1 || true
 
     if [ ! -f "$SERIAL_OUTPUT" ]; then

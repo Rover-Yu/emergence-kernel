@@ -74,6 +74,7 @@ run_qemu_capture() {
 
     # Run QEMU with serial output to file, timeout after specified seconds
     # Redirect both stdout and stderr to /dev/null to suppress QEMU monitor output
+    # Include shutdown device for clean VM exit (8-bit I/O for exit code 0)
     timeout ${timeout} qemu-system-x86_64 \
         -M pc \
         -m 128M \
@@ -82,6 +83,7 @@ run_qemu_capture() {
         -smp ${cpu_count} \
         -cdrom "${iso_path}" \
         ${extra_flags} \
+        -device isa-debug-exit,iobase=0xB004,iosize=1 \
         -serial file:"${SERIAL_OUTPUT}" >/dev/null 2>&1 || true
 
     # Check if output was captured
