@@ -47,8 +47,10 @@
 /* MSRs */
 .equ MSR_EFER,           0xC0000080  /* Extended Feature Enable Register MSR */
 
-/* Code selectors */
-.selector = 0x0008
+/* GDT Segment Selectors */
+.equ PM_CODE_SELECTOR,   0x0008  /* 32-bit Protected Mode Code Selector (GDT[1]) */
+.equ PM_DATA_SELECTOR,   0x0010  /* 32-bit Protected Mode Data Selector (GDT[2]) */
+.equ LM_CODE_SELECTOR,   0x0008  /* 64-bit Long Mode Code Selector (GDT64[1]) */
 
 /* External symbols - populated into GOT by linker */
 .extern boot_pml4        /* PML4 page table address */
@@ -106,10 +108,7 @@ get_eip_gdt:
     mov %eax, %cr0
 
     /* Far jump to protected mode */
-    .byte 0x66
-    .byte 0xEA
-    .long 0x703D
-    .word 0x0008
+    data32 ljmp $PM_CODE_SELECTOR, $pm_entry
 
     /* Should never reach here */
     cli
@@ -128,7 +127,7 @@ pm_entry:
     out %al, %edx
 
     /* Set up data segments */
-    mov $0x10, %eax
+    mov $PM_DATA_SELECTOR, %eax
     mov %eax, %ds
     mov %eax, %es
     mov %eax, %ss
@@ -211,7 +210,7 @@ get_eip_gdt64:
     /* ============================================================
      * Far Jump to 64-bit Mode using retf technique
      * ============================================================ */
-    pushl $0x0008         /* 64-bit code segment selector */
+    pushl $LM_CODE_SELECTOR  /* 64-bit code segment selector */
     pushl $STUB_PHYSICAL  /* Offset to ap_trampoline_stub (0x8000) */
     retf
 
