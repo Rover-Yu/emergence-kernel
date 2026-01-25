@@ -96,10 +96,4 @@ int lapic_wait_for_ipi(void);
 /* BSP (Boot Strap Processor) detection */
 int is_bsp(void);
 
-/* Timer functions */
-void lapic_timer_init(uint32_t frequency);
-void lapic_timer_set_divide(uint32_t divide_value);
-void lapic_timer_set_initial_count(uint32_t count);
-uint32_t lapic_timer_get_current_count(void);
-
 #endif /* JAKERNEL_ARCH_X86_64_APIC_H */

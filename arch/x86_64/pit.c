@@ -34,22 +34,3 @@ void pit_init(uint32_t frequency) {
     outb(PIT_CH0_DATA, (divisor >> 8) & 0xFF);
 }
 
-/**
- * pit_read_counter - Read current PIT counter value
- *
- * Returns: Current counter value (decrements from divisor to 0)
- */
-uint16_t pit_read_counter(void) {
-    uint8_t lo, hi;
-
-    /* Latch the count */
-    outb(PIT_COMMAND, PIT_CHANNEL_0 | PIT_ACCESS_LATCH);
-
-    /* Read low byte */
-    lo = inb(PIT_CH0_DATA);
-
-    /* Read high byte */
-    hi = inb(PIT_CH0_DATA);
-
-    return ((uint16_t)hi << 8) | lo;
-}

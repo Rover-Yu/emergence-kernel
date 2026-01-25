@@ -37,9 +37,6 @@ typedef struct {
 /* Initialize SMP subsystem */
 void smp_init(void);
 
-/* Get number of detected CPUs */
-int smp_get_cpu_count(void);
-
 /* Get current CPU's APIC ID */
 uint8_t smp_get_apic_id(void);
 
@@ -51,12 +48,6 @@ uint8_t smp_get_apic_id_by_index(int cpu_index);
 
 /* Mark CPU as ready */
 void smp_mark_cpu_ready(int cpu_index);
-
-/* Wait for all CPUs to be ready */
-void smp_wait_for_all_cpus(void);
-
-/* Get CPU info by index */
-smp_cpu_info_t *smp_get_cpu_info(int cpu_index);
 
 /* AP (Application Processor) entry point */
 void ap_start(void);

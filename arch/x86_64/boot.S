@@ -23,6 +23,7 @@ multiboot_header_end:
 /* External symbols from C code
  * These are resolved at link time and patched into the trampoline */
 .extern ap_start              /* AP entry point function */
+.extern ap_start_minimal      /* Minimal test function for debugging */
 .extern idt_ptr                /* IDT pointer structure in kernel BSS */
 .extern boot_pml4              /* PML4 page table address */
 .extern ap_stack_end           /* End of AP stack (top address) */
@@ -278,35 +279,30 @@ boot_is_bsp:
     movl $boot_pml4+4, %eax              /* High 32 bits */
     movl %eax, 0x7104
 
-    /* Patch ap_start_placeholder (at 0x7000 + 0x108 = 0x7108) */
+    /* Patch ap_start_placeholder (at 0x7000 + 0x108 = 0x7108)
+     * Revert to using ap_start now that we know C code execution works */
     movl $ap_start, %eax                 /* Low 32 bits of ap_start */
     movl %eax, 0x7108
     movl $ap_start+4, %eax               /* High 32 bits */
     movl %eax, 0x710C
-
-    /* Debug: Extract third byte (bits 16-23) and output as hex digit
-     * For kernel at 0x100000, this should be 0x01, output as '1' */
-    movl $ap_start, %eax
-    shrl $16, %eax                       /* Get bits 16-23 in AL */
-    movb %al, %bl                        /* Save in BL */
-    shrb $4, %al                         /* Get high nibble */
-    andb $0xF, %al
-    /* Convert to ASCII '0'-'9' or 'A'-'F' */
-    cmpb $10, %al
-    jb is_digit_1
-    addb $'A' - 10, %al
-    jmp output_byte1
-is_digit_1:
-    addb $'0', %al
-output_byte1:
-    mov $0x3F8, %dx
-    out %al, %dx                         /* Output high nibble of third byte */
 
     /* Patch ap_stack_placeholder (at 0x7000 + 0x1400 = 0x8400) */
     movl $ap_stack_end, %eax             /* Low 32 bits of ap_stack_end */
     movl %eax, 0x8400
     movl $ap_stack_end+4, %eax           /* High 32 bits */
     movl %eax, 0x8404
+
+    /* DEBUG: Verify ap_stack_end is non-zero */
+    test %eax, %eax
+    jnz stack_addr_ok
+    /* ap_stack_end+4 is zero - this is an error! */
+    mov $'S', %al
+    out %al, $0x3F8
+    jmp stack_patch_done
+stack_addr_ok:
+    mov $'s', %al
+    out %al, $0x3F8
+stack_patch_done:
 
     /* Patch idt_ptr_placeholder (at 0x7000 + 0x1500 = 0x8500)
      * The AP needs to load the BSP's IDT to handle exceptions */

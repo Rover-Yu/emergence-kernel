@@ -8,6 +8,16 @@
 .global \name
 .type \name, @function
 \name:
+    /* EMERGENCY DEBUG: Output 'X' for exception before doing anything else
+     * This helps diagnose which exception is causing triple faults */
+    push %rax
+    push %rdx
+    mov $0x3F8, %dx
+    mov $'X', %al
+    out %al, %dx
+    pop %rdx
+    pop %rax
+
     /* Save all general-purpose registers (x86-64 has no pusha) */
     push %r15
     push %r14

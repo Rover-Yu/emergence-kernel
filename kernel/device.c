@@ -37,29 +37,6 @@ int driver_register(struct driver *drv) {
     return 0;
 }
 
-/**
- * driver_unregister - Unregister a driver from the system
- * @drv: Driver to unregister
- */
-void driver_unregister(struct driver *drv) {
-    struct driver *prev = NULL;
-    struct driver *curr = driver_list;
-
-    while (curr) {
-        if (curr == drv) {
-            /* Remove from list */
-            if (prev) {
-                prev->next = curr->next;
-            } else {
-                driver_list = curr->next;
-            }
-            drv->next = NULL;
-            return;
-        }
-        prev = curr;
-        curr = curr->next;
-    }
-}
 
 /* ============================================================================
  * Device Management
@@ -93,83 +70,13 @@ int device_register(struct device *dev) {
     return 0;
 }
 
-/**
- * device_unregister - Unregister a device from the system
- * @dev: Device to unregister
- */
-void device_unregister(struct device *dev) {
-    struct device *prev = NULL;
-    struct device *curr = device_list;
-
-    while (curr) {
-        if (curr == dev) {
-            /* Remove from list */
-            if (prev) {
-                prev->next = curr->next;
-            } else {
-                device_list = curr->next;
-            }
-            dev->next = NULL;
-            device_count--;
-            return;
-        }
-        prev = curr;
-        curr = curr->next;
-    }
-}
 
 /* ============================================================================
  * Device Getters/Setters
  * ============================================================================ */
 
-/**
- * device_get - Find a device by name
- * @name: Device name to search for
- *
- * Returns: Device pointer or NULL if not found
- */
-struct device *device_get(const char *name) {
-    struct device *dev = device_list;
 
-    while (dev) {
-        if (dev->name && name) {
-            /* Simple string comparison */
-            const char *d = dev->name;
-            const char *n = name;
-            while (*d && *n && *d == *n) {
-                d++;
-                n++;
-            }
-            if (*d == '\0' && *n == '\0') {
-                return dev;
-            }
-        }
-        dev = dev->next;
-    }
 
-    return NULL;
-}
-
-/**
- * device_set_drvdata - Set driver private data for a device
- * @dev: Device
- * @data: Private data pointer
- */
-void device_set_drvdata(struct device *dev, void *data) {
-    if (dev) {
-        dev->driver_data = data;
-    }
-}
-
-/**
- * device_get_drvdata - Get driver private data from a device
- * @dev: Device
- *
- * Returns: Private data pointer
- */
-void *device_get_drvdata(struct device *dev) {
-    return dev ? dev->driver_data : NULL;
-}
 
 /* ============================================================================
  * Device Matching and Probing

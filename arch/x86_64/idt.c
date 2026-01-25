@@ -159,9 +159,4 @@ void idt_init(void) {
 
     /* Load IDT using lidt instruction */
     asm volatile ("lidt %0" : : "m"(idt_ptr));
-
-    /* Disable RTC interrupt (IRQ 8) for now - causes system resets
-     * Only enable when RTC is properly initialized */
-    /* outb(PIC2_DATA, inb(PIC2_DATA) & ~0x01);   Enable IRQ 8 on slave PIC */
-    /* outb(PIC1_DATA, inb(PIC1_DATA) & ~0x04);   Enable IRQ 2 (cascade) on master PIC */
 }

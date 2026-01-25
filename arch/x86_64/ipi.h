@@ -9,9 +9,6 @@
 /* IPI device match ID */
 #define IPI_DEVICE_MATCH_ID    0x4950  /* "IP" in hex */
 
-/* IPI vector numbers for testing */
-#define IPI_TEST_VECTOR        33      /* IPI test interrupt vector */
-
 /* IPI driver initialization function */
 int ipi_driver_init(void);
 

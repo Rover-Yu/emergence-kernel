@@ -11,12 +11,8 @@ struct driver;
 
 /* Device types - categorized by bus/connection type */
 enum device_type {
-    DEVICE_TYPE_UNKNOWN,
     DEVICE_TYPE_PLATFORM,     /* Platform devices (memory-mapped, fixed) */
-    DEVICE_TYPE_ISA,          /* ISA bus devices */
-    DEVICE_TYPE_PCI,          /* PCI bus devices */
     DEVICE_TYPE_SERIAL,       /* Serial port devices */
-    DEVICE_TYPE_CONSOLE,      /* Console devices */
 };
 
 /* Device states */
@@ -60,7 +56,6 @@ struct driver {
     /* Driver callbacks */
     int (*probe)(struct device *dev);     /* Check if driver can handle device */
     int (*init)(struct device *dev);      /* Initialize the device */
-    void (*remove)(struct device *dev);   /* Remove driver from device */
 
     /* Linked list for driver registry */
     struct driver *next;
@@ -71,28 +66,13 @@ struct driver {
 /* Register a driver to the system */
 int driver_register(struct driver *drv);
 
-/* Unregister a driver from the system */
-void driver_unregister(struct driver *drv);
-
 /* Register a device to the system */
 int device_register(struct device *dev);
-
-/* Unregister a device from the system */
-void device_unregister(struct device *dev);
 
 /* Probe and match devices with registered drivers */
 int device_probe_all(void);
 
 /* Initialize all devices in priority order */
 int device_init_all(void);
-
-/* Get device by name */
-struct device *device_get(const char *name);
-
-/* Set driver private data for a device */
-void device_set_drvdata(struct device *dev, void *data);
-
-/* Get driver private data for a device */
-void *device_get_drvdata(struct device *dev);
 
 #endif /* JAKERNEL_KERNEL_DEVICE_H */

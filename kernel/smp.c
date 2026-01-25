@@ -15,14 +15,8 @@ static uint8_t ap_stacks[SMP_MAX_CPUS][CPU_STACK_SIZE] __attribute__((aligned(16
 /* Per-CPU information */
 static smp_cpu_info_t cpu_info[SMP_MAX_CPUS];
 
-/* Number of detected CPUs */
-static int cpu_count = 0;
-
 /* Number of CPUs that have completed initialization */
 static volatile int ready_cpus = 0;
-
-/* SMP initialization flag - set by BSP after basic init is complete */
-static volatile int smp_initialized = 0;
 
 /* CPU ID assignment - atomically incremented by each CPU */
 static volatile int next_cpu_id = 0;
@@ -36,16 +30,6 @@ static volatile int current_cpu_index = 0;
 
 /* External symbols */
 extern void ap_start(void);
-extern uint64_t boot_pml4;
-
-/**
- * smp_get_cpu_count - Get number of detected CPUs
- *
- * Returns: Number of CPUs
- */
-int smp_get_cpu_count(void) {
-    return SMP_MAX_CPUS;  /* Configurable in smp.h */
-}
 
 /**
  * smp_get_apic_id - Get current CPU's APIC ID
@@ -83,19 +67,6 @@ uint8_t smp_get_apic_id_by_index(int cpu_index) {
 }
 
 /**
- * smp_get_cpu_info - Get CPU info by index
- * @cpu_index: CPU index
- *
- * Returns: Pointer to CPU info or NULL
- */
-smp_cpu_info_t *smp_get_cpu_info(int cpu_index) {
-    if (cpu_index < 0 || cpu_index >= SMP_MAX_CPUS) {
-        return NULL;
-    }
-    return &cpu_info[cpu_index];
-}
-
-/**
  * smp_mark_cpu_ready - Mark CPU as ready
  * @cpu_index: CPU index
  */
@@ -107,15 +78,6 @@ void smp_mark_cpu_ready(int cpu_index) {
 }
 
 /**
- * smp_wait_for_all_cpus - Wait for all CPUs to be ready
- */
-void smp_wait_for_all_cpus(void) {
-    while (ready_cpus < SMP_MAX_CPUS) {
-        asm volatile ("pause");
-    }
-}
-
-/**
  * smp_init - Initialize SMP subsystem
  */
 void smp_init(void) {
@@ -123,7 +85,6 @@ void smp_init(void) {
     current_cpu_index = 0;
     next_cpu_id = 1;
 
-    cpu_count = SMP_MAX_CPUS;
     ready_cpus = 0;
 
     /* Initialize CPU info with real APIC IDs from ACPI */
@@ -225,8 +186,21 @@ void smp_start_all_aps(void) {
         }
     }
 
-    /* All APs started - BSP will halt after returning to main.c
-     * Don't print anymore to avoid interfering with any remaining AP output */
+    /* All APs started - report status */
+    int ap_ready_count = 0;
+    for (int i = 1; i < SMP_MAX_CPUS; i++) {
+        if (cpu_info[i].state == CPU_READY) {
+            ap_ready_count++;
+        }
+    }
+
+    serial_puts("SMP: All APs startup complete. ");
+    serial_putc('0' + ap_ready_count);
+    serial_puts("/");
+    serial_putc('0' + (SMP_MAX_CPUS - 1));
+    serial_puts(" APs ready\n");
+
+    /* BSP will halt after returning to main.c */
 }
 
 /**
@@ -243,31 +217,18 @@ void ap_start(void) {
     extern void serial_puts(const char *str);
     extern void serial_putc(char c);
 
-    /* Debug marker "JIMI" - completes "HAJIMI" sequence for debugging
-     * The trampoline outputs "HA" before jumping here, allowing us to
-     * verify the trampoline→C transition completed successfully */
-    serial_puts("JIMI");
-
-    /* Confirm AP reached C code - indicates trampoline worked correctly */
-    serial_puts("[AP] ap_start() reached!\n");
-
-    /* Wait for BSP initialization to complete
-     * The BSP sets bsp_init_complete before starting any APs,
-     * so this should normally pass immediately */
-    while (!bsp_init_complete) {
-        asm volatile ("pause");  /* Wait efficiently */
-    }
-
-    serial_puts("[AP] BSP init complete, getting CPU ID...\n");
+    /* Output 'C' to indicate we reached C code */
+    asm volatile (
+        "mov $0x3F8, %%dx\n"
+        "mov $'C', %%al\n"
+        "out %%al, %%dx\n"
+        : : : "dx", "al"
+    );
 
     /* Atomically allocate CPU index using fetch-and-add
      * Each AP gets a unique index: 1, 2, 3, ... (BSP is always 0)
      * Atomic operation prevents race conditions when multiple APs boot */
     int my_index = __sync_fetch_and_add(&next_cpu_id, 1);
-
-    serial_puts("[AP] Got CPU index: ");
-    serial_putc('0' + my_index);
-    serial_puts("\n");
 
     if (my_index <= 0 || my_index >= SMP_MAX_CPUS) {
         serial_puts("[AP] ERROR: Invalid CPU index!\n");
@@ -283,12 +244,13 @@ void ap_start(void) {
 
     cpu_info[my_index].state = CPU_ONLINE;
 
-    serial_puts("[AP] Stack set up, marking CPU as ready...\n");
-
     /* Mark CPU as ready and halt */
     smp_mark_cpu_ready(my_index);
 
-    serial_puts("[AP] CPU marked as ready, halting...\n");
+    /* Final status message */
+    serial_puts("[AP] CPU ");
+    serial_putc('0' + my_index);
+    serial_puts(" initialized successfully\n");
 
     /* Halt */
     while (1) { asm volatile ("hlt"); }

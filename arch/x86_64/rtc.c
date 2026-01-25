@@ -57,9 +57,6 @@ void rtc_init(uint8_t rate) {
     serial_puts("RTC initialized for periodic interrupts\n");
 }
 
-/* RTC interrupt count (for verification) */
-static volatile int rtc_interrupt_count = 0;
-
 /**
  * rtc_isr_handler - RTC interrupt handler
  *
@@ -73,6 +70,4 @@ void rtc_isr_handler(void) {
     /* Call the generic timer handler */
     extern void timer_handler(void);
     timer_handler();
-
-    rtc_interrupt_count++;
 }

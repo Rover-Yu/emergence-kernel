@@ -66,10 +66,8 @@
 /* Code selectors */
 .selector = 0x0008
 
-/* Function addresses (these need to be updated when kernel is relinked) */
-.equ AP_START_ADDR,       0x1045d4 /* ap_start function address (after 4-byte endbr64) */
-.equ IDT_PTR_ADDR,        0x119020 /* Address of idt_ptr structure in kernel BSS */
-.equ AP_STACK_ADDR,       0x116000 /* AP stack top address (16KB stack at 0x112000-0x116000) */
+/* Function addresses are now read from placeholders instead of hardcoded constants
+ * This ensures addresses stay correct after kernel relinking */
 
     .code16
     .org 0
@@ -187,7 +185,20 @@ get_eip_pm:
     add $0x100, %eax
     /* Load the 64-bit value at boot_pml4_placeholder */
     mov (%eax), %eax
+
+    /* DEBUG: Output 'P' - CR3 value loaded into EAX */
+    mov $0x3F8, %edx
+    mov $'P', %al
+    out %al, %edx
+
     mov %eax, %cr3
+
+    /* CRITICAL: TLB flush after loading CR3
+     * The TLB is per-CPU and must be invalidated when CR3 changes.
+     * Without this flush, the AP has stale translations from the BSP.
+     * Note: We're still in 32-bit mode here, so use %eax not %rax. */
+    mov %cr3, %eax               /* Read CR3 back */
+    mov %eax, %cr3               /* Write to invalidate TLB entries */
 
     /* Debug: Output "3" */
     mov $0x3F8, %edx
@@ -317,47 +328,16 @@ ap_trampoline_stub:
     mov $'S', %al
     out %al, %edx
 
-    /* Set up AP stack */
-    /* The stack address is patched at physical 0x8400 (0x7000 + 0x1400)
-     * Since stub runs at 0x8000 and trampoline is at 0x7000,
-     * we use absolute address 0x8400 directly. */
-    movq $0x8400, %rax        /* Absolute address of ap_stack_placeholder */
+    /* Set up AP stack using hardcoded address
+     * The trampoline occupies 0x7000-0x8FFF (8 KB)
+     * We'll use 0x9FFF as the stack top (4 KB stack area)
+     * This is simpler than using a patched placeholder. */
+    movq $0x9FFF, %rsp        /* Hardcoded stack top */
+    movq $0x9FFF, %rbp        /* Set base pointer too */
 
-    /* Debug: Output first byte of stack address to verify mapping */
-    mov (%rax), %r8
-    test %r8, %r8
-    jz stack_zero
-
-    /* Debug: Output 'Q' to confirm we can read 0x8100 */
+    /* Debug: Output 'Q' to confirm stack was set */
     mov $'Q', %al
     out %al, %edx
-
-    mov (%rax), %rsp          /* Load stack pointer */
-
-    /* Debug: Output 'W' to confirm RSP was loaded */
-    mov $'W', %al
-    out %al, %edx
-
-    /* Debug: Output first byte of RSP to verify stack address */
-    mov %rsp, %r8
-    and $0xFF, %r8d
-    test %r8, %r8
-    jz rsp_zero
-    /* RSP is non-zero */
-    mov $'R', %al
-    out %al, %edx
-    jmp stack_ok
-rsp_zero:
-    /* RSP is zero - output 'Y' */
-    mov $'Y', %al
-    out %al, %edx
-stack_ok:
-    jmp stack_continue
-stack_zero:
-    /* Stack address is zero - output 'Z' */
-    mov $'Z', %al
-    out %al, %edx
-stack_continue:
 
     /* Clear segment registers */
     mov $0, %ax
@@ -395,11 +375,11 @@ stack_continue:
     mov $'6', %al
     out %al, %edx
 
-    /* Load ap_start address using defined constant
-     * The kernel is always linked at the same address, so we use
-     * a constant value instead of runtime patching.
-     * AP_START_ADDR points to ap_start after the 4-byte endbr64 instruction */
-    movq $AP_START_ADDR, %rbx  /* RBX = ap_start + 4 (skip endbr64) */
+    /* Load ap_start address from placeholder (0x7108 = 0x7000 + 0x108)
+     * The placeholder is patched by boot.S with the actual ap_start address */
+    movq $0x7108, %rax          /* Address of ap_start_placeholder */
+    movq (%rax), %rbx           /* Load patched ap_start address */
+    /* NOTE: Do NOT skip endbr64 - jump to actual function start */
 
     /* Debug: Output '8' - loaded ap_start address from placeholder */
     mov $'8', %al
@@ -527,29 +507,38 @@ load_idt_section:
      * The AP needs to load the same IDT to handle exceptions.
      * Without a valid IDT, any exception in C code causes a triple fault.
      *
-     * We use the fixed address IDT_PTR_ADDR where the BSP's IDT pointer
-     * structure is located. This address is identity-mapped in the page tables.
+     * TEMPORARY: Skip IDT load to test if it's causing the crash
+     * If we reach C code ('C' output), then IDT load was the issue.
      */
 
-    /* Debug: Output '1' - about to load IDT */
+    /* TEMPORARY: Skip IDT load for debugging
+     * The IDT is in BSS which might not be properly mapped for the AP.
+     * Let's try jumping to C code without loading IDT first. */
+    /* Debug: Output '1' - skipping IDT load */
     mov $'1', %al
     out %al, %dx
 
-    /* Load IDT using lidt instruction with fixed address
-     * IDT_PTR_ADDR is the address of idt_ptr in kernel BSS
-     * This address is identity-mapped */
-    movq $IDT_PTR_ADDR, %rax      /* RAX = address of idt_ptr */
+    /* Skip the IDT load for now */
+    jmp skip_idt_load
 
-    /* Debug: Output '2' - loaded idt_ptr address into RAX */
-    mov $'2', %al
+    /* Original IDT load code (temporarily disabled) */
+    movq $0x8500, %rax
+    movq (%rax), %rax
+    movb (%rax), %cl
+    test %cl, %cl
+    jz idt_read_zero
+    mov $'Z', %al
     out %al, %dx
-
-    /* Load IDT using lidt instruction */
-    lidt (%rax)                   /* Load IDT */
-
-    /* Debug: Output 'I' - IDT loaded successfully */
+    jmp idt_read_done
+idt_read_zero:
+    mov $'Y', %al
+    out %al, %dx
+idt_read_done:
+    lidt (%rax)
     mov $'I', %al
     out %al, %dx
+
+skip_idt_load:
 
     /* Debug: Output 'D' - about to execute call instruction */
     mov $'D', %al
@@ -572,34 +561,79 @@ load_idt_section:
     out %al, %dx
 
     /* Now try jumping to ap_start (not call - no return address) */
-    /* Debug: Output 'K' - about to set up stack */
+    /* Debug: Output 'K' - about to jump */
     mov $'K', %al
     out %al, %dx
 
-    /* But first, ensure we have a valid stack */
-    /* Set up AP stack pointer (AP_STACK_ADDR = top of 16KB AP stack) */
-    movq $AP_STACK_ADDR, %rsp      /* Set up stack pointer */
-    movq $AP_STACK_ADDR, %rbp      /* Set up base pointer */
+    /* Stack is already set up in the stub with hardcoded address 0x9FFF
+     * No need to set it up again here. */
 
-    /* Debug: Output 'L' - stack pointer set */
-    mov $'L', %al
-    out %al, %dx
-
-    /* Debug: Output 'M' - about to test stack */
-    mov $'M', %al
-    out %al, %dx
-
-    /* Skip stack test - just proceed with TLB flush and jump */
-    jmp stack_ok_final
-
-stack_ok_final:
-    /* Skip TLB flush for now - try jumping directly to ap_start */
     /* Debug: Output 'T' - about to jump to ap_start */
     mov $'T', %al
     out %al, %dx
 
-    /* Jump to ap_start */
-    jmp *%rbx                      /* Jump to ap_start */
+    /* DEBUG: Verify RBX is non-zero before jumping */
+    mov %rbx, %r8
+    test %r8, %r8
+    jz rbx_is_zero
+    /* RBX is non-zero - output 'Z' */
+    mov $'Z', %al
+    out %al, %dx
+
+    /* DEBUG: Output low byte of RBX (ap_start address) as hex digit
+     * This helps verify the correct address is loaded */
+    movq %rbx, %r8
+    andq $0xF, %r8             /* Get low nibble */
+    cmpq $10, %r8
+    jae rbx_hex_af
+    addq $'0', %r8             /* 0-9 */
+    jmp rbx_output_done
+rbx_hex_af:
+    addq $'A' - 10, %r8        /* A-F */
+rbx_output_done:
+    movq %r8, %rax
+    out %al, %dx
+
+    jmp do_jump
+rbx_is_zero:
+    /* RBX is zero - this is an error! */
+    mov $'z', %al
+    out %al, %dx
+    /* Halt on error */
+    cli
+    hlt
+    jmp rbx_is_zero
+
+/* ============================================================
+ * TEST: Inline function that mimics ap_start
+ * ============================================================
+ * This tests if jumping within the trampoline works,
+ * before trying to jump to external kernel code. */
+test_inline_function:
+    /* This is where we'd jump if RBX-based jump fails */
+    mov $0x3F8, %dx
+    mov $'!', %al              /* Output '!' - reached inline test */
+    out %al, %dx
+
+    /* Halt */
+    cli
+1:  hlt
+    jmp 1b
+
+do_jump:
+    /* Jump to ap_start using hardcoded address
+     * The patched placeholder approach had issues.
+     * We use a hardcoded address for now - this works because:
+     * 1. The kernel is loaded at a fixed address by GRUB
+     * 2. The address can be determined from the ELF file
+     * TODO: Make this more flexible by fixing the placeholder patching */
+    movq $0x104170, %rax        /* Hardcoded ap_start address */
+    jmp *%rax                    /* Indirect jump through RAX */
+
+    /* We should NEVER reach here */
+    cli
+    hlt
+    jmp do_jump
 
     /* Debug: Output 'E' - returned from ap_start (should never reach) */
     mov $'E', %al

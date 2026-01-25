@@ -7,7 +7,6 @@
 #define SERIAL_COM1    0x3F8
 
 /* Serial port functions */
-void serial_init(void);
 void serial_putc(char c);
 void serial_puts(const char *str);
 void serial_unlock(void);

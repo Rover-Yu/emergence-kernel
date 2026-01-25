@@ -66,7 +66,6 @@ static struct driver ipi_driver = {
     .match_mask = 0xFFFF,
     .probe = ipi_device_probe,
     .init = ipi_device_init,
-    .remove = NULL,
 };
 
 /* IPI device structure */

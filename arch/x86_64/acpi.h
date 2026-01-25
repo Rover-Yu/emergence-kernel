@@ -10,16 +10,9 @@
 #define ACPI_SDT_SIGNATURE     0x54445353    /* "DMTF" */
 #define ACPI_MADT_SIGNATURE     0x43414944    /* "APIC" */
 
-/* ACPI table signatures */
-#define ACPI_SDT_SIG_SUBTABLE  0x2C          /* Subtable type */
-#define ACPI_SDT_SIG_MADT      0x5F424154    /* MADT signature */
-
 /* MADT entry types */
 typedef enum {
     MADT_TYPE_LOCAL_APIC = 0,         /* Processor local APIC */
-    MADT_TYPE_IO_APIC = 1,             /* I/O APIC */
-    MADT_TYPE_INTERRUPT_SOURCE = 2,   /* Interrupt source override */
-    MADT_TYPE_NMI = 3,                /* NMI source */
     /* ... other types ... */
 } madt_entry_type_t;
 
@@ -32,13 +25,6 @@ typedef struct {
     uint32_t rsdt_address;     /* Physical address of RSDT */
     uint32_t length;           /* Length of RSDT */
 } __attribute__((packed)) rsdp_t;
-
-/* RSDT entry - Generic descriptor in RSDT */
-typedef struct {
-    uint8_t type;             /* Entry type (see ACPI types) */
-    uint8_t length;           /* Length of this entry */
-    uint32_t address;          /* Physical address of table or entry */
-} __attribute__((packed)) rsdt_entry_t;
 
 /* MADT header - Multiple APIC Description Table header */
 typedef struct {

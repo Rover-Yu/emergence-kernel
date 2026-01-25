@@ -28,56 +28,37 @@ static void kernel_halt(void) {
 void kernel_main(void) {
     uint8_t color = VGA_COLOR(VGA_COLOR_BLACK, VGA_COLOR_WHITE);
     int cpu_id;
-    int ret;
 
     /* Initialize VGA directly (only BSP should do this) */
     vga_init();
 
     /* Initialize device drivers (only BSP) */
     /* Step 1: Register platform-specific drivers and devices */
-    ret = serial_driver_init();
-    (void)ret;
+    serial_driver_init();
 
     /* Step 2: Probe devices and match with drivers */
-    ret = device_probe_all();
-    (void)ret;
+    device_probe_all();
 
     /* Step 3: Initialize all devices in priority order */
-    ret = device_init_all();
-    (void)ret;
+    device_init_all();
 
     /* Print greeting message to VGA */
     vga_puts("Hello, JAKernel!", 0, 0, color);
 
     /* Print boot message */
     serial_puts("Hello, JAKernel!\n");
-    serial_puts("Device driver framework initialized.\n");
-
-    /* Note: ACPI parsing temporarily disabled for testing
-     * We'll use default APIC IDs (0, 1, 2, 3) for now */
-    serial_puts("Using default APIC ID configuration (4 CPUs)\n");
-
-    /* Note: Local APIC initialization skipped for now
-     * QEMU may have APIC enabled by default */
 
     /* BSP specific initialization - must complete BEFORE starting APs */
     /* Get CPU ID first to determine if we're BSP or AP */
     cpu_id = smp_get_cpu_index();
 
     if (cpu_id == 0) {
-        serial_puts("BSP: Initializing IDT...\n");
+        serial_puts("BSP: Initializing...\n");
         idt_init();
-
-        serial_puts("BSP: Initializing Local APIC...\n");
         lapic_init();
+        smp_init();
+        serial_puts("BSP: Initialization complete\n");
     }
-
-    serial_puts("Initializing SMP...\n");
-
-    /* Initialize SMP subsystem */
-    smp_init();
-
-    serial_puts("SMP initialized, getting CPU ID...\n");
 
     /* Print CPU boot message in English */
     serial_puts("CPU ");
@@ -88,46 +69,21 @@ void kernel_main(void) {
 
     /* BSP specific initialization */
     if (cpu_id == 0) {
-        serial_puts("SMP: BSP initialization complete.\n");
-
-        /* Initialize and start timer on BSP using RTC (Real Time Clock)
-         * RTC can generate periodic interrupts without needing APIC memory mapping
-         * We'll use 2Hz (500ms period) for the demo */
-        serial_puts("Initializing RTC timer...\n");
-        /* rtc_init(RTC_RATE_2HZ);   DISABLED - causes system resets */
-        /* timer_start();              DISABLED - causes system resets */
-
         /* Initialize IPI driver */
-        serial_puts("Initializing IPI driver...\n");
-        ret = ipi_driver_init();
-        (void)ret;
+        ipi_driver_init();
 
-        serial_puts("Enabling interrupts...\n");
+        /* Enable interrupts */
         enable_interrupts();
-        /* Timer disabled - serial_puts("Timer started. Quotes will print every 0.5 seconds.\n"); */
 
-        /* Disable interrupts for AP startup - re-enable after APs are ready */
-        serial_puts("Disabling interrupts for AP startup...\n");
+        /* Disable interrupts for AP startup */
         asm volatile ("cli");
-
-        /* Run IPI self-test (after interrupts are enabled) */
-        /* NOTE: IPI test function not yet implemented - to be added */
-        serial_puts("IPI test not yet implemented (IPI handler EOI fix verified)\n");
 
         /* Mark BSP as ready */
         smp_mark_cpu_ready(0);
 
-        /* Trampoline was already copied to 0x7000 during BSP boot (in boot.S) */
-        serial_puts("SMP: AP trampoline ready at 0x7000 (copied during boot)\n");
-
         /* Start all APs */
-        serial_puts("SMP: Starting all Application Processors...\n");
-
-        /* CRITICAL: Release serial lock before starting APs to prevent deadlock.
-         * The AP will try to call serial_puts() which will deadlock if the BSP
-         * still holds the serial lock. */
+        serial_puts("SMP: Starting APs...\n");
         serial_unlock();
-
         smp_start_all_aps();
 
         /* BSP halts immediately after starting AP to avoid interference

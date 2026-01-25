@@ -97,7 +97,6 @@ static struct driver serial_driver = {
     .match_mask = SERIAL_DRIVER_MASK,
     .probe = serial_probe,
     .init = serial_init_device,
-    .remove = NULL,
 };
 
 /* ============================================================================
