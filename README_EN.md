@@ -2,7 +2,7 @@
 
 > **JAKernel** is an experimental x86_64 operating system kernel written entirely by LLM (Claude) through prompts - **zero hand-written code**.
 
-This is an exploratory educational project aimed at demonstrating the potential of Large Language Models in OS kernel development. All code is generated through natural language conversations, including low-level assembly, memory management, and multiprocessor support.
+This is a research kernel project aimed at exploring the boundaries of LLM capabilities in OS kernel development. All code is generated through natural language conversations, including low-level assembly, memory management, and multiprocessor support.
 
 ---
 
