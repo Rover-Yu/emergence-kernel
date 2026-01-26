@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "kernel/smp.h"
+#include "include/spinlock.h"
 #include "arch/x86_64/apic.h"
 
 /* External ACPI functions for getting APIC information */
@@ -14,6 +15,9 @@ static uint8_t ap_stacks[SMP_MAX_CPUS][CPU_STACK_SIZE] __attribute__((aligned(16
 
 /* Per-CPU information */
 static smp_cpu_info_t cpu_info[SMP_MAX_CPUS];
+
+/* Lock for ready_cpus counter - prevents race conditions during AP startup */
+static spinlock_t ready_cpus_lock = SPIN_LOCK_UNLOCKED;
 
 /* Number of CPUs that have completed initialization */
 static volatile int ready_cpus = 0;
@@ -74,9 +78,15 @@ uint8_t smp_get_apic_id_by_index(int cpu_index) {
  * @cpu_index: CPU index
  */
 void smp_mark_cpu_ready(int cpu_index) {
+    irq_flags_t flags;
+
     if (cpu_index >= 0 && cpu_index < SMP_MAX_CPUS) {
         cpu_info[cpu_index].state = CPU_READY;
+
+        /* Use interrupt-safe lock to prevent deadlock in IPI handler */
+        spin_lock_irqsave(&ready_cpus_lock, &flags);
         ready_cpus++;
+        spin_unlock_irqrestore(&ready_cpus_lock, &flags);
     }
 }
 

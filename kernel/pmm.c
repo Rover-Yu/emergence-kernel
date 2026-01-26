@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include "kernel/pmm.h"
 #include "kernel/multiboot2.h"
+#include "include/spinlock.h"
 #include "arch/x86_64/serial.h"
 
 /* External symbols for kernel region reservation */
@@ -206,6 +207,9 @@ static void coalesce_block(block_info_t *block) {
 void pmm_init(uint32_t mbi_addr) {
     serial_puts("PMM: Initializing...\n");
 
+    /* Initialize spin lock */
+    spin_lock_init(&pmm_state.lock);
+
     /* Initialize state */
     for (int i = 0; i <= MAX_ORDER; i++) {
         list_init(&pmm_state.free_lists[i].list);
@@ -384,13 +388,18 @@ void pmm_reserve_region(uint64_t base, uint64_t size) {
  */
 void *pmm_alloc(uint8_t order) {
     block_info_t *block;
+    irq_flags_t flags;
 
     if (order > MAX_ORDER) {
         return 0;
     }
 
+    /* Protect PMM operation with interrupt-safe lock */
+    spin_lock_irqsave(&pmm_state.lock, &flags);
+
     block = find_free_block(order);
     if (!block) {
+        spin_unlock_irqrestore(&pmm_state.lock, &flags);
         serial_puts("PMM: Out of memory for order ");
         put_hex(order);
         serial_puts("\n");
@@ -403,6 +412,8 @@ void *pmm_alloc(uint8_t order) {
     put_hex(block->base_addr);
     serial_puts("\n");
 
+    spin_unlock_irqrestore(&pmm_state.lock, &flags);
+
     return (void *)block->base_addr;
 }
 
@@ -414,14 +425,19 @@ void *pmm_alloc(uint8_t order) {
 void pmm_free(void *phys_addr, uint8_t order) {
     block_info_t *block;
     uint64_t addr = (uint64_t)phys_addr;
+    irq_flags_t flags;
 
     if (order > MAX_ORDER) {
         return;
     }
 
+    /* Protect PMM operation with interrupt-safe lock */
+    spin_lock_irqsave(&pmm_state.lock, &flags);
+
     /* Find block in allocated list */
     block = find_allocated_block(addr);
     if (!block) {
+        spin_unlock_irqrestore(&pmm_state.lock, &flags);
         serial_puts("PMM: WARNING - Freeing unallocated block at 0x");
         put_hex(addr);
         serial_puts("\n");
@@ -439,6 +455,8 @@ void pmm_free(void *phys_addr, uint8_t order) {
 
     /* Coalesce with buddies and add to free list */
     coalesce_block(block);
+
+    spin_unlock_irqrestore(&pmm_state.lock, &flags);
 }
 
 /**

@@ -5,6 +5,7 @@
 
 #include <stdint.h>
 #include "kernel/list.h"
+#include "include/spinlock.h"
 
 /* Page size and shift */
 #define PAGE_SIZE       4096
@@ -43,6 +44,7 @@ typedef struct free_list {
 
 /* PMM state structure */
 typedef struct pmm_state {
+    spinlock_t lock;                        /* Protects PMM operations */
     free_list_t free_lists[MAX_ORDER + 1];   /* Free lists for each order */
     struct list_head allocated_blocks;       /* List of allocated blocks */
     struct list_head regions;                /* List of managed regions */

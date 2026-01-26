@@ -2,9 +2,14 @@
 
 #include <stddef.h>
 #include "kernel/device.h"
+#include "include/spinlock.h"
 
 /* Maximum number of devices in the system */
 #define MAX_DEVICES    32
+
+/* Locks for driver and device registries */
+static spinlock_t driver_list_lock = SPIN_LOCK_UNLOCKED;
+static spinlock_t device_list_lock = SPIN_LOCK_UNLOCKED;
 
 /* Global driver registry - singly linked list */
 static struct driver *driver_list = NULL;
@@ -26,13 +31,20 @@ static int device_count = 0;
  * Returns: 0 on success, negative value on error
  */
 int driver_register(struct driver *drv) {
+    irq_flags_t flags;
+
     if (!drv || !drv->name) {
         return -1;  /* Invalid driver */
     }
 
+    /* Protect driver registry */
+    spin_lock_irqsave(&driver_list_lock, &flags);
+
     /* Add to the front of the driver list */
     drv->next = driver_list;
     driver_list = drv;
+
+    spin_unlock_irqrestore(&driver_list_lock, &flags);
 
     return 0;
 }
@@ -49,11 +61,17 @@ int driver_register(struct driver *drv) {
  * Returns: 0 on success, negative value on error
  */
 int device_register(struct device *dev) {
+    irq_flags_t flags;
+
     if (!dev || !dev->name) {
         return -1;  /* Invalid device */
     }
 
+    /* Protect device registry */
+    spin_lock_irqsave(&device_list_lock, &flags);
+
     if (device_count >= MAX_DEVICES) {
+        spin_unlock_irqrestore(&device_list_lock, &flags);
         return -2;  /* Too many devices */
     }
 
@@ -66,6 +84,8 @@ int device_register(struct device *dev) {
     dev->next = device_list;
     device_list = dev;
     device_count++;
+
+    spin_unlock_irqrestore(&device_list_lock, &flags);
 
     return 0;
 }
@@ -118,6 +138,12 @@ static int match_device_driver(struct driver *drv, struct device *dev) {
 int device_probe_all(void) {
     struct device *dev;
     int matched_count = 0;
+    irq_flags_t driver_flags, device_flags;
+
+    /* Acquire locks in consistent order to prevent deadlock:
+     * driver_list_lock first, then device_list_lock */
+    spin_lock_irqsave(&driver_list_lock, &driver_flags);
+    spin_lock_irqsave(&device_list_lock, &device_flags);
 
     /* Match devices with drivers */
     dev = device_list;
@@ -136,6 +162,10 @@ int device_probe_all(void) {
         }
         dev = dev->next;
     }
+
+    /* Release locks in reverse order */
+    spin_unlock_irqrestore(&device_list_lock, &device_flags);
+    spin_unlock_irqrestore(&driver_list_lock, &driver_flags);
 
     return matched_count;
 }
