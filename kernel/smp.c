@@ -55,6 +55,10 @@ uint8_t smp_get_apic_id(void) {
  * smp_get_cpu_index - Get current CPU's index
  *
  * Returns: CPU index (0-3)
+ *
+ * NOTE: Returns the global current_cpu_index variable.
+ * This works correctly because the BSP always returns 0, and APs
+ * call this before setting current_cpu_index to their own value.
  */
 int smp_get_cpu_index(void) {
     return current_cpu_index;
@@ -71,6 +75,15 @@ uint8_t smp_get_apic_id_by_index(int cpu_index) {
         return cpu_info[cpu_index].apic_id;
     }
     return 0;
+}
+
+/**
+ * smp_get_cpu_count - Get the actual number of CPUs in the system
+ *
+ * Returns: Number of CPUs detected (1 to SMP_MAX_CPUS)
+ */
+int smp_get_cpu_count(void) {
+    return actual_cpu_count > 0 ? actual_cpu_count : 1;
 }
 
 /**
@@ -100,10 +113,10 @@ void smp_init(void) {
 
     ready_cpus = 0;
 
-    /* Get actual CPU count from ACPI, fallback to SMP_MAX_CPUS */
+    /* Get actual CPU count from ACPI, fallback to 1 (BSP only) */
     actual_cpu_count = acpi_get_apic_count();
     if (actual_cpu_count <= 0 || actual_cpu_count > SMP_MAX_CPUS) {
-        actual_cpu_count = SMP_MAX_CPUS;
+        actual_cpu_count = 1;  /* BSP only when ACPI fails */
     }
 
     /* Initialize CPU info with real APIC IDs from ACPI */
@@ -240,8 +253,21 @@ void ap_start(void) {
 
     cpu_info[my_index].state = CPU_ONLINE;
 
-    /* Mark CPU as ready and halt */
+    /* Mark CPU as ready FIRST - BSP is waiting for this */
     smp_mark_cpu_ready(my_index);
+
+    /* Small delay to ensure BSP sees we're ready */
+    for (volatile int i = 0; i < 1000; i++) {
+        asm volatile("pause");
+    }
+
+    /* Check if spin lock tests are enabled */
+    extern volatile int spinlock_test_start;
+    if (spinlock_test_start) {
+        /* Enter test mode - participate in SMP tests */
+        extern void spinlock_test_ap_entry(void);
+        spinlock_test_ap_entry();
+    }
 
     /* Halt */
     while (1) { asm volatile ("hlt"); }

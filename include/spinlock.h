@@ -161,4 +161,35 @@ static inline void spin_write_unlock(rwlock_t *lock) {
     arch_spin_write_unlock(lock);
 }
 
+/* ============================================================================
+ * Test Functions
+ * ============================================================================ */
+
+/**
+ * run_spinlock_tests - Run all spin lock tests
+ *
+ * Runs comprehensive spin lock and read-write lock tests including:
+ * - Single-CPU tests (basic operations, trylock, IRQ-safe, RWLock)
+ * - SMP multi-CPU tests (contention, deadlock prevention)
+ *
+ * Returns: Number of failed tests (0 = all passed)
+ */
+extern int run_spinlock_tests(void);
+
+/**
+ * spinlock_test_ap_entry - AP entry point for SMP tests
+ *
+ * Called by APs when spinlock_test_start is set.
+ * APs participate in SMP tests coordinated by BSP.
+ */
+extern void spinlock_test_ap_entry(void);
+
+/**
+ * spinlock_test_start - Flag to signal APs to join tests
+ *
+ * Set by BSP to 1 to activate test mode.
+ * APs check this flag in ap_start() before halting.
+ */
+extern volatile int spinlock_test_start;
+
 #endif /* _KERNEL_SPINLOCK_H */

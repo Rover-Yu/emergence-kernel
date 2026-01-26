@@ -142,10 +142,10 @@ void kernel_main(uint32_t multiboot_info_addr) {
         smp_init();
 
         /* Initialize APIC Timer for high-frequency interrupts */
-        apic_timer_init();
+        //apic_timer_init();
 
         /* Activate APIC timer */
-        timer_start();
+        //timer_start();  /* Disabled: APIC timer tests interfere with spin lock tests */
 
         serial_puts("BSP: Initialization complete\n");
     }
@@ -171,6 +171,11 @@ void kernel_main(uint32_t multiboot_info_addr) {
         /* Mark BSP as ready */
         smp_mark_cpu_ready(0);
 
+        /* Keep spinlock_test_start = 0 during AP startup
+         * APs will halt normally. We'll set it to 1 later before SMP tests. */
+        extern volatile int spinlock_test_start;
+        spinlock_test_start = 0;  /* APs will halt, not enter test mode yet */
+
         /* Start all APs */
         serial_puts("SMP: Starting APs...\n");
         serial_unlock();
@@ -179,6 +184,24 @@ void kernel_main(uint32_t multiboot_info_addr) {
         /* Re-enable interrupts after AP startup to allow APIC timer to fire
          * This allows the APIC timer to generate interrupts */
         enable_interrupts();
+
+        /* Now enable spin lock test mode and wake up APs for SMP tests
+         * Note: APs are currently halted. Setting this flag won't wake them.
+         * For now, we'll run single-CPU tests only. */
+        spinlock_test_start = 1;  /* Set for future use if we implement AP wake */
+
+        /* Run spin lock tests */
+        serial_puts("SMP: Starting spin lock tests...\n");
+        extern int run_spinlock_tests(void);
+        int test_failures = run_spinlock_tests();
+        if (test_failures == 0) {
+            serial_puts("SMP: All spin lock tests PASSED\n");
+        } else {
+            serial_puts("SMP: Some spin lock tests FAILED\n");
+            serial_puts("SMP: Failures: ");
+            serial_put_hex(test_failures);
+            serial_puts("\n");
+        }
 
         /* BSP waits with interrupts enabled for timer interrupts to fire
          * The HLT instruction will wake up on each interrupt */

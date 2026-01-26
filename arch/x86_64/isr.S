@@ -101,16 +101,6 @@ ISR_HANDLER simd_isr
 .global timer_isr
 .type timer_isr, @function
 timer_isr:
-    /* EMERGENCY DEBUG: Output 'A' for APIC Timer before doing anything else
-     * This helps distinguish APIC timer interrupts from RTC interrupts */
-    push %rax
-    push %rdx
-    mov $0x3F8, %dx
-    mov $'A', %al
-    out %al, %dx
-    pop %rdx
-    pop %rax
-
     /* Save all general-purpose registers (x86-64 has no pusha)
      * Save in order: r15 first, rax last (reverse restore) */
     push %r15

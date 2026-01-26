@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include "arch/x86_64/timer.h"
+#include "arch/x86_64/apic.h"
 
 /* Mathematician quotes (≤8 words each) */
 static const char *math_quotes[] = {
@@ -22,6 +23,9 @@ static volatile int apic_timer_active = 0;
 extern void serial_puts(const char *str);
 extern void serial_putc(char c);
 
+/* Forward declarations */
+void timer_stop(void);  /* Declared in timer.h, need forward declaration here */
+
 /**
  * apic_timer_handler - APIC Timer interrupt handler
  *
@@ -36,9 +40,10 @@ void apic_timer_handler(void) {
         serial_puts("\n");
         apic_timer_count++;
 
-        /* Stop timer after 5 quotes */
+        /* Stop timer after 5 quotes - mask the hardware interrupt */
         if (apic_timer_count >= (int)NUM_QUOTES) {
             apic_timer_active = 0;
+            timer_stop();  /* Mask the timer interrupt in hardware */
         }
     }
 }
@@ -56,9 +61,10 @@ void timer_handler(void) {
         serial_puts("\n");
         apic_timer_count++;
 
-        /* Stop timer after 5 quotes */
+        /* Stop timer after 5 quotes - mask the hardware interrupt */
         if (apic_timer_count >= (int)NUM_QUOTES) {
             apic_timer_active = 0;
+            timer_stop();  /* Mask the timer interrupt in hardware */
         }
     }
 }
@@ -75,8 +81,16 @@ void timer_start(void) {
 
 /**
  * timer_stop - Stop the APIC timer
+ *
+ * Masks the timer interrupt to stop periodic interrupts.
  */
 void timer_stop(void) {
+    /* Mask the timer interrupt in the LVT */
+    /* Write the timer vector with the mask bit set */
+    extern uint32_t lapic_read(uint32_t offset);
+    extern void lapic_write(uint32_t offset, uint32_t value);
+
+    lapic_write(0x320, TIMER_VECTOR | 0x10000);  /* Mask timer interrupt */
     apic_timer_active = 0;
 }
 
