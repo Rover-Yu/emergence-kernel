@@ -31,7 +31,7 @@ extern void serial_putc(char c);
  */
 void apic_timer_handler(void) {
     if (apic_timer_active && apic_timer_count < (int)NUM_QUOTES) {
-        serial_puts("[APIC] ");
+        serial_puts("[ APIC tests ]");
         serial_puts(math_quotes[apic_timer_count]);
         serial_puts("\n");
         apic_timer_count++;
@@ -51,7 +51,7 @@ void apic_timer_handler(void) {
  */
 void timer_handler(void) {
     if (apic_timer_active && apic_timer_count < (int)NUM_QUOTES) {
-        serial_puts("[TIMER] ");
+        serial_puts("[ APIC tests ]");
         serial_puts(math_quotes[apic_timer_count]);
         serial_puts("\n");
         apic_timer_count++;

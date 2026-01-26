@@ -55,7 +55,6 @@ static int ipi_device_probe(struct device *dev) {
  */
 static int ipi_device_init(struct device *dev) {
     (void)dev;
-    serial_puts("IPI: Device initialized\n");
     return 0;
 }
 
@@ -102,6 +101,5 @@ int ipi_driver_init(void) {
         return ret;
     }
 
-    serial_puts("IPI: Driver and device registered\n");
     return 0;
 }

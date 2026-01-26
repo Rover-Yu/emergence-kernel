@@ -62,6 +62,25 @@ void kernel_main(uint32_t multiboot_info_addr) {
     /* Step 1: Register platform-specific drivers and devices */
     serial_driver_init();
 
+    /* Print boot banner FIRST - before any other output */
+    const char *banner_top    = "+============================================================+";
+    const char *banner_msg    = "|  JAkernel, Just another kernel but prompts only           |";
+    const char *banner_bottom = "+============================================================+";
+
+    /* Print banner to VGA (rows 0-2) */
+    vga_puts(banner_top,    0, 0, color);
+    vga_puts(banner_msg,    1, 0, color);
+    vga_puts(banner_bottom, 2, 0, color);
+
+    /* Print banner to serial console */
+    serial_puts("\n");
+    serial_puts(banner_top);
+    serial_puts("\n");
+    serial_puts(banner_msg);
+    serial_puts("\n");
+    serial_puts(banner_bottom);
+    serial_puts("\n\n");
+
     /* Step 2: Probe devices and match with drivers */
     device_probe_all();
 
@@ -72,19 +91,13 @@ void kernel_main(uint32_t multiboot_info_addr) {
     pmm_init(multiboot_info_addr);
     serial_puts("PMM: Initialized\n");
 
-    /* Print greeting message to VGA */
-    vga_puts("Hello, JAKernel!", 0, 0, color);
-
-    /* Print boot message */
-    serial_puts("Hello, JAKernel!\n");
-
     /* PMM Tests */
-    serial_puts("PMM: Running allocation tests...\n");
+    serial_puts("[ PMM tests ] Running allocation tests...\n");
 
     /* Test 1: Single page allocation */
     void *page1 = pmm_alloc(0);
     void *page2 = pmm_alloc(0);
-    serial_puts("PMM: Allocated page1 at 0x");
+    serial_puts("[ PMM tests ] Allocated page1 at 0x");
     serial_put_hex((uint64_t)page1);
     serial_puts(", page2 at 0x");
     serial_put_hex((uint64_t)page2);
@@ -92,19 +105,19 @@ void kernel_main(uint32_t multiboot_info_addr) {
 
     /* Test 2: Multi-page allocation (order 3 = 8 pages = 32KB) */
     void *block = pmm_alloc(3);
-    serial_puts("PMM: Allocated 32KB block at 0x");
+    serial_puts("[ PMM tests ] Allocated 32KB block at 0x");
     serial_put_hex((uint64_t)block);
     serial_puts("\n");
 
     /* Test 3: Free and coalesce */
     pmm_free(page1, 0);
     pmm_free(page2, 0);
-    serial_puts("PMM: Freed pages (buddy coalescing)\n");
+    serial_puts("[ PMM tests ] Freed pages (buddy coalescing)\n");
 
     /* Test 4: Statistics */
     uint64_t free = pmm_get_free_pages();
     uint64_t total = pmm_get_total_pages();
-    serial_puts("PMM: Free: ");
+    serial_puts("[ PMM tests ] Free: ");
     serial_put_hex(free);
     serial_puts(" / Total: ");
     serial_put_hex(total);
@@ -112,11 +125,11 @@ void kernel_main(uint32_t multiboot_info_addr) {
 
     /* Test 5: Allocate adjacent pages to verify they were coalesced */
     void *page3 = pmm_alloc(1);  /* Request 2 pages */
-    serial_puts("PMM: Allocated 2-page block at 0x");
+    serial_puts("[ PMM tests ] Allocated 2-page block at 0x");
     serial_put_hex((uint64_t)page3);
     serial_puts(" (should be same as page1 if coalesced)\n");
 
-    serial_puts("PMM: Tests complete\n");
+    serial_puts("[ PMM tests ] Tests complete\n");
 
     /* BSP specific initialization - must complete BEFORE starting APs */
     /* Get CPU ID first to determine if we're BSP or AP */

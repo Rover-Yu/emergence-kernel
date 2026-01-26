@@ -139,18 +139,7 @@ void smp_start_all_aps(void) {
 
     serial_puts("SMP: Starting all Application Processors...\n");
 
-    /* Debug: Print CPU info */
-    serial_puts("SMP: CPU info:\n");
-    for (int i = 0; i < actual_cpu_count; i++) {
-        serial_puts("  CPU ");
-        serial_putc('0' + i);
-        serial_puts(" -> APIC ID ");
-        serial_putc('0' + smp_get_apic_id_by_index(i));
-        serial_puts("\n");
-    }
-
     /* Disable interrupts during AP startup to avoid interference */
-    serial_puts("SMP: Disabling interrupts for AP startup...\n");
     asm volatile ("cli");
 
     /* Signal APs that BSP initialization is complete BEFORE starting APs
@@ -165,11 +154,6 @@ void smp_start_all_aps(void) {
      * simultaneously, which causes serial output corruption and system instability. */
     for (int i = 1; i < actual_cpu_count; i++) {
         uint8_t apic_id = smp_get_apic_id_by_index(i);
-
-        /* Log which AP we're starting (helps with debugging) */
-        serial_puts("SMP: Starting AP ");
-        serial_putc('0' + i);
-        serial_puts("...\n");
 
         /* Mark AP as booting - tracks AP initialization state */
         cpu_info[i].state = CPU_BOOTING;
@@ -237,14 +221,6 @@ void ap_start(void) {
     extern void serial_puts(const char *str);
     extern void serial_putc(char c);
 
-    /* Output 'C' to indicate we reached C code */
-    asm volatile (
-        "mov $0x3F8, %%dx\n"
-        "mov $'C', %%al\n"
-        "out %%al, %%dx\n"
-        : : : "dx", "al"
-    );
-
     /* Atomically allocate CPU index using fetch-and-add
      * Each AP gets a unique index: 1, 2, 3, ... (BSP is always 0)
      * Atomic operation prevents race conditions when multiple APs boot */
@@ -266,11 +242,6 @@ void ap_start(void) {
 
     /* Mark CPU as ready and halt */
     smp_mark_cpu_ready(my_index);
-
-    /* Final status message */
-    serial_puts("[AP] CPU ");
-    serial_putc('0' + my_index);
-    serial_puts(" initialized successfully\n");
 
     /* Halt */
     while (1) { asm volatile ("hlt"); }

@@ -106,121 +106,29 @@ uint64_t lapic_get_base(void) {
  */
 void lapic_init(void) {
     uint64_t apic_base_msr;
-    uint32_t id, ver, svr_after;
+    uint32_t ver;
 
     /* Read the IA32_APIC_BASE MSR to get actual APIC configuration */
     apic_base_msr = rdmsr(IA32_APIC_BASE_MSR);
 
-    serial_puts("[APIC] IA32_APIC_BASE MSR (before) = 0x");
-    for (int i = 60; i >= 0; i -= 4) {
-        uint8_t nibble = (apic_base_msr >> i) & 0xF;
-        serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
-    }
-    serial_puts("\n");
-
     /* Check if APIC is enabled, enable it if not */
-    serial_puts("[APIC] Checking APIC enable status (bit 11)...\n");
-    /* Debug: show bit 11 directly */
-    serial_puts("[APIC]   apic_base_msr & 0x800 = 0x");
-    uint32_t bit11_check = apic_base_msr & 0x800;
-    for (int i = 12; i >= 0; i -= 4) {
-        uint8_t nibble = (bit11_check >> i) & 0xF;
-        serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
-    }
-    serial_puts("\n");
-    if (apic_base_msr & IA32_APIC_BASE_ENABLED) {
-        serial_puts("[APIC] APIC is ENABLED via MSR (bit 11 = 1)\n");
-    } else {
-        serial_puts("[APIC] APIC is DISABLED via MSR (bit 11 = 0), enabling...\n");
+    if (!(apic_base_msr & IA32_APIC_BASE_ENABLED)) {
         apic_base_msr |= IA32_APIC_BASE_ENABLED;
         wrmsr(IA32_APIC_BASE_MSR, apic_base_msr);
-        serial_puts("[APIC] Attempted to enable APIC in MSR\n");
     }
 
-    /* Re-read MSR to verify */
+    /* Re-read MSR after potential modification */
     apic_base_msr = rdmsr(IA32_APIC_BASE_MSR);
-    serial_puts("[APIC] IA32_APIC_BASE MSR (after) = 0x");
-    for (int i = 60; i >= 0; i -= 4) {
-        uint8_t nibble = (apic_base_msr >> i) & 0xF;
-        serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
-    }
-    serial_puts("\n");
-
-    /* Check if x2APIC is enabled */
-    if (apic_base_msr & IA32_APIC_BASE_EXTD) {
-        serial_puts("[APIC] WARNING: x2APIC is enabled! Trying to disable...\n");
-
-        /* Disable x2APIC mode by clearing bit 10 */
-        apic_base_msr &= ~IA32_APIC_BASE_EXTD;
-        wrmsr(IA32_APIC_BASE_MSR, apic_base_msr);
-
-        /* Read back to verify */
-        apic_base_msr = rdmsr(IA32_APIC_BASE_MSR);
-        if (apic_base_msr & IA32_APIC_BASE_EXTD) {
-            serial_puts("[APIC] ERROR: Failed to disable x2APIC!\n");
-            serial_puts("[APIC] Will attempt x2APIC mode access...\n");
-        } else {
-            serial_puts("[APIC] x2APIC disabled successfully\n");
-        }
-    } else {
-        serial_puts("[APIC] x2APIC is not enabled (good)\n");
-    }
-
-    /* Don't try x2APIC - it causes crashes in QEMU
-     * x2APIC requires CPUID check and proper support */
-    serial_puts("[APIC] Skipping x2APIC mode (not supported in QEMU config)\n");
 
     /* Use the actual APIC base address from MSR
      * Note: We're in long mode with paging enabled
      * The page tables should identity-map 0xFEE00000 -> 0xFEE00000
-     * We can use the physical address directly because of the identity mapping
-     *
-     * CRITICAL: Try using the VIRTUAL address directly via PML4[0x1FD] path
-     * instead of relying on identity mapping */
-    serial_puts("[APIC] Setting lapic_base to VA 0xFEE00000 (via PML4[0x1FD])\n");
+     * We can use the physical address directly because of the identity mapping */
     lapic_base = (volatile uint32_t *)0xFEE00000;
-
-    serial_puts("[APIC] APIC base address = 0x");
-    uint64_t base_addr = (uint64_t)lapic_base;
-    for (int i = 60; i >= 0; i -= 4) {
-        uint8_t nibble = (base_addr >> i) & 0xF;
-        serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
-    }
-    serial_puts("\n");
 
     /* CRITICAL FIX: Enable APIC via SVR BEFORE reading any registers!
      * The SVR bit 8 (software enable) must be set for APIC registers to be accessible.
      * Without this, all APIC register reads return 0. */
-    serial_puts("[APIC] Enabling APIC via SVR (early init)...\n");
-
-    /* Debug: Check PDPT[3] entry to verify APIC mapping */
-    serial_puts("[APIC] Checking PDPT[3] entry...\n");
-    extern uint64_t boot_pdpt[];
-    uint64_t pdpt_entry_3 = boot_pdpt[3];
-    serial_puts("[APIC] PDPT[3] = 0x");
-    for (int i = 60; i >= 0; i -= 4) {
-        uint8_t nibble = (pdpt_entry_3 >> i) & 0xF;
-        serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
-    }
-    serial_puts("\n");
-    if (pdpt_entry_3 == 0) {
-        serial_puts("[APIC] ERROR: PDPT[3] is 0! APIC NOT accessible!\n");
-    } else {
-        serial_puts("[APIC] PDPT[3] is set correctly\n");
-    }
-
-    /* Debug: Print lapic_base value before any access */
-    serial_puts("[APIC] lapic_base = 0x");
-    uint64_t base_ptr = (uint64_t)lapic_base;
-    for (int i = 60; i >= 0; i -= 4) {
-        uint8_t nibble = (base_ptr >> i) & 0xF;
-        serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
-    }
-    serial_puts("\n");
-
-    /* Try a simple test: write to SVR and verify */
-    serial_puts("[APIC] Testing SVR write/read...\n");
-    serial_puts("[APIC] Writing 0x1FF to SVR...\n");
 
     /* Flush cache before write */
     asm volatile ("mfence" ::: "memory");
@@ -230,38 +138,6 @@ void lapic_init(void) {
     /* Flush cache after write */
     asm volatile ("mfence" ::: "memory");
 
-    /* Flush the specific cache line for the APIC SVR register */
-    /* Note: clflush needs proper memory operand syntax */
-    asm volatile ("clflush (%0)" : : "r"((volatile char *)lapic_base + LAPIC_SVR) : "memory");
-
-    uint32_t svr_check = lapic_read(LAPIC_SVR);
-
-    /* Flush cache after read */
-    asm volatile ("mfence" ::: "memory");
-
-    serial_puts("[APIC] SVR after write = 0x");
-    for (int i = 28; i >= 0; i -= 4) {
-        uint8_t nibble = (svr_check >> i) & 0xF;
-        serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
-    }
-    serial_puts("\n");
-
-    if (svr_check == (0x100 | 0xFF)) {
-        serial_puts("[APIC] SUCCESS! SVR write/read worked!\n");
-    } else {
-        serial_puts("[APIC] SVR write/read failed (wrote=0x1FF)\n");
-    }
-
-    /* Now try reading APIC ID and VERSION */
-    serial_puts("[APIC] Testing direct access to lapic_base[0]...\n");
-    uint32_t test_val = lapic_base[0];
-    serial_puts("[APIC] lapic_base[0] = 0x");
-    for (int i = 28; i >= 0; i -= 4) {
-        uint8_t nibble = (test_val >> i) & 0xF;
-        serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
-    }
-    serial_puts("\n");
-
     /* Memory fence to ensure SVR write completes before reading */
     asm volatile ("mfence" ::: "memory");
 
@@ -270,257 +146,21 @@ void lapic_init(void) {
         asm volatile ("pause");
     }
 
-    /* Now read APIC ID and VERSION after enabling APIC */
-    id = lapic_read(LAPIC_ID);
-    serial_puts("[APIC] Initial APIC_ID = 0x");
-    for (int i = 28; i >= 0; i -= 4) {
-        uint8_t nibble = (id >> i) & 0xF;
-        serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
-    }
-    serial_puts("\n");
-
     /* Read APIC version */
     ver = lapic_read(LAPIC_VER);
-    serial_puts("[APIC] LAPIC_VER = 0x");
+    serial_puts("APIC: LAPIC_VER = 0x");
     for (int i = 28; i >= 0; i -= 4) {
         uint8_t nibble = (ver >> i) & 0xF;
         serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
     }
     serial_puts("\n");
-
-    /* Verify page table mapping for 0xFEE00000
-     * VA 0xFEE00000 -> PML4[0x1FD] -> PDPT[3] -> PD[503] -> PA 0xFEE00000
-     *
-     * Wait! 0xFEE00000 is HIGH memory (~4.27GB), not in the first 1GB.
-     * PML4 index = bits 39-47 = 0x1FD (not 0!)
-     * PDPT index = bits 30-38 = 0x3
-     * PD index = bits 21-29 = 0x1F8 (504 decimal)
-     */
-    serial_puts("[APIC] Verifying page table mapping for 0xFEE00000...\n");
-    extern uint64_t boot_pml4[];
-
-    /* Calculate page table indices for VA 0xFEE00000 */
-    uint64_t pml4_index = (0xFEE00000ULL >> 39) & 0x1FF;
-    uint64_t pdpt_index = (0xFEE00000ULL >> 30) & 0x1FF;
-    uint64_t pd_index = (0xFEE00000ULL >> 21) & 0x1FF;
-
-    serial_puts("[APIC] Page table indices for 0xFEE00000:\n");
-    serial_puts("[APIC]   PML4[0x");
-    for (int i = 8; i >= 0; i -= 4) {
-        uint8_t nibble = (pml4_index >> i) & 0xF;
-        serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
-    }
-    serial_puts("] -> PDPT index 0x");
-    for (int i = 8; i >= 0; i -= 4) {
-        uint8_t nibble = (pdpt_index >> i) & 0xF;
-        serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
-    }
-    serial_puts(" -> PD[0x");
-    for (int i = 8; i >= 0; i -= 4) {
-        uint8_t nibble = (pd_index >> i) & 0xF;
-        serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
-    }
-    serial_puts("]\n");
-
-    /* Check PML4[0x1FD] for 0xFEE00000 (critical for APIC access) */
-    uint64_t pml4_1fd = boot_pml4[0x1FD];
-    serial_puts("[APIC] PML4[0x1FD] (APIC PML4 entry) = 0x");
-    for (int i = 60; i >= 0; i -= 4) {
-        uint8_t nibble = (pml4_1fd >> i) & 0xF;
-        serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
-    }
+    serial_puts("APIC: APIC version=");
+    serial_putc('0' + (ver & 0xFF));
+    serial_puts(" maxlvt=");
+    serial_putc('0' + ((ver >> 16) & 0xFF));
     serial_puts("\n");
 
-    /* Check PML4[0] for comparison */
-    uint64_t pml4_entry0 = boot_pml4[0];
-    serial_puts("[APIC] PML4[0] = 0x");
-    for (int i = 60; i >= 0; i -= 4) {
-        uint8_t nibble = (pml4_entry0 >> i) & 0xF;
-        serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
-    }
-    serial_puts("\n");
-
-    /* If PML4[0x1FD] is 0, APIC at 0xFEE00000 is NOT accessible! */
-    if (pml4_1fd == 0) {
-        serial_puts("[APIC] ERROR: PML4[0x1FD] is 0! APIC NOT accessible!\n");
-    } else {
-        serial_puts("[APIC] PML4[0x1FD] is set, APIC should be accessible\n");
-
-        /* Trace the full page table walk for VA 0xFEE00000 */
-        extern uint64_t boot_pdpt[];
-        extern uint64_t boot_pd[];
-
-        /* PML4[0x1FD] points to PDPT - use the actual symbol which is identity-mapped */
-        serial_puts("[APIC] Using boot_pdpt identity mapping\n");
-        serial_puts("[APIC] boot_pdpt address = 0x");
-        uint64_t pdpt_sym_addr = (uint64_t)boot_pdpt;
-        for (int i = 60; i >= 0; i -= 4) {
-            uint8_t nibble = (pdpt_sym_addr >> i) & 0xF;
-            serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
-        }
-        serial_puts("\n");
-
-        /* Check PDPT[3] using the actual symbol */
-        uint64_t pdpt_entry3 = boot_pdpt[3];
-        serial_puts("[APIC] PDPT[3] = 0x");
-        for (int i = 60; i >= 0; i -= 4) {
-            uint8_t nibble = (pdpt_entry3 >> i) & 0xF;
-            serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
-        }
-        serial_puts("\n");
-
-        if (pdpt_entry3 == 0) {
-            serial_puts("[APIC] ERROR: PDPT[3] is 0! APIC mapping broken!\n");
-        }
-
-        /* Check PD[503] using the actual symbol */
-        serial_puts("[APIC] Using boot_pd identity mapping\n");
-        serial_puts("[APIC] boot_pd address = 0x");
-        uint64_t pd_sym_addr = (uint64_t)boot_pd;
-        for (int i = 60; i >= 0; i -= 4) {
-            uint8_t nibble = (pd_sym_addr >> i) & 0xF;
-            serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
-        }
-        serial_puts("\n");
-
-        uint64_t pd_entry504 = boot_pd[504];
-        serial_puts("[APIC] PD[503] = 0x");
-        for (int i = 60; i >= 0; i -= 4) {
-            uint8_t nibble = (pd_entry504 >> i) & 0xF;
-            serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
-        }
-        serial_puts("\n");
-
-        if (pd_entry504 == 0) {
-            serial_puts("[APIC] ERROR: PD[503] is 0! APIC page not mapped!\n");
-        }
-
-        /* PD[503] should map to PA 0xFEE00000 */
-        uint64_t mapped_pa = (pd_entry504 >> 12) << 12;
-        serial_puts("[APIC] PD[503] maps to PA 0x");
-        for (int i = 60; i >= 0; i -= 4) {
-            uint8_t nibble = (mapped_pa >> i) & 0xF;
-            serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
-        }
-        serial_puts("\n");
-
-        /* Check page table entry flags for APIC mapping */
-        serial_puts("[APIC] Checking PD[503] entry flags...\n");
-        serial_puts("[APIC]   PD[503] = 0x");
-        for (int i = 60; i >= 0; i -= 4) {
-            uint8_t nibble = (pd_entry504 >> i) & 0xF;
-            serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
-        }
-        serial_puts("\n");
-        /* Check for critical flags */
-        if (pd_entry504 & (1 << 12)) serial_puts("[APIC]   PAT bit is SET\n");
-        else serial_puts("[APIC]   PAT bit is CLEAR\n");
-        if (pd_entry504 & (1 << 7)) serial_puts("[APIC]   Page size bit (2MB) is SET\n");
-        else serial_puts("[APIC]   Page size bit is CLEAR\n");
-        if (pd_entry504 & (1 << 6)) serial_puts("[APIC]   Dirty bit is SET\n");
-        else serial_puts("[APIC]   Dirty bit is CLEAR\n");
-        if (pd_entry504 & (1 << 5)) serial_puts("[APIC]   Access bit is SET\n");
-        else serial_puts("[APIC]   Access bit is CLEAR\n");
-        if (pd_entry504 & (1 << 4)) serial_puts("[APIC]   Cache disable (CD) is SET\n");
-        else serial_puts("[APIC]   Cache disable (CD) is CLEAR (may cache MMIO!)\n");
-        if (pd_entry504 & (1 << 3)) serial_puts("[APIC]   Write-through is SET\n");
-        else serial_puts("[APIC]   Write-through is CLEAR\n");
-    }
-
-    /* Test APIC accessibility by writing to ESR and reading back */
-    serial_puts("[APIC] Testing APIC accessibility...\n");
-
-    /* First, check CPUID for APIC support */
-    uint32_t eax, ebx, ecx, edx;
-    asm volatile ("cpuid"
-                  : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx)
-                  : "a"(1));  /* CPUID leaf 1 */
-    serial_puts("[APIC] CPUID.1:EDX.APIC (bit 9) = ");
-    if (edx & (1 << 9)) {
-        serial_puts("1 (APIC available)\n");
-    } else {
-        serial_puts("0 (NO APIC!)\n");
-    }
-
-    /* Check if we're actually accessing the right memory location */
-    serial_puts("[APIC] Trying to access APIC at 0xFEE00000...\n");
-    volatile uint32_t *apic_direct = (volatile uint32_t *)0xFEE00000;
-    serial_puts("[APIC] Direct read: *0xFEE00000 = 0x");
-    uint32_t direct_read = apic_direct[0];
-    for (int i = 28; i >= 0; i -= 4) {
-        uint8_t nibble = (direct_read >> i) & 0xF;
-        serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
-    }
-    serial_puts("\n");
-
-    /* Scan the entire APIC 4KB MMIO range to verify mapping */
-    serial_puts("[APIC] Scanning APIC MMIO range (0xFEE00000 - 0xFEE00FFF)...\n");
-    volatile uint32_t *apic_base = (volatile uint32_t *)0xFEE00000;
-    int non_zero_count = 0;
-    for (int offset = 0; offset < 0x1000; offset += 16) {
-        uint32_t val = apic_base[offset / 4];
-        if (val != 0) {
-            non_zero_count++;
-            if (non_zero_count <= 8) {  /* Show first 8 non-zero values */
-                serial_puts("[APIC]   Offset 0x");
-                for (int i = 12; i >= 0; i -= 4) {
-                    uint8_t nibble = (offset >> i) & 0xF;
-                    serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
-                }
-                serial_puts(" = 0x");
-                for (int i = 28; i >= 0; i -= 4) {
-                    uint8_t nibble = (val >> i) & 0xF;
-                    serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
-                }
-                serial_puts("\n");
-            }
-        }
-    }
-    serial_puts("[APIC]   Total non-zero dwords: ");
-    if (non_zero_count < 10) {
-        serial_putc('0' + non_zero_count);
-    } else {
-        serial_putc('0' + (non_zero_count / 10));
-        serial_putc('0' + (non_zero_count % 10));
-    }
-    serial_puts(" of 256\n");
-
-    /* Verify page table is working by checking a known-mapped address */
-    serial_puts("[APIC] Verifying page tables by accessing kernel memory...\n");
-    volatile uint32_t *kernel_ptr = (volatile uint32_t *)0x100000;
-    uint32_t kernel_val = *kernel_ptr;
-    serial_puts("[APIC]   Read from 0x100000 = 0x");
-    for (int i = 28; i >= 0; i -= 4) {
-        uint8_t nibble = (kernel_val >> i) & 0xF;
-        serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
-    }
-    serial_puts("\n");
-    if (kernel_val != 0) {
-        serial_puts("[APIC]   Page tables are working (kernel memory accessible)\n");
-    } else {
-        serial_puts("[APIC]   WARNING: Page tables may not be working!\n");
-    }
-
-    /* Try ESR write/read test - clear ESR first */
-    lapic_write(LAPIC_ESR, 0);  /* Clear all errors */
-    uint32_t test_read = lapic_read(LAPIC_ESR);
-    serial_puts("[APIC] ESR after clear: 0x");
-    for (int i = 28; i >= 0; i -= 4) {
-        uint8_t nibble = (test_read >> i) & 0xF;
-        serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
-    }
-    serial_puts("\n");
-
-    /* Read SVR after initialization (APIC was already enabled early) */
-    svr_after = lapic_read(LAPIC_SVR);
-    serial_puts("[APIC] SVR after init = 0x");
-    for (int i = 28; i >= 0; i -= 4) {
-        uint8_t nibble = (svr_after >> i) & 0xF;
-        serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
-    }
-    serial_puts("\n");
-
-    serial_puts("[APIC] Local APIC initialized\n");
+    serial_puts("APIC: Local APIC initialized\n");
 }
 
 /**
@@ -532,18 +172,6 @@ uint8_t lapic_get_id(void) {
     uint32_t id = lapic_read(LAPIC_ID);
     /* APIC ID is in bits 24-31 for xAPIC */
     return (uint8_t)(id >> 24);
-}
-
-/**
- * print_hex_byte - Print a byte as hex
- * @val: Value to print
- */
-static void print_hex_byte(uint8_t val) {
-    extern void serial_putc(char c);
-    serial_putc('0');
-    serial_putc('x');
-    serial_putc('0' + ((val >> 4) & 0xF));
-    serial_putc('0' + (val & 0xF));
 }
 
 /**
@@ -585,28 +213,16 @@ int lapic_wait_for_ipi(void) {
     /* Wait for delivery status bit to clear, with timeout */
     int timeout = 1000000;  /* Increased timeout */
     uint32_t icr_low;
-    int first = 1;
 
     while (timeout-- > 0) {
         icr_low = lapic_read(LAPIC_ICR_LOW);
         if (!(icr_low & LAPIC_ICR_DS)) {
             /* Delivery complete */
-            serial_puts("[APIC] ICR_LOW after send: 0x");
-            for (int i = 28; i >= 0; i -= 4) {
-                uint8_t nibble = (icr_low >> i) & 0xF;
-                serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
-            }
-            serial_puts("\n");
             return 0;
-        }
-        if (first) {
-            serial_puts("[APIC] Waiting for IPI delivery...\n");
-            first = 0;
         }
         asm volatile ("pause");
     }
 
-    serial_puts("[APIC] IPI delivery timeout!\n");
     return -1;  /* Timeout */
 }
 
@@ -650,210 +266,83 @@ int ap_startup(uint8_t apic_id, uint32_t startup_addr) {
     uint32_t icr_low, icr_high;
     uint32_t ver, maxlvt;
 
-    /* Debug: Print BSP's APIC ID (from hardware) and target APIC ID */
-    uint8_t my_apic_id = lapic_get_id();
-    serial_puts("[APIC] BSP APIC ID = ");
-    print_hex_byte(my_apic_id);
-    serial_puts(", Target APIC ID = ");
-    print_hex_byte(apic_id);
-    serial_puts("\n");
-
-    serial_puts("[APIC] ap_startup: APIC ID=");
-    serial_putc('0' + apic_id);
-    serial_puts(" vector=");
-    serial_putc('0' + startup_addr);
-    serial_puts("\n");
-
-    /* Check APIC version (for ESR clearing)
-     * LAPIC_VER format:
-     *   Bits 0-7: Version
-     *   Bits 16-23: Max LVT entry
-     */
+    /* Check APIC version (for ESR clearing) */
     ver = lapic_read(LAPIC_VER);
     maxlvt = (ver >> 16) & 0xFF;  /* Max LVT is in bits 16-23 */
-    serial_puts("[APIC] LAPIC_VER = 0x");
-    for (int i = 28; i >= 0; i -= 4) {
-        uint8_t nibble = (ver >> i) & 0xF;
-        serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
-    }
-    serial_puts("\n");
-    serial_puts("[APIC] APIC version=");
-    serial_putc('0' + (ver & 0xFF));
-    serial_puts(" maxlvt=");
-    serial_putc('0' + maxlvt);
-    serial_puts("\n");
 
     /* Be paranoid about clearing APIC errors (like Linux does)
      * Due to Pentium erratum 3AP */
     if (maxlvt > 3) {
         lapic_write(LAPIC_ESR, 0);
         lapic_read(LAPIC_ESR);  /* Dummy read to flush */
-        serial_puts("[APIC] Cleared ESR (maxlvt > 3)\n");
     }
 
     /* Step 1: Send INIT IPI (ASSERT, level-triggered) to reset the AP to real mode */
-    serial_puts("[APIC] Sending INIT IPI (assert)...\n");
-
-    /* Set destination APIC ID in ICR high */
     icr_high = (uint32_t)apic_id << 24;
     lapic_write(LAPIC_ICR_HIGH, icr_high);
-
-    /* INIT: level-triggered + assert + INIT delivery mode */
     icr_low = LAPIC_ICR_LEVELTRIG | LAPIC_ICR_ASSERT | LAPIC_ICR_DM_INIT;
     icr_low |= LAPIC_ICR_DST_PHYSICAL;
-
-    serial_puts("[APIC] ICR_HIGH = 0x");
-    for (int i = 28; i >= 0; i -= 4) {
-        uint8_t nibble = (icr_high >> i) & 0xF;
-        serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
-    }
-    serial_puts(" ICR_LOW = 0x");
-    for (int i = 28; i >= 0; i -= 4) {
-        uint8_t nibble = (icr_low >> i) & 0xF;
-        serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
-    }
-    serial_puts("\n");
-
     lapic_write(LAPIC_ICR_LOW, icr_low);
 
     if (lapic_wait_for_ipi() < 0) {
-        serial_puts("[APIC] INIT assert IPI timeout!\n");
         return -1;
     }
-    serial_puts("[APIC] INIT assert IPI sent successfully\n");
 
     /* Step 2: Wait - reduced delay for QEMU */
-    serial_puts("[APIC] Waiting for INIT deassert...\n");
-    pit_delay_ms(400);  /* Reduced from 10ms to 1ms for QEMU */
+    pit_delay_ms(400);
 
-    /* Step 3: Send INIT IPI (DEASSERT, level-triggered)
-     * This is CRITICAL! INIT must be deasserted or the AP stays in INIT state */
-    serial_puts("[APIC] Sending INIT IPI (deassert)...\n");
-
-    /* Re-set destination APIC ID (may have been cleared) */
+    /* Step 3: Send INIT IPI (DEASSERT, level-triggered) */
     icr_high = (uint32_t)apic_id << 24;
     lapic_write(LAPIC_ICR_HIGH, icr_high);
-
-    /* INIT: level-triggered (NO assert) + INIT delivery mode */
     icr_low = LAPIC_ICR_LEVELTRIG | LAPIC_ICR_DM_INIT;
     icr_low |= LAPIC_ICR_DST_PHYSICAL;
     lapic_write(LAPIC_ICR_LOW, icr_low);
 
     if (lapic_wait_for_ipi() < 0) {
-        serial_puts("[APIC] INIT deassert IPI timeout!\n");
         return -1;
     }
-    serial_puts("[APIC] INIT deassert IPI sent successfully\n");
 
-    /* Step 4: Delay before STARTUP (spec says 10ms, use 10ms for reliability) */
+    /* Step 4: Delay before STARTUP */
     pit_delay_ms(100);
 
-    serial_puts("[APIC] Sending STARTUP IPI...\n");
-
-    /* Clear ESR before STARTUP IPI (due to Pentium erratum 3AP) */
-    if (maxlvt > 3) {
-        lapic_write(LAPIC_ESR, 0);
-        lapic_read(LAPIC_ESR);  /* Dummy read to flush */
-    }
-
-    /* Step 5: Send first STARTUP IPI (edge-triggered, no LEVELTRIG) */
-    serial_puts("[APIC] Sending STARTUP IPI...\n");
-
-    /* Clear ESR before STARTUP IPI (due to Pentium erratum 3AP) */
-    if (maxlvt > 3) {
-        lapic_write(LAPIC_ESR, 0);
-        lapic_read(LAPIC_ESR);  /* Dummy read to flush */
-    }
-
-    /* Verify trampoline is at 0x7000 by checking the signature */
-    uint16_t *trampoline_ptr = (uint16_t *)0x7000;
-    uint16_t sig = *trampoline_ptr;
-    serial_puts("[APIC] Trampoline at 0x7000: first word = 0x");
-    for (int i = 12; i >= 0; i -= 4) {
-        uint8_t nibble = (sig >> i) & 0xF;
-        serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
-    }
-    serial_puts(" (should be 0xFA00 = cli)\n");
-
-    /* Send STARTUP IPI using explicit APIC ID in ICR_HIGH */
-    icr_high = (uint32_t)apic_id << 24;
-    icr_low = LAPIC_ICR_DM_STARTUP | startup_addr;
-    icr_low |= LAPIC_ICR_DST_PHYSICAL;
-
-    serial_puts("[APIC] ICR_HIGH = 0x");
-    for (int i = 28; i >= 0; i -= 4) {
-        uint8_t nibble = (icr_high >> i) & 0xF;
-        serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
-    }
-    serial_puts(" ICR_LOW = 0x");
-    for (int i = 28; i >= 0; i -= 4) {
-        uint8_t nibble = (icr_low >> i) & 0xF;
-        serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
-    }
-    serial_puts("\n");
-
-    lapic_write(LAPIC_ICR_HIGH, icr_high);
-    lapic_write(LAPIC_ICR_LOW, icr_low);
-
-    if (lapic_wait_for_ipi() < 0) {
-        serial_puts("[APIC] STARTUP IPI timeout!\n");
-        return -1;
-    }
-    /* No output here - let AP execute first */
-
-    /* Step 6: Delay between STARTUP IPIs (spec says 200us, use 1ms for reliability) */
-    pit_delay_ms(1);
-
-    /* Check ESR for errors (due to Pentium erratum 3AP)
-     * Note: ESR bit 7 (0x80) is Send Accept Error, which QEMU may set spuriously.
-     * We log it but don't treat it as fatal. */
-    if (maxlvt > 3) {
-        uint32_t esr = lapic_read(LAPIC_ESR) & 0xEF;
-        if (esr) {
-            serial_puts("[APIC] WARNING: ESR = 0x");
-            serial_putc('0' + (esr >> 4));
-            serial_putc('0' + (esr & 0xF));
-            serial_puts(" (may be QEMU-specific, continuing)\n");
-        }
-    }
-
-    /* Step 7: Send second STARTUP IPI (recommended by Intel) */
-
-    /* Clear ESR before second STARTUP IPI */
+    /* Clear ESR before STARTUP IPI */
     if (maxlvt > 3) {
         lapic_write(LAPIC_ESR, 0);
         lapic_read(LAPIC_ESR);
     }
 
-    /* Re-set destination APIC ID (may have been cleared) */
+    /* Step 5: Send first STARTUP IPI */
     icr_high = (uint32_t)apic_id << 24;
     icr_low = LAPIC_ICR_DM_STARTUP | startup_addr;
     icr_low |= LAPIC_ICR_DST_PHYSICAL;
-
-    serial_puts("[APIC] Sending second STARTUP IPI...\n");
     lapic_write(LAPIC_ICR_HIGH, icr_high);
     lapic_write(LAPIC_ICR_LOW, icr_low);
 
     if (lapic_wait_for_ipi() < 0) {
-        serial_puts("[APIC] Second STARTUP IPI timeout!\n");
         return -1;
     }
 
-    /* Check ESR after second STARTUP IPI */
+    /* Step 6: Delay between STARTUP IPIs */
+    pit_delay_ms(1);
+
+    /* Step 7: Send second STARTUP IPI */
     if (maxlvt > 3) {
-        uint32_t esr = lapic_read(LAPIC_ESR) & 0xEF;
-        if (esr) {
-            serial_puts("[APIC] ESR after second SIPI: 0x");
-            serial_putc('0' + (esr >> 4));
-            serial_putc('0' + (esr & 0xF));
-            serial_puts("\n");
-        }
+        lapic_write(LAPIC_ESR, 0);
+        lapic_read(LAPIC_ESR);
     }
 
-    /* Wait for AP to start executing - give it time to output debug chars */
-    pit_delay_ms(100);
+    icr_high = (uint32_t)apic_id << 24;
+    icr_low = LAPIC_ICR_DM_STARTUP | startup_addr;
+    icr_low |= LAPIC_ICR_DST_PHYSICAL;
+    lapic_write(LAPIC_ICR_HIGH, icr_high);
+    lapic_write(LAPIC_ICR_LOW, icr_low);
 
-    serial_puts("[APIC] STARTUP IPI sent, waiting for AP...\n");
+    if (lapic_wait_for_ipi() < 0) {
+        return -1;
+    }
+
+    /* Wait for AP to start executing */
+    pit_delay_ms(100);
 
     return 0;
 }
@@ -882,38 +371,17 @@ int is_bsp(void) {
 void apic_timer_init(void) {
     uint32_t lvt_value;
 
-    serial_puts("[APIC_TIMER] Initializing APIC timer...\n");
-
-    /* Step 1: Set divide configuration register
-     * 0xB = divide by 1 (highest frequency)
-     * Other options: 0x0=div2, 0x1=div4, 0x2=div8, 0x3=div16, etc.
-     */
-    serial_puts("[APIC_TIMER] Setting divide configuration (divide by 1)...\n");
+    /* Set divide configuration register (divide by 1) */
     lapic_write(LAPIC_TIMER_DCR, LAPIC_TIMER_DIV_BY_1);
 
-    /* Step 2: Configure timer LVT (Local Vector Table)
-     * Set timer vector to TIMER_VECTOR (32)
-     * Set periodic mode bit (bit 17)
-     * Unmask the timer (clear bit 16)
-     */
-    serial_puts("[APIC_TIMER] Configuring timer LVT (periodic mode)...\n");
+    /* Configure timer LVT (periodic mode) */
     lvt_value = TIMER_VECTOR;              /* Interrupt vector */
     lvt_value |= LAPIC_TIMER_LVT_PERIODIC; /* Periodic mode */
-    /* Timer is unmasked by default (LAPIC_TIMER_LVT_MASK = 0) */
     lapic_write(LAPIC_TIMER_LVT, lvt_value);
 
-    /* Step 3: Set initial count to start the timer
-     * The actual interrupt frequency depends on the bus clock.
-     * For typical systems:
-     * - Bus clock ~ 100-200 MHz
-     * - Divide by 1
-     * - Initial count 100000 gives ~1000-2000 Hz
-     *
-     * Using a conservative value of 100000 for reliable interrupts.
-     */
-    serial_puts("[APIC_TIMER] Setting initial count (100000)...\n");
+    /* Set initial count to start the timer */
     lapic_write(LAPIC_TIMER_ICR, 100000);
 
-    serial_puts("[APIC_TIMER] APIC timer initialized successfully\n");
+    serial_puts("APIC: APIC timer initialized successfully\n");
 }
 

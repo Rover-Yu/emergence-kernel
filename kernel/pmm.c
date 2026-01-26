@@ -406,12 +406,6 @@ void *pmm_alloc(uint8_t order) {
         return 0;
     }
 
-    serial_puts("PMM: Allocated order ");
-    put_hex(order);
-    serial_puts(" at 0x");
-    put_hex(block->base_addr);
-    serial_puts("\n");
-
     spin_unlock_irqrestore(&pmm_state.lock, &flags);
 
     return (void *)block->base_addr;
@@ -446,12 +440,6 @@ void pmm_free(void *phys_addr, uint8_t order) {
 
     /* Remove from allocated list */
     list_remove(&block->list);
-
-    serial_puts("PMM: Freeing order ");
-    put_hex(order);
-    serial_puts(" at 0x");
-    put_hex(addr);
-    serial_puts("\n");
 
     /* Coalesce with buddies and add to free list */
     coalesce_block(block);
