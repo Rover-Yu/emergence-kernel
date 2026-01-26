@@ -11,21 +11,37 @@ This is a research kernel project aimed at exploring the boundaries of LLM capab
 ### Currently Implemented
 
 #### Boot and Mode Transitions
-- **Multiboot2 Boot** - Kernel loaded via GRUB
+- **Multiboot2 Boot** - Kernel loaded via GRUB with memory map parsing
 - **Real Mode → Protected Mode → Long Mode** - Complete mode transition flow
 - **Page Table Setup** - Identity mapping for first 2MB
 - **GDT Configuration** - 64-bit Global Descriptor Table
+- **Boot Banner** - Visual kernel identification on startup
 
 #### Symmetric Multi-Processing (SMP)
 - **BSP/AP Detection** - Distinguish Bootstrap vs Application Processors via atomic counter
 - **AP Startup Trampoline** - Jump from real mode to long mode
 - **IPI Communication** - Inter-Processor Interrupt support
 - **Per-CPU Stack** - Independent stack space (16 KiB each)
+- **CPU State Management** - OFFLINE, BOOTING, ONLINE, READY states
+
+#### Synchronization Primitives
+- **Spin Locks** - Basic spin locks with `spin_lock`/`spin_unlock`
+- **IRQ-Safe Locks** - `spin_lock_irqsave`/`spin_unlock_irqrestore` for interrupt context
+- **Read-Write Locks** - Multiple readers, exclusive writer access
+- **Comprehensive Testing** - 10 tests including single-CPU and SMP multi-CPU scenarios
+
+#### Physical Memory Management
+- **Buddy System Allocator** - Efficient power-of-2 block allocation
+- **Multiboot2 Memory Map** - Parses available/reserved memory regions
+- **Order-Based Allocation** - Supports orders 0-9 (4KB to 2MB blocks)
+- **Automatic Coalescing** - Adjacent free blocks are merged
+- **Statistics Tracking** - Free and total page counts
 
 #### Interrupt and Exception Handling
 - **IDT Setup** - Complete Interrupt Descriptor Table
 - **Exception Handlers** - Divide by zero, page fault, etc.
 - **ISR Stubs** - Assembly interrupt service routines
+- **APIC Timer** - High-frequency timer interrupts (RTC removed due to QEMU resets)
 
 #### Device Driver Framework
 - **Linux-style Driver Model** - probe/init/remove pattern
@@ -37,10 +53,15 @@ This is a research kernel project aimed at exploring the boundaries of LLM capab
 - **Local APIC** - Per-CPU interrupt controller initialization
 - **I/O APIC** - External interrupt routing
 - **IPI Support** - Inter-processor interrupt send/receive
+- **Timer Support** - APIC timer for scheduling and timekeeping
 
 #### Console Output
 - **VGA Text Mode** - 80x25 character display
 - **Serial Output** (COM1) - Debug information output
+- **Standardized Logging** - Consistent log prefixes across all subsystems
+
+#### Power Management
+- **System Shutdown** - Clean shutdown after SMP initialization and tests
 
 ---
 
@@ -96,13 +117,21 @@ JAKernel/
 │   ├── serial_driver.c  # Serial driver
 │   ├── acpi.c           # ACPI parsing
 │   ├── timer.c          # Timer framework
-│   ├── rtc.c            # RTC driver
-│   └── ipi.c            # Inter-Processor Interrupts
+│   ├── ipi.c            # Inter-Processor Interrupts
+│   ├── power.c          # Power management (shutdown)
+│   └── spinlock_arch.h  # x86_64 spin lock implementation
 ├── kernel/              # Architecture-independent code
 │   ├── main.c           # Kernel main function
 │   ├── smp.c            # Multiprocessor support
-│   └── device.c         # Device driver framework
+│   ├── device.c         # Device driver framework
+│   ├── pmm.c            # Physical Memory Manager (buddy system)
+│   ├── multiboot2.c     # Multiboot2 parsing
+│   ├── list.h           # Doubly-linked list
+│   └── spinlock_test.c  # Spin lock test suite
+├── include/             # Public headers
+│   └── spinlock.h       # Spin lock public interface
 ├── tests/               # Test code
+│   └── timer_test.c     # Timer tests
 └── Makefile             # Build system
 ```
 
@@ -135,13 +164,17 @@ JAKernel/
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| BSP Boot | ✅ Complete | Single-core boot working |
-| AP Boot | ✅ Complete | 3/3 APs successfully start |
+| BSP Boot | ✅ Complete | Single-core boot working with banner |
+| AP Boot | ✅ Complete | Multi-core boot with state management |
 | Interrupt Handling | ✅ Complete | IDT and exception handlers working |
 | APIC Init | ✅ Complete | Local APIC and I/O APIC |
+| APIC Timer | ✅ Complete | High-frequency timer interrupts |
 | Device Framework | ✅ Complete | probe/init/remove pattern |
-| Timers | ⚠️ Partial | RTC disabled due to reset issues |
+| Physical Memory Manager | ✅ Complete | Buddy system allocator with Multiboot2 |
+| Synchronization Primitives | ✅ Complete | Spin locks, RW locks, IRQ-safe locks |
+| Test Framework | ✅ Complete | PMM and spin lock test suites |
 | ACPI Parsing | ⚠️ Partial | Using default APIC IDs for now |
+| RTC Timer | ❌ Removed | Removed due to QEMU reset issues |
 
 ---
 
@@ -152,6 +185,20 @@ AP startup trampoline uses Position-Independent Code (PIC) with GOT-based symbol
 - **16-bit** → **32-bit** using `data32 ljmp` far jump
 - **32-bit** → **64-bit** using `retf` technique
 - No runtime patching needed; linker populates GOT
+
+### Buddy System Memory Allocator
+Based on the Linux kernel buddy algorithm:
+- **Order-based allocation** - Supports 2^0 to 2^9 pages (4KB - 2MB)
+- **Automatic coalescing** - Merges adjacent free blocks on free
+- **Split allocation** - Automatically splits larger blocks when needed
+- **O(1) operations** - Free list per order
+
+### Spin Lock System
+Complete SMP synchronization primitives:
+- **Basic locks** - TAS implementation using `xchg` instruction
+- **IRQ-safe locks** - Saves/restores RFLAGS to prevent interrupt deadlocks
+- **Read-write locks** - Atomic counter implementation, multiple readers
+- **PAUSE instruction** - Reduces power consumption while spinning
 
 ### Assembly Mnemonic Optimization
 ```assembly
@@ -187,22 +234,29 @@ All code in this project is generated via **Claude Code** (claude.ai/code):
 ## Debug Output Example
 
 ```
-Hello, JAKernel!
++============================================================+
+|  JAkernel, Just another kernel but prompts only           |
++============================================================+
+
+PMM: Initialized
+[ PMM tests ] Running allocation tests...
+[ PMM tests ] Allocated page1 at 0x1000000, page2 at 0x1001000
+[ PMM tests ] Allocated 32KB block at 0x1002000
+[ PMM tests ] Freed pages (buddy coalescing)
+[ PMM tests ] Free: 0x1F8 / Total: 0x200
+[ PMM tests ] Allocated 2-page block at 0x1000000 (should be same as page1 if coalesced)
+[ PMM tests ] Tests complete
 BSP: Initializing...
-[APIC] Local APIC initialized
-BSP: Initialization complete
-CPU 0 (APIC ID 0): Successfully booted
-SMP: Starting APs...
-SMP: Starting AP 1...
-HG3APLXDSQWYAT568J12JIMI
-[AP] CPU 1 initialized successfully
-SMP: Starting AP 2...
-HG3APLXDSQWYAT568J12JIMI
-[AP] CPU 2 initialized successfully
-SMP: Starting AP 3...
-HG3APLXDSQWYAT568J12JIMI
-[AP] CPU 3 initialized successfully
-SMP: All APs startup complete. 3/3 APs ready
+SMP: Starting spin lock tests...
+[ Spin lock tests ] Starting spin lock test suite...
+[ Spin lock tests ] Number of CPUs: 2
+[ Spin lock tests ] === Single-CPU Tests ===
+[ Spin lock tests ] Test 1: Basic lock operations...
+[ Spin lock tests ] Test 1 PASSED
+...
+[ Spin lock tests ] Result: ALL TESTS PASSED
+SMP: All spin lock tests PASSED
+System: Shutdown complete
 ```
 
 ---
