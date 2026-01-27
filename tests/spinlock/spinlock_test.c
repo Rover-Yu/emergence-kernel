@@ -148,6 +148,7 @@ static int test_wait_phase(int phase) {
     int timeout = BARRIER_TIMEOUT;
     while (test_phase != phase && timeout > 0) {
         asm volatile("pause");
+        asm volatile("mfence" ::: "memory");  /* Ensure we see the updated phase */
         timeout--;
     }
     return (timeout == 0) ? -1 : 0;
@@ -978,11 +979,6 @@ int run_spinlock_tests(void) {
             failures++;
         }
         test_set_phase(5);
-
-        /* Delay for AP to wake up and reach test10 barrier */
-        for (volatile int i = 0; i < 100000; i++) {
-            asm volatile("pause");
-        }
 
         /* Test 10: Deadlock prevention */
         result = test10_deadlock_prevention(num_cpus);
