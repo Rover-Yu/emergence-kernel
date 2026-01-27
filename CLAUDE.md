@@ -46,7 +46,8 @@ gdb -x .gdbinit
 
 ### Directory Structure
 - `arch/x86_64/` - Architecture-specific code (boot, APIC, IDT, timers, drivers)
-- `kernel/` - Architecture-independent kernel (device framework, SMP)
+- `kernel/` - Architecture-independent kernel (device framework, SMP, memory management)
+- `tests/` - Test suite organized by component (boot, SMP, timer, spinlock)
 - `include/` - Currently empty; headers are co-located with sources
 
 ### Build System
@@ -103,3 +104,48 @@ gdb -x .gdbinit
 - ACPI parsing temporarily disabled; uses default APIC IDs
 - RTC timer disabled (causes QEMU resets)
 - IPI handler EOI fix verified, test not yet implemented
+
+## Testing
+
+### Test Suite Organization
+
+Tests are organized by component in the `tests/` directory:
+
+```
+tests/
+├── lib/                    # Test framework library
+├── boot/                   # Boot integration tests
+├── smp/                    # SMP integration tests
+├── timer/                  # Timer integration tests
+└── spinlock/               # Kernel test code (compiled into kernel)
+```
+
+### Running Tests
+
+**Run all tests:**
+```bash
+make test
+# or
+make test-all
+```
+
+**Run individual tests:**
+```bash
+make test-boot          # Basic kernel boot test (1 CPU)
+make test-smp           # SMP boot test (2 CPUs)
+make test-apic-timer    # APIC timer test (1 CPU)
+```
+
+### Test Framework
+
+The test suite uses a bash-based framework:
+- `tests/lib/test_lib.sh` - Common test utilities (QEMU runner, assertions, output formatting)
+- `tests/run_all_tests.sh` - Test suite runner that executes all tests and reports results
+
+Integration tests run QEMU with specified CPU counts, capture serial output, and verify expected patterns in the boot logs.
+
+### Kernel Tests
+
+Kernel tests like `spinlock_test.c` are compiled into the kernel binary and execute during boot. These tests verify synchronization primitives and multi-CPU coordination.
+
+See `tests/README.md` for detailed test documentation.

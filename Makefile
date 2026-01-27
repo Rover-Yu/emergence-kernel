@@ -28,7 +28,9 @@ TRAMPOLINE_OBJ := $(BUILD_DIR)/ap_trampoline.o
 # Architecture-independent kernel sources
 KERNEL_DIR := kernel
 KERNEL_C_SRCS := $(KERNEL_DIR)/main.c $(KERNEL_DIR)/device.c $(KERNEL_DIR)/smp.c \
-                 $(KERNEL_DIR)/pmm.c $(KERNEL_DIR)/multiboot2.c $(KERNEL_DIR)/spinlock_test.c
+                 $(KERNEL_DIR)/pmm.c $(KERNEL_DIR)/multiboot2.c
+SPINLOCK_TEST_SRC := tests/spinlock/spinlock_test.c
+SPINLOCK_TEST_OBJ := $(BUILD_DIR)/kernel_spinlock_test.o
 
 # Test sources (reference only, not compiled into kernel)
 # These test files are kept for documentation purposes
@@ -44,10 +46,10 @@ ARCH_BOOT_OBJ := $(patsubst $(ARCH_DIR)/%.S,$(BUILD_DIR)/boot_%.o,$(ARCH_DIR)/bo
 ARCH_OBJS := $(patsubst $(ARCH_DIR)/%.c,$(BUILD_DIR)/arch_%.o,$(ARCH_C_SRCS))
 KERNEL_OBJS := $(patsubst $(KERNEL_DIR)/%.c,$(BUILD_DIR)/kernel_%.o,$(KERNEL_C_SRCS))
 TESTS_OBJS := $(patsubst $(TESTS_DIR)/%.c,$(BUILD_DIR)/test_%.o,$(TESTS_C_SRCS))
-OBJS := $(ARCH_BOOT_OBJ) $(ARCH_OBJS) $(KERNEL_OBJS) $(TESTS_OBJS) $(TRAMPOLINE_OBJ)
+OBJS := $(ARCH_BOOT_OBJ) $(ARCH_OBJS) $(KERNEL_OBJS) $(TESTS_OBJS) $(TRAMPOLINE_OBJ) $(SPINLOCK_TEST_OBJ)
 KERNEL_ELF := $(BUILD_DIR)/$(KERNEL).elf
 
-.PHONY: all clean run test test-all test-boot test-apic-timer test-rtc-timer test-both-timers test-smp test-integration
+.PHONY: all clean run test test-all test-boot test-apic-timer test-smp
 
 all: $(ISO)
 
@@ -71,6 +73,10 @@ $(BUILD_DIR)/arch_%.o: $(ARCH_DIR)/%.c | $(BUILD_DIR)
 
 # Compile architecture-independent kernel C files
 $(BUILD_DIR)/kernel_%.o: $(KERNEL_DIR)/%.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Compile spinlock test (from tests/spinlock/)
+$(SPINLOCK_TEST_OBJ): $(SPINLOCK_TEST_SRC) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Compile test C files
@@ -114,24 +120,12 @@ test-all:
 
 test-boot:
 	@echo "Running Basic Kernel Boot Test..."
-	@cd tests && ./boot_test.sh
+	@cd tests && ./boot/boot_test.sh
 
 test-apic-timer:
 	@echo "Running APIC Timer Test..."
-	@cd tests && ./apic_timer_test.sh
-
-test-rtc-timer:
-	@echo "Running RTC Timer Test..."
-	@cd tests && ./rtc_timer_test.sh
-
-test-both-timers:
-	@echo "Running Dual Timer Test..."
-	@cd tests && ./both_timers_test.sh
+	@cd tests && ./timer/apic_timer_test.sh
 
 test-smp:
 	@echo "Running SMP Boot Test..."
-	@cd tests && ./smp_boot_test.sh 2
-
-test-integration:
-	@echo "Running SMP + Timers Integration Test..."
-	@cd tests && ./smp_with_timers_test.sh 2
+	@cd tests && ./smp/smp_boot_test.sh 2

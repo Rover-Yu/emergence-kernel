@@ -23,9 +23,9 @@ NC='\033[0m' # No Color
 # Test list: "script_name:Test Display Name"
 # Format: "filename:display_name[:cpu_arg]"
 TESTS=(
-    "boot_test.sh:Basic Kernel Boot"
-    "apic_timer_test.sh:APIC Timer"
-    "smp_boot_test.sh:SMP Boot:2"
+    "boot/boot_test.sh:Basic Kernel Boot"
+    "timer/apic_timer_test.sh:APIC Timer"
+    "smp/smp_boot_test.sh:SMP Boot:2"
 )
 
 # Global counters

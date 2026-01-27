@@ -570,6 +570,12 @@ static int test7_trylock_contention(int num_cpus) {
         if (total_success == 1) {
             test_puts("  PASS: Exactly one CPU acquired lock\n");
             test_puts("Test 7 PASSED\n\n");
+
+            /* Small delay for AP to exit test 7 and reach test_wait_phase(3) */
+            for (volatile int i = 0; i < 50000; i++) {
+                asm volatile("pause");
+            }
+
             return 0;
         } else {
             test_puts("  FAIL: ");
@@ -584,21 +590,40 @@ static int test7_trylock_contention(int num_cpus) {
 
 /**
  * test8_rwlock_readers - Test 8: Multiple concurrent readers
+ * Uses flag-based synchronization to avoid barrier deadlock.
  */
 static int test8_rwlock_readers(int num_cpus) {
+    /* Synchronization flags */
+    static volatile int test8_ready = 0;
+    static volatile int test8_done[SMP_MAX_CPUS] = {0};
+
     int my_cpu = test_get_cpu_index();
 
     if (test_is_bsp()) {
         test_puts("Test 8: RWLock concurrent readers...\n");
-        test_barrier_reset();  /* Reset barrier at start of test */
-    }
 
-    /* Phase 1: Initialize and synchronize */
-    if (test_is_bsp()) {
+        /* Wait for AP to be ready */
+        while (!test8_ready) {
+            asm volatile("pause");
+        }
+
+        /* BSP: Initialize test */
         rwlock_init(&test_rwlock);
         shared_counter = 0;
+
+        /* Signal AP to start */
+        test8_ready = 2;  /* Phase 2: Start test */
+        asm volatile("mfence" ::: "memory");
+    } else {
+        /* AP: Signal that we're waiting */
+        test8_ready = 1;
+        asm volatile("mfence" ::: "memory");
+
+        /* Wait for BSP to initialize and signal start */
+        while (test8_ready != 2) {
+            asm volatile("pause");
+        }
     }
-    test_barrier_wait(num_cpus);
 
     /* Phase 2: All CPUs acquire read lock (interrupt-safe) */
     irq_flags_t flags;
@@ -626,11 +651,18 @@ static int test8_rwlock_readers(int num_cpus) {
         enable_interrupts();
     }
 
-    /* Phase 3: Synchronize and verify */
-    test_barrier_wait(num_cpus);
+    /* Mark this CPU as done */
+    test8_done[my_cpu] = 1;
+    asm volatile("mfence" ::: "memory");
 
+    /* Phase 3: BSP waits for all CPUs to finish and verifies */
     if (test_is_bsp()) {
-        test_barrier_reset();  /* Only BSP resets barrier */
+        /* Wait for AP to finish */
+        int timeout = BARRIER_TIMEOUT;
+        while (test8_done[1] == 0 && timeout > 0) {
+            asm volatile("pause");
+            timeout--;
+        }
 
         int has_error = 0;
         for (int i = 0; i < num_cpus; i++) {
@@ -639,6 +671,12 @@ static int test8_rwlock_readers(int num_cpus) {
                 break;
             }
         }
+
+        /* Clear flags for next test */
+        for (int i = 0; i < num_cpus; i++) {
+            test8_done[i] = 0;
+        }
+        test8_ready = 0;
 
         if (has_error) {
             test_puts("  FAIL: Reader counter was not positive\n");
@@ -655,21 +693,48 @@ static int test8_rwlock_readers(int num_cpus) {
 
 /**
  * test9_rwlock_writer - Test 9: Writer excludes readers
+ * Uses flag-based synchronization to avoid barrier deadlock.
  */
 static int test9_rwlock_writer(int num_cpus) {
+    /* Synchronization flags */
+    static volatile int test9_ready = 0;
+    static volatile int test9_done[SMP_MAX_CPUS] = {0};
+
     int my_cpu = test_get_cpu_index();
 
     if (test_is_bsp()) {
         test_puts("Test 9: RWLock writer exclusion...\n");
-        test_barrier_reset();  /* Reset barrier at start of test */
-    }
 
-    /* Phase 1: Initialize and synchronize */
-    if (test_is_bsp()) {
+        /* Wait for AP to be ready */
+        while (!test9_ready) {
+            asm volatile("pause");
+        }
+
+        /* BSP: Initialize test */
         rwlock_init(&test_rwlock);
         shared_counter = 0;
+
+        /* Signal AP to start - use atomic store for visibility */
+        __atomic_store_n(&test9_ready, 2, __ATOMIC_SEQ_CST);
+
+        /* Small delay to ensure AP sees the signal */
+        for (volatile int i = 0; i < 10000; i++) {
+            asm volatile("pause");
+        }
+    } else {
+        /* AP: Signal that we're waiting */
+        __atomic_store_n(&test9_ready, 1, __ATOMIC_SEQ_CST);
+
+        /* Wait for BSP to initialize and signal start */
+        while (test9_ready != 2) {
+            asm volatile("pause");
+        }
+
+        /* Small delay to ensure BSP has acquired write lock */
+        for (volatile int i = 0; i < 5000; i++) {
+            asm volatile("pause");
+        }
     }
-    test_barrier_wait(num_cpus);
 
     /* Phase 2: BSP acquires write lock, APs try read lock (interrupt-safe) */
     irq_flags_t flags;
@@ -685,6 +750,7 @@ static int test9_rwlock_writer(int num_cpus) {
             test_puts("  FAIL: Writer counter not -1\n");
             spin_write_unlock(&test_rwlock);
             enable_interrupts();
+            test9_ready = 0;
             return -1;
         }
 
@@ -715,11 +781,18 @@ static int test9_rwlock_writer(int num_cpus) {
         enable_interrupts();
     }
 
-    /* Phase 3: Synchronize and verify */
-    test_barrier_wait(num_cpus);
+    /* Mark this CPU as done */
+    test9_done[my_cpu] = 1;
+    asm volatile("mfence" ::: "memory");
 
+    /* Phase 3: BSP waits for all CPUs to finish and verifies */
     if (test_is_bsp()) {
-        test_barrier_reset();  /* Only BSP resets barrier */
+        /* Wait for AP to finish */
+        int timeout = BARRIER_TIMEOUT;
+        while (test9_done[1] == 0 && timeout > 0) {
+            asm volatile("pause");
+            timeout--;
+        }
 
         int has_error = 0;
         for (int i = 1; i < num_cpus; i++) {
@@ -728,6 +801,12 @@ static int test9_rwlock_writer(int num_cpus) {
                 break;
             }
         }
+
+        /* Clear flags for next test */
+        for (int i = 0; i < num_cpus; i++) {
+            test9_done[i] = 0;
+        }
+        test9_ready = 0;
 
         if (has_error) {
             test_puts("  FAIL: APs encountered errors\n");
