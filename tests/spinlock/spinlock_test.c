@@ -979,6 +979,11 @@ int run_spinlock_tests(void) {
         }
         test_set_phase(5);
 
+        /* Delay for AP to wake up and reach test10 barrier */
+        for (volatile int i = 0; i < 100000; i++) {
+            asm volatile("pause");
+        }
+
         /* Test 10: Deadlock prevention */
         result = test10_deadlock_prevention(num_cpus);
         if (result != 0) {
