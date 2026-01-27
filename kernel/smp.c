@@ -261,13 +261,15 @@ void ap_start(void) {
         asm volatile("pause");
     }
 
-    /* Check if spin lock tests are enabled */
+    /* Poll for spin lock test mode - BSP will set this flag */
     extern volatile int spinlock_test_start;
-    if (spinlock_test_start) {
-        /* Enter test mode - participate in SMP tests */
-        extern void spinlock_test_ap_entry(void);
-        spinlock_test_ap_entry();
+    while (!spinlock_test_start) {
+        asm volatile("pause");
     }
+
+    /* Enter test mode - participate in SMP tests */
+    extern void spinlock_test_ap_entry(void);
+    spinlock_test_ap_entry();
 
     /* Halt */
     while (1) { asm volatile ("hlt"); }

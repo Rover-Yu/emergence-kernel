@@ -44,6 +44,9 @@ static volatile int test_errors[SMP_MAX_CPUS];  /* Per-CPU error flags */
 /* Test completion flag */
 static volatile int test_complete = 0;
 
+/* Signal flag for test7 - BSP signals when lock is ready */
+static volatile int test7_lock_ready = 0;
+
 /* Timeout constants */
 #define BARRIER_TIMEOUT 10000000   /* ~10ms at 1GHz */
 #define SPIN_TIMEOUT 1000000       /* ~1ms at 1GHz */
@@ -51,6 +54,36 @@ static volatile int test_complete = 0;
 /* ============================================================================
  * Helper Functions
  * ============================================================================ */
+
+/**
+ * test_is_bsp - Check if current CPU is Bootstrap Processor (BSP)
+ * Returns: 1 if BSP, 0 otherwise
+ */
+static int test_is_bsp(void) {
+    /* Use the existing is_bsp() function from apic.c */
+    extern int is_bsp(void);
+    return is_bsp();
+}
+
+/**
+ * test_get_cpu_index - Get correct CPU index for array indexing
+ * Returns: 0 for BSP, 1 for first AP, etc.
+ *
+ * This function works around the bug where smp_get_cpu_index() returns
+ * the wrong value for BSP due to the global current_cpu_index variable.
+ */
+static int test_get_cpu_index(void) {
+    /* BSP always has index 0, APs have index 1, 2, etc. */
+    if (test_is_bsp()) {
+        return 0;
+    } else {
+        /* For APs, use APIC ID to determine index
+         * In QEMU with 2 CPUs: BSP has APIC ID 0, AP has APIC ID 1
+         * So APIC ID = CPU index for now */
+        extern uint8_t lapic_get_id(void);
+        return (int)lapic_get_id();
+    }
+}
 
 /**
  * test_barrier_wait - Synchronize all CPUs at a barrier
@@ -61,6 +94,9 @@ static volatile int test_complete = 0;
 static int test_barrier_wait(int expected) {
     /* Atomic increment of barrier counter */
     __sync_fetch_and_add(&test_barrier, 1);
+
+    /* CPU memory barrier - ensure increment visible immediately */
+    asm volatile("mfence" ::: "memory");
 
     /* Wait for all CPUs to arrive */
     int timeout = BARRIER_TIMEOUT;
@@ -80,9 +116,10 @@ static int test_barrier_wait(int expected) {
  * test_barrier_reset - Reset barrier for next use
  */
 static void test_barrier_reset(void) {
-    test_barrier = 0;
-    /* Memory barrier to ensure visibility */
-    asm volatile("" ::: "memory");
+    /* Use atomic exchange to ensure write is visible to all CPUs */
+    __atomic_exchange_n(&test_barrier, 0, __ATOMIC_SEQ_CST);
+    /* Full memory fence */
+    asm volatile("mfence" ::: "memory");
 }
 
 /**
@@ -92,9 +129,10 @@ static void test_barrier_reset(void) {
  * BSP sets the phase, APs wait for phase changes.
  */
 static void test_set_phase(int phase) {
-    test_phase = phase;
-    /* Memory barrier to ensure visibility */
-    asm volatile("" ::: "memory");
+    /* Use atomic exchange to ensure write is visible to all CPUs immediately */
+    __atomic_exchange_n(&test_phase, phase, __ATOMIC_SEQ_CST);
+    /* Force memory barrier */
+    asm volatile("mfence" ::: "memory");
 }
 
 /**
@@ -102,10 +140,13 @@ static void test_set_phase(int phase) {
  * @phase: Expected phase number
  *
  * Returns: 0 on success, -1 on timeout
+ *
+ * Note: Only exits when test_phase == phase, not when test_phase > phase.
+ * This prevents AP from skipping phases if BSP advances quickly.
  */
 static int test_wait_phase(int phase) {
     int timeout = BARRIER_TIMEOUT;
-    while (test_phase < phase && timeout > 0) {
+    while (test_phase != phase && timeout > 0) {
         asm volatile("pause");
         timeout--;
     }
@@ -390,14 +431,15 @@ static int test5_nested_locks(void) {
  * test6_lock_contention - Test 6: Lock contention with shared counter
  */
 static int test6_lock_contention(int num_cpus) {
-    int my_cpu = smp_get_cpu_index();
+    int my_cpu = test_get_cpu_index();
 
-    if (my_cpu == 0) {
+    if (test_is_bsp()) {
         test_puts("Test 6: Lock contention...\n");
+        test_barrier_reset();  /* Reset barrier at start of test */
     }
 
-    /* Phase 1: Initialize */
-    if (my_cpu == 0) {
+    /* Phase 1: Initialize and synchronize */
+    if (test_is_bsp()) {
         shared_counter = 0;
         spin_lock_init(&test_lock1);
         for (int i = 0; i < SMP_MAX_CPUS; i++) {
@@ -405,7 +447,6 @@ static int test6_lock_contention(int num_cpus) {
         }
     }
     test_barrier_wait(num_cpus);
-    test_barrier_reset();
 
     /* Phase 2: Each CPU increments shared counter 100 times */
     const int ITERATIONS = 100;
@@ -419,11 +460,12 @@ static int test6_lock_contention(int num_cpus) {
     /* Each CPU counts its iterations */
     test_counter[my_cpu] = ITERATIONS;
 
+    /* Phase 3: Synchronize and verify */
     test_barrier_wait(num_cpus);
-    test_barrier_reset();
 
-    /* Phase 3: BSP verifies result */
-    if (my_cpu == 0) {
+    if (test_is_bsp()) {
+        test_barrier_reset();  /* Only BSP resets barrier */
+
         int expected = 0;
         for (int i = 0; i < num_cpus; i++) {
             expected += test_counter[i];
@@ -454,48 +496,71 @@ static int test6_lock_contention(int num_cpus) {
  * test7_trylock_contention - Test 7: Trylock contention (exactly one succeeds)
  */
 static int test7_trylock_contention(int num_cpus) {
-    int my_cpu = smp_get_cpu_index();
+    int my_cpu = test_get_cpu_index();
 
-    if (my_cpu == 0) {
+    if (test_is_bsp()) {
         test_puts("Test 7: Trylock contention...\n");
+        test7_lock_ready = 0;  /* Initialize signal */
+        test_barrier_reset();  /* Reset barrier at start of test */
     }
 
-    /* Phase 1: Initialize */
-    if (my_cpu == 0) {
+    /* Phase 1: Initialize and synchronize */
+    if (test_is_bsp()) {
         spin_lock_init(&test_lock1);
-        /* Initially unlocked */
     }
     test_barrier_wait(num_cpus);
-    test_barrier_reset();
-
-    /* Phase 2: All CPUs try to acquire simultaneously */
-    /* Only one should succeed - disable interrupts for safety */
-    irq_flags_t flags;
-    asm volatile("pushf\npop %0" : "=rm"(flags));
-    disable_interrupts();
-
-    int success = spin_trylock(&test_lock1);
-    test_counter[my_cpu] = success ? 1 : 0;
-
-    /* Small delay to keep the lock held */
-    for (volatile int i = 0; i < 1000; i++) {
-        asm volatile("pause");
+    if (test_is_bsp()) {
+        test_barrier_reset();  /* Reset for second barrier */
     }
 
-    if (success) {
+    /* Phase 2: Test trylock - BSP holds lock, AP tries to acquire (should fail) */
+    if (test_is_bsp()) {
+        /* BSP: Acquire and hold lock */
+        irq_flags_t flags;
+        asm volatile("pushf\npop %0" : "=rm"(flags));
+        disable_interrupts();
+
+        spin_lock(&test_lock1);
+        test_counter[my_cpu] = 1;  /* BSP acquired lock */
+
+        /* Signal AP that lock is held */
+        test7_lock_ready = 1;
+        asm volatile("mfence" ::: "memory");  /* Ensure write is visible */
+
+        /* Wait for AP to finish its attempt (AP will increment barrier) */
+        test_barrier_wait(num_cpus);
+
         spin_unlock(&test_lock1);
-    }
+        enable_interrupts();
+    } else {
+        /* AP: Wait for BSP to acquire lock, then try trylock */
+        while (!test7_lock_ready) {
+            asm volatile("pause");
+        }
 
-    /* Restore interrupt state */
-    if (flags & (1 << 9)) {
+        irq_flags_t flags;
+        asm volatile("pushf\npop %0" : "=rm"(flags));
+        disable_interrupts();
+
+        int success = spin_trylock(&test_lock1);
+        test_counter[my_cpu] = success ? 1 : 0;
+
+        /* Signal BSP we're done */
+        __sync_fetch_and_add(&test_barrier, 1);
+
+        if (success) {
+            spin_unlock(&test_lock1);
+        }
+
         enable_interrupts();
     }
 
+    /* Phase 3: Synchronize and verify */
     test_barrier_wait(num_cpus);
-    test_barrier_reset();
 
-    /* Phase 3: BSP verifies exactly one succeeded */
-    if (my_cpu == 0) {
+    if (test_is_bsp()) {
+        test_barrier_reset();  /* Reset for next test */
+
         int total_success = 0;
         for (int i = 0; i < num_cpus; i++) {
             total_success += test_counter[i];
@@ -520,19 +585,19 @@ static int test7_trylock_contention(int num_cpus) {
  * test8_rwlock_readers - Test 8: Multiple concurrent readers
  */
 static int test8_rwlock_readers(int num_cpus) {
-    int my_cpu = smp_get_cpu_index();
+    int my_cpu = test_get_cpu_index();
 
-    if (my_cpu == 0) {
+    if (test_is_bsp()) {
         test_puts("Test 8: RWLock concurrent readers...\n");
+        test_barrier_reset();  /* Reset barrier at start of test */
     }
 
-    /* Phase 1: Initialize */
-    if (my_cpu == 0) {
+    /* Phase 1: Initialize and synchronize */
+    if (test_is_bsp()) {
         rwlock_init(&test_rwlock);
         shared_counter = 0;
     }
     test_barrier_wait(num_cpus);
-    test_barrier_reset();
 
     /* Phase 2: All CPUs acquire read lock (interrupt-safe) */
     irq_flags_t flags;
@@ -543,7 +608,7 @@ static int test8_rwlock_readers(int num_cpus) {
 
     /* Check that we can see the reader count */
     if (test_rwlock.counter <= 0) {
-        test_errors[my_cpu] = 1;  /* Error: counter should be positive */
+        test_errors[my_cpu] = 1;
     } else {
         test_errors[my_cpu] = 0;
     }
@@ -560,11 +625,12 @@ static int test8_rwlock_readers(int num_cpus) {
         enable_interrupts();
     }
 
+    /* Phase 3: Synchronize and verify */
     test_barrier_wait(num_cpus);
-    test_barrier_reset();
 
-    /* Phase 3: BSP verifies all readers acquired lock */
-    if (my_cpu == 0) {
+    if (test_is_bsp()) {
+        test_barrier_reset();  /* Only BSP resets barrier */
+
         int has_error = 0;
         for (int i = 0; i < num_cpus; i++) {
             if (test_errors[i] != 0) {
@@ -590,26 +656,26 @@ static int test8_rwlock_readers(int num_cpus) {
  * test9_rwlock_writer - Test 9: Writer excludes readers
  */
 static int test9_rwlock_writer(int num_cpus) {
-    int my_cpu = smp_get_cpu_index();
+    int my_cpu = test_get_cpu_index();
 
-    if (my_cpu == 0) {
+    if (test_is_bsp()) {
         test_puts("Test 9: RWLock writer exclusion...\n");
+        test_barrier_reset();  /* Reset barrier at start of test */
     }
 
-    /* Phase 1: Initialize */
-    if (my_cpu == 0) {
+    /* Phase 1: Initialize and synchronize */
+    if (test_is_bsp()) {
         rwlock_init(&test_rwlock);
         shared_counter = 0;
     }
     test_barrier_wait(num_cpus);
-    test_barrier_reset();
 
     /* Phase 2: BSP acquires write lock, APs try read lock (interrupt-safe) */
     irq_flags_t flags;
     asm volatile("pushf\npop %0" : "=rm"(flags));
     disable_interrupts();
 
-    if (my_cpu == 0) {
+    if (test_is_bsp()) {
         /* BSP: Acquire write lock */
         spin_write_lock(&test_rwlock);
 
@@ -621,21 +687,21 @@ static int test9_rwlock_writer(int num_cpus) {
             return -1;
         }
 
-        /* Hold write lock briefly */
-        for (volatile int i = 0; i < 10000; i++) {
+        /* Hold write lock briefly to ensure APs block */
+        for (volatile int i = 0; i < 100000; i++) {
             asm volatile("pause");
         }
 
         spin_write_unlock(&test_rwlock);
     } else {
         /* APs: Try to acquire read lock while writer holds it */
-        /* This should block until writer releases */
+        /* This will block until writer releases */
         spin_read_lock(&test_rwlock);
 
         /* Once we get here, writer has released */
         /* Verify we now have read access */
         if (test_rwlock.counter <= 0) {
-            test_errors[my_cpu] = 1;  /* Should have positive counter */
+            test_errors[my_cpu] = 1;
         } else {
             test_errors[my_cpu] = 0;
         }
@@ -648,11 +714,12 @@ static int test9_rwlock_writer(int num_cpus) {
         enable_interrupts();
     }
 
+    /* Phase 3: Synchronize and verify */
     test_barrier_wait(num_cpus);
-    test_barrier_reset();
 
-    /* Phase 3: BSP verifies APs were blocked */
-    if (my_cpu == 0) {
+    if (test_is_bsp()) {
+        test_barrier_reset();  /* Only BSP resets barrier */
+
         int has_error = 0;
         for (int i = 1; i < num_cpus; i++) {
             if (test_errors[i] != 0) {
@@ -676,25 +743,24 @@ static int test9_rwlock_writer(int num_cpus) {
 
 /**
  * test10_deadlock_prevention - Test 10: Deadlock prevention with consistent ordering
+ *
+ * All CPUs acquire locks in consistent order (lock1, then lock2) to prevent deadlock.
  */
 static int test10_deadlock_prevention(int num_cpus) {
-    int my_cpu = smp_get_cpu_index();
-
-    if (my_cpu == 0) {
+    if (test_is_bsp()) {
         test_puts("Test 10: Deadlock prevention...\n");
+        test_barrier_reset();  /* Reset barrier at start of test */
     }
 
-    /* Phase 1: Initialize */
-    if (my_cpu == 0) {
+    /* Phase 1: Initialize and barrier (BSP initializes, both synchronize) */
+    if (test_is_bsp()) {
         spin_lock_init(&test_lock1);
         spin_lock_init(&test_lock2);
         shared_counter = 0;
     }
     test_barrier_wait(num_cpus);
-    test_barrier_reset();
 
-    /* Phase 2: All CPUs acquire locks in consistent order (lock1, then lock2) */
-    /* This prevents deadlock even with contention (interrupt-safe) */
+    /* Phase 2: All CPUs execute critical section with consistent lock ordering */
     irq_flags_t flags;
     asm volatile("pushf\npop %0" : "=rm"(flags));
     disable_interrupts();
@@ -716,11 +782,12 @@ static int test10_deadlock_prevention(int num_cpus) {
         enable_interrupts();
     }
 
+    /* Phase 3: Barrier and verify (both synchronize, BSP verifies) */
     test_barrier_wait(num_cpus);
-    test_barrier_reset();
 
-    /* Phase 3: BSP verifies result and no deadlock occurred */
-    if (my_cpu == 0) {
+    if (test_is_bsp()) {
+        test_barrier_reset();  /* Only BSP resets barrier */
+
         int expected = num_cpus * 10;
 
         if (shared_counter == expected) {
@@ -751,9 +818,14 @@ static int test10_deadlock_prevention(int num_cpus) {
  *
  * Called by APs when spinlock_test_start is set.
  * APs participate in SMP tests coordinated by BSP.
+ *
+ * Synchronization pattern:
+ * 1. AP waits for BSP to set phase N
+ * 2. Both AP and BSP call test function (which handles internal barriers)
+ * 3. BSP sets phase N+1
+ * 4. Repeat for next test
  */
 void spinlock_test_ap_entry(void) {
-    int my_cpu = smp_get_cpu_index();
     int num_cpus = test_get_active_cpu_count();
 
     /* Wait for BSP to signal first test phase */
@@ -768,55 +840,35 @@ void spinlock_test_ap_entry(void) {
     result = test6_lock_contention(num_cpus);
     if (result != 0) {
         test_atomic_inc(&tests_failed);
-    } else if (my_cpu == 0) {
-        test_atomic_inc(&tests_passed);
     }
-    test_barrier_reset();
-    test_set_phase(2);
+    test_wait_phase(2);
 
     /* Test 7: Trylock contention */
-    test_wait_phase(2);
     result = test7_trylock_contention(num_cpus);
     if (result != 0) {
         test_atomic_inc(&tests_failed);
-    } else if (my_cpu == 0) {
-        test_atomic_inc(&tests_passed);
     }
-    test_barrier_reset();
-    test_set_phase(3);
+    test_wait_phase(3);
 
     /* Test 8: RWLock readers */
-    test_wait_phase(3);
     result = test8_rwlock_readers(num_cpus);
     if (result != 0) {
         test_atomic_inc(&tests_failed);
-    } else if (my_cpu == 0) {
-        test_atomic_inc(&tests_passed);
     }
-    test_barrier_reset();
-    test_set_phase(4);
+    test_wait_phase(4);
 
     /* Test 9: RWLock writer */
-    test_wait_phase(4);
     result = test9_rwlock_writer(num_cpus);
     if (result != 0) {
         test_atomic_inc(&tests_failed);
-    } else if (my_cpu == 0) {
-        test_atomic_inc(&tests_passed);
     }
-    test_barrier_reset();
-    test_set_phase(5);
+    test_wait_phase(5);
 
     /* Test 10: Deadlock prevention */
-    test_wait_phase(5);
     result = test10_deadlock_prevention(num_cpus);
     if (result != 0) {
         test_atomic_inc(&tests_failed);
-    } else if (my_cpu == 0) {
-        test_atomic_inc(&tests_passed);
     }
-    test_barrier_reset();
-    test_set_phase(6);
 
     /* Wait for BSP to signal completion */
     test_wait_phase(6);
@@ -842,39 +894,6 @@ int run_spinlock_tests(void) {
     test_puts("Number of CPUs: ");
     test_put_hex(num_cpus);
     test_puts("\n\n");
-
-    /* ========================================================================
-     * Single-CPU Tests (Run on BSP only)
-     * ======================================================================== */
-
-    test_puts("=== Single-CPU Tests ===\n\n");
-
-    /* Only run test 1 - test 2 might have issues */
-    if (test1_basic_lock_unlock() != 0) {
-        failures++;
-    }
-
-    /* Skip test 2 and remaining tests for debugging */
-    test_puts("(Test 2 and remaining tests skipped for debugging)\n\n");
-
-    /* Skip SMP tests for now */
-    test_puts("=== SMP Tests Skipped ===\n\n");
-
-    test_puts("========================================\n");
-    test_puts("Tests complete\n");
-    test_puts("Summary: ");
-    test_put_hex(1 - failures);
-    test_puts("/1 tests passed\n");
-
-    if (failures == 0) {
-        test_puts("Result: ALL TESTS PASSED\n");
-    } else {
-        test_puts("Result: SOME TESTS FAILED\n");
-    }
-
-    test_puts("========================================\n\n");
-
-    return failures;
 
     /* ========================================================================
      * Single-CPU Tests (Run on BSP only)
@@ -917,7 +936,7 @@ int run_spinlock_tests(void) {
          * APs should already be waiting in spinlock_test_ap_entry() */
 
         /* Small delay to ensure APs are ready and in test entry */
-        for (volatile int i = 0; i < 100000; i++) {
+        for (volatile int i = 0; i < 2000000; i++) {
             asm volatile("pause");
         }
 
@@ -925,18 +944,18 @@ int run_spinlock_tests(void) {
         test_set_phase(1);
 
         /* Small delay for APs to wake up */
-        for (volatile int i = 0; i < 10000; i++) {
+        for (volatile int i = 0; i < 200000; i++) {
             asm volatile("pause");
         }
 
-        /* Run SMP tests - APs will participate via spinlock_test_ap_entry() */
+        /* Run SMP tests - APs will participate via spinlock_test_ap_entry()
+         * Both BSP and AP call test functions, which handle their own synchronization internally */
 
         /* Test 6: Lock contention */
         int result = test6_lock_contention(num_cpus);
         if (result != 0) {
             failures++;
         }
-        test_barrier_reset();
         test_set_phase(2);
 
         /* Test 7: Trylock contention */
@@ -944,7 +963,6 @@ int run_spinlock_tests(void) {
         if (result != 0) {
             failures++;
         }
-        test_barrier_reset();
         test_set_phase(3);
 
         /* Test 8: RWLock readers */
@@ -952,7 +970,6 @@ int run_spinlock_tests(void) {
         if (result != 0) {
             failures++;
         }
-        test_barrier_reset();
         test_set_phase(4);
 
         /* Test 9: RWLock writer */
@@ -960,7 +977,6 @@ int run_spinlock_tests(void) {
         if (result != 0) {
             failures++;
         }
-        test_barrier_reset();
         test_set_phase(5);
 
         /* Test 10: Deadlock prevention */
@@ -968,7 +984,6 @@ int run_spinlock_tests(void) {
         if (result != 0) {
             failures++;
         }
-        test_barrier_reset();
         test_set_phase(6);
 
         /* Signal APs that tests are complete */

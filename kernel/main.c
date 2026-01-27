@@ -172,9 +172,9 @@ void kernel_main(uint32_t multiboot_info_addr) {
         smp_mark_cpu_ready(0);
 
         /* Keep spinlock_test_start = 0 during AP startup
-         * APs will halt normally. We'll set it to 1 later before SMP tests. */
+         * APs will wait for this flag to be set before joining tests */
         extern volatile int spinlock_test_start;
-        spinlock_test_start = 0;  /* APs will halt, not enter test mode yet */
+        spinlock_test_start = 0;
 
         /* Start all APs */
         serial_puts("SMP: Starting APs...\n");
@@ -185,10 +185,18 @@ void kernel_main(uint32_t multiboot_info_addr) {
          * This allows the APIC timer to generate interrupts */
         enable_interrupts();
 
-        /* Now enable spin lock test mode and wake up APs for SMP tests
-         * Note: APs are currently halted. Setting this flag won't wake them.
-         * For now, we'll run single-CPU tests only. */
-        spinlock_test_start = 1;  /* Set for future use if we implement AP wake */
+        /* Enable spin lock test mode - APs are polling for this flag
+         * Once set, APs will wake from their polling loop and join SMP tests */
+        spinlock_test_start = 1;
+
+        /* Memory barrier to ensure APs see the flag change immediately */
+        asm volatile("" ::: "memory");
+
+        /* Small delay to ensure APs wake up and enter spinlock_test_ap_entry()
+         * This gives APs time to exit their polling loop and start waiting for phase 1 */
+        for (volatile int i = 0; i < 1000000; i++) {
+            asm volatile("pause");
+        }
 
         /* Run spin lock tests */
         serial_puts("SMP: Starting spin lock tests...\n");
