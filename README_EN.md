@@ -1,5 +1,7 @@
 # Emergence Kernel
 
+> "We wrote not a single line of code. We only defined the rules of creation."
+
 > **Emergence Kernel** is an experimental x86_64 operating system kernel written entirely by LLM (Claude) through prompts - **zero hand-written code**.
 
 This is a research kernel project aimed at exploring the boundaries of LLM capabilities in OS kernel development. All code is generated through natural language conversations, including low-level assembly, memory management, and multiprocessor support.
@@ -234,9 +236,11 @@ All code in this project is generated via **Claude Code** (claude.ai/code):
 ## Debug Output Example
 
 ```
-+============================================================+
-|  Emergence Kernel - Intelligence through Emergence      |
-+============================================================+
+▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+░░░                                      ░░░
+▓▓▓  [ Emergence Kernel ]  v0.1  ▓▓▓
+░░░   > Learning with Every Boot   ░░░
+▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
 
 PMM: Initialized
 [ PMM tests ] Running allocation tests...

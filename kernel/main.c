@@ -63,23 +63,27 @@ void kernel_main(uint32_t multiboot_info_addr) {
     serial_driver_init();
 
     /* Print boot banner FIRST - before any other output */
-    const char *banner_top    = "+============================================================+";
-    const char *banner_msg    = "|  Emergence Kernel - Intelligence through Emergence      |";
-    const char *banner_bottom = "+============================================================+";
+    const char *banner[] = {
+        "▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓",
+        "░░░                                      ░░░",
+        "▓▓▓  [ Emergence Kernel ]  v0.1  ▓▓▓",
+        "░░░   > Learning with Every Boot   ░░░",
+        "▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓"
+    };
+    const int banner_lines = sizeof(banner) / sizeof(banner[0]);
 
-    /* Print banner to VGA (rows 0-2) */
-    vga_puts(banner_top,    0, 0, color);
-    vga_puts(banner_msg,    1, 0, color);
-    vga_puts(banner_bottom, 2, 0, color);
+    /* Print banner to VGA */
+    for (int i = 0; i < banner_lines && i < 25; i++) {
+        vga_puts(banner[i], i, 0, color);
+    }
 
     /* Print banner to serial console */
     serial_puts("\n");
-    serial_puts(banner_top);
+    for (int i = 0; i < banner_lines; i++) {
+        serial_puts(banner[i]);
+        serial_puts("\n");
+    }
     serial_puts("\n");
-    serial_puts(banner_msg);
-    serial_puts("\n");
-    serial_puts(banner_bottom);
-    serial_puts("\n\n");
 
     /* Step 2: Probe devices and match with drivers */
     device_probe_all();
