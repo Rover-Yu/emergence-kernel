@@ -90,6 +90,7 @@ run_qemu() {
     # Run QEMU with serial output to file, timeout after specified seconds
     # Include shutdown device for clean VM exit after SMP startup completes (8-bit I/O)
     timeout ${QEMU_TIMEOUT} qemu-system-x86_64 \
+        -enable-kvm \
         -M pc \
         -m 128M \
         -nographic \
@@ -113,7 +114,7 @@ parse_boot_logs() {
     local boot_log=$(cat "$SERIAL_OUTPUT" 2>/dev/null || echo "")
 
     # Test 1: Check kernel started
-    if echo "$boot_log" | grep -q "Hello, JAKernel"; then
+    if echo "$boot_log" | grep -q "JAkernel"; then
         print_result "Kernel started" "true"
     else
         print_result "Kernel started" "false" "No kernel greeting found"

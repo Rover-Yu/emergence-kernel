@@ -5,6 +5,10 @@ ISO := jakernel.iso
 BUILD_DIR := build
 ISO_DIR := isodir
 
+# Configuration
+# Set to 1 to enable spinlock tests, 0 to disable
+CONFIG_SPINLOCK_TESTS ?= 1
+
 # Tools
 CC := gcc
 AS := as
@@ -13,6 +17,7 @@ GRUB_MKRESCUE := grub-mkrescue
 
 # Flags (x86_64 with multiboot support)
 CFLAGS := -ffreestanding -O2 -Wall -Wextra -nostdlib -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2 -I.
+CFLAGS += -DCONFIG_SPINLOCK_TESTS=$(CONFIG_SPINLOCK_TESTS)
 LDFLAGS := -nostdlib -m elf_x86_64
 
 # Architecture-specific sources (x86_64)
@@ -29,6 +34,8 @@ TRAMPOLINE_OBJ := $(BUILD_DIR)/ap_trampoline.o
 KERNEL_DIR := kernel
 KERNEL_C_SRCS := $(KERNEL_DIR)/main.c $(KERNEL_DIR)/device.c $(KERNEL_DIR)/smp.c \
                  $(KERNEL_DIR)/pmm.c $(KERNEL_DIR)/multiboot2.c
+
+# Spinlock test sources (conditionally compiled)
 SPINLOCK_TEST_SRC := tests/spinlock/spinlock_test.c
 SPINLOCK_TEST_OBJ := $(BUILD_DIR)/kernel_spinlock_test.o
 
@@ -46,7 +53,13 @@ ARCH_BOOT_OBJ := $(patsubst $(ARCH_DIR)/%.S,$(BUILD_DIR)/boot_%.o,$(ARCH_DIR)/bo
 ARCH_OBJS := $(patsubst $(ARCH_DIR)/%.c,$(BUILD_DIR)/arch_%.o,$(ARCH_C_SRCS))
 KERNEL_OBJS := $(patsubst $(KERNEL_DIR)/%.c,$(BUILD_DIR)/kernel_%.o,$(KERNEL_C_SRCS))
 TESTS_OBJS := $(patsubst $(TESTS_DIR)/%.c,$(BUILD_DIR)/test_%.o,$(TESTS_C_SRCS))
+
+# Conditionally include spinlock test object
+ifeq ($(CONFIG_SPINLOCK_TESTS),1)
 OBJS := $(ARCH_BOOT_OBJ) $(ARCH_OBJS) $(KERNEL_OBJS) $(TESTS_OBJS) $(TRAMPOLINE_OBJ) $(SPINLOCK_TEST_OBJ)
+else
+OBJS := $(ARCH_BOOT_OBJ) $(ARCH_OBJS) $(KERNEL_OBJS) $(TESTS_OBJS) $(TRAMPOLINE_OBJ)
+endif
 KERNEL_ELF := $(BUILD_DIR)/$(KERNEL).elf
 
 .PHONY: all clean run test test-all test-boot test-apic-timer test-smp
@@ -75,9 +88,11 @@ $(BUILD_DIR)/arch_%.o: $(ARCH_DIR)/%.c | $(BUILD_DIR)
 $(BUILD_DIR)/kernel_%.o: $(KERNEL_DIR)/%.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Compile spinlock test (from tests/spinlock/)
+# Compile spinlock test (from tests/spinlock/) - only if enabled
+ifeq ($(CONFIG_SPINLOCK_TESTS),1)
 $(SPINLOCK_TEST_OBJ): $(SPINLOCK_TEST_SRC) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
+endif
 
 # Compile test C files
 $(BUILD_DIR)/test_%.o: $(TESTS_DIR)/%.c | $(BUILD_DIR)
@@ -103,10 +118,10 @@ $(ISO): $(KERNEL_ELF) | $(ISO_DIR)
 	$(GRUB_MKRESCUE) -o $@ $(ISO_DIR)
 
 run: $(ISO)
-	qemu-system-x86_64 -M pc -m 128M -nographic -cdrom $(ISO) -smp 4 -device isa-debug-exit,iobase=0xB004,iosize=1 || exit 0
+	qemu-system-x86_64 -enable-kvm -M pc -m 128M -nographic -cdrom $(ISO) -smp 4 -device isa-debug-exit,iobase=0xB004,iosize=1 || exit 0
 
 run-debug: $(ISO)
-	qemu-system-x86_64 -M pc -m 128M -nographic -cdrom $(ISO) -smp 4 -s -S -device isa-debug-exit,iobase=0xB004,iosize=1 || exit 0
+	qemu-system-x86_64 -enable-kvm -M pc -m 128M -nographic -cdrom $(ISO) -smp 4 -s -S -device isa-debug-exit,iobase=0xB004,iosize=1 || exit 0
 
 clean:
 	rm -rf $(BUILD_DIR) $(ISO_DIR) $(ISO)

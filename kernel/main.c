@@ -171,10 +171,12 @@ void kernel_main(uint32_t multiboot_info_addr) {
         /* Mark BSP as ready */
         smp_mark_cpu_ready(0);
 
+#if CONFIG_SPINLOCK_TESTS
         /* Keep spinlock_test_start = 0 during AP startup
          * APs will wait for this flag to be set before joining tests */
         extern volatile int spinlock_test_start;
         spinlock_test_start = 0;
+#endif
 
         /* Start all APs */
         serial_puts("SMP: Starting APs...\n");
@@ -185,6 +187,7 @@ void kernel_main(uint32_t multiboot_info_addr) {
          * This allows the APIC timer to generate interrupts */
         enable_interrupts();
 
+#if CONFIG_SPINLOCK_TESTS
         /* Enable spin lock test mode - APs are polling for this flag
          * Once set, APs will wake from their polling loop and join SMP tests */
         spinlock_test_start = 1;
@@ -210,6 +213,7 @@ void kernel_main(uint32_t multiboot_info_addr) {
             serial_put_hex(test_failures);
             serial_puts("\n");
         }
+#endif
 
         /* BSP waits with interrupts enabled for timer interrupts to fire
          * The HLT instruction will wake up on each interrupt */

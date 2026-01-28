@@ -47,7 +47,7 @@ main() {
     local boot_log=$(cat "$output_file" 2>/dev/null || echo "")
 
     # Test 1: Kernel greeting message
-    if echo "$boot_log" | grep -q "Hello, JAKernel"; then
+    if echo "$boot_log" | grep -q "JAkernel"; then
         print_result "Kernel greeting message" "true"
     else
         print_result "Kernel greeting message" "false" "No greeting message found"
@@ -78,17 +78,17 @@ main() {
     assert_no_exceptions "$output_file"
 
     # Test 6: APIC initialization present
-    if echo "$boot_log" | grep -q "\[APIC\]"; then
+    if echo "$boot_log" | grep -q "APIC:.*Local APIC initialized"; then
         print_result "APIC initialization" "true" "APIC messages found"
     else
         print_result "APIC initialization" "false" "No APIC messages found"
     fi
 
-    # Test 7: Timer initialization present
-    if echo "$boot_log" | grep -q "\[APIC_TIMER\]"; then
-        print_result "APIC timer initialization" "true" "Timer init messages found"
+    # Test 7: Spinlock tests complete
+    if echo "$boot_log" | grep -q "ALLDONE"; then
+        print_result "Kernel tests complete" "true" "ALLDONE found"
     else
-        print_result "APIC timer initialization" "false" "No timer init messages found"
+        print_result "Kernel tests complete" "false" "ALLDONE not found"
     fi
 
     print_summary

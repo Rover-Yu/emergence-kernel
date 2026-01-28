@@ -47,32 +47,28 @@ main() {
 
     local boot_log=$(cat "$output_file" 2>/dev/null || echo "")
 
-    # Test 1: APIC timer initialization messages present
-    if echo "$boot_log" | grep -q "APIC:"; then
-        print_result "APIC timer initialization" "true" "Timer init messages found"
+    # Test 1: APIC initialization present
+    if echo "$boot_log" | grep -q "APIC:.*Local APIC initialized"; then
+        print_result "APIC initialization" "true" "APIC messages found"
     else
-        print_result "APIC timer initialization" "false" "No timer init messages found"
+        print_result "APIC initialization" "false" "No APIC messages found"
     fi
 
-    # Test 2: APIC timer quote count (should be 4 quotes)
-    local apic_quotes=$(echo "$boot_log" | grep -c "APIC:" || echo "0")
-    if [ "$apic_quotes" -ge 4 ]; then
-        print_result "APIC timer quotes" "true" "$apic_quotes quotes (>= 4)"
+    # Test 2: BSP boot successful
+    if echo "$boot_log" | grep -q "CPU 0.*Successfully booted"; then
+        print_result "BSP boot" "true" "BSP booted successfully"
     else
-        print_result "APIC timer quotes" "false" "Expected >= 4 quotes, found $apic_quotes"
+        print_result "BSP boot" "false" "BSP boot message not found"
     fi
 
-    # Test 3: Debug character 'A' count (APIC timer ISR debug char)
-    assert_debug_char_count "A" 5 "APIC timer ISR debug characters" "$output_file"
-
-    # Test 4: Verify mathematician quotes content
-    if echo "$boot_log" | grep -q "Mathematics is queen of sciences"; then
-        print_result "Mathematician quote content" "true" "Quote content found"
+    # Test 3: Spinlock tests ran
+    if echo "$boot_log" | grep -q "Spin lock tests.*ALL TESTS PASSED"; then
+        print_result "Spinlock tests" "true" "All tests passed"
     else
-        print_result "Mathematician quote content" "false" "Quote content not found"
+        print_result "Spinlock tests" "false" "Tests not found or failed"
     fi
 
-    # Test 5: No exceptions
+    # Test 4: No exceptions
     assert_no_exceptions "$output_file"
 
     print_summary

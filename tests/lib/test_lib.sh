@@ -76,6 +76,7 @@ run_qemu_capture() {
     # Redirect both stdout and stderr to /dev/null to suppress QEMU monitor output
     # Include shutdown device for clean VM exit (8-bit I/O for exit code 0)
     timeout ${timeout} qemu-system-x86_64 \
+        -enable-kvm \
         -M pc \
         -m 128M \
         -nographic \
