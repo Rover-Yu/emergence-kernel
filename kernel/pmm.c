@@ -94,7 +94,7 @@ static void add_free_block(uint64_t addr, uint8_t order) {
 }
 
 /* Remove a block from free list */
-static block_info_t *remove_free_block(uint8_t order) {
+static __attribute__((unused)) block_info_t *remove_free_block(uint8_t order) {
     struct list_head *node = list_pop_front(&pmm_state.free_lists[order].list);
 
     if (!node) {
@@ -257,7 +257,6 @@ void pmm_init(uint32_t mbi_addr) {
  * @size: Size of region in bytes
  */
 void pmm_add_region(uint64_t base, uint64_t size) {
-    mem_region_t *region;
     uint64_t addr;
     uint64_t end;
     uint8_t order;

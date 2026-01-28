@@ -28,7 +28,7 @@ static volatile int ready_cpus = 0;
 static int actual_cpu_count = 0;
 
 /* CPU ID assignment - atomically incremented by each CPU */
-static volatile int next_cpu_id = 0;
+static volatile atomic_int next_cpu_id = 0;
 
 /* BSP initialization complete flag - use the same variable as boot.S */
 extern volatile int bsp_init_done;

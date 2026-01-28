@@ -156,7 +156,7 @@ void multiboot2_parse(uint32_t mbi_addr) {
         tag = (multiboot_tag_t *)((uint8_t *)tag + ((tag->size + 7) & ~7));
 
         /* Safety check - don't read beyond total_size */
-        if ((uint8_t *)tag - (uint8_t *)mbi >= total_size) {
+        if ((uint64_t)((uint8_t *)tag - (uint8_t *)mbi) >= total_size) {
             break;
         }
     }
