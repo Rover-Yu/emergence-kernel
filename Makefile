@@ -16,7 +16,7 @@ LD := ld
 GRUB_MKRESCUE := grub-mkrescue
 
 # Flags (x86_64 with multiboot support)
-CFLAGS := -ffreestanding -O2 -Wall -Wextra -nostdlib -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2 -I.
+CFLAGS := -ffreestanding -O2 -Wall -nostdlib -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2 -I.
 CFLAGS += -DCONFIG_SPINLOCK_TESTS=$(CONFIG_SPINLOCK_TESTS)
 LDFLAGS := -nostdlib -m elf_x86_64
 
