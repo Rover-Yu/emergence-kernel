@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include "kernel/smp.h"
 #include "include/spinlock.h"
+#include "include/atomic.h"
+#include "include/barrier.h"
 #include "arch/x86_64/serial.h"
 
 /* External functions */
@@ -20,16 +22,16 @@ extern uint8_t smp_get_apic_id(void);
 volatile int spinlock_test_start = 0;
 
 /* Barrier counter - counts CPUs that have reached the barrier */
-static volatile int test_barrier = 0;
+static atomic_int test_barrier = 0;
 
 /* Current test phase - indicates which test is running */
-static volatile int test_phase = 0;
+static atomic_int test_phase = 0;
 
 /* Per-CPU counters for SMP tests */
 static volatile int test_counter[SMP_MAX_CPUS];
 
 /* Shared counter for lock contention tests */
-static volatile int shared_counter = 0;
+static atomic_int shared_counter = 0;
 
 /* Test locks */
 static spinlock_t test_lock1;
@@ -45,7 +47,13 @@ static volatile int test_errors[SMP_MAX_CPUS];  /* Per-CPU error flags */
 static volatile int test_complete = 0;
 
 /* Signal flag for test7 - BSP signals when lock is ready */
-static volatile int test7_lock_ready = 0;
+static atomic_int test7_lock_ready = 0;
+
+/* Signal flag for test7 - AP confirms it attempted trylock */
+static atomic_int test7_ap_confirmed = 0;
+
+/* Per-CPU completion flags for test10 */
+static atomic_int test10_cpu_done[SMP_MAX_CPUS];
 
 /* Timeout constants */
 #define BARRIER_TIMEOUT 10000000   /* ~10ms at 1GHz */
@@ -92,17 +100,19 @@ static int test_get_cpu_index(void) {
  * Returns: 0 on success, -1 on timeout
  */
 static int test_barrier_wait(int expected) {
-    /* Atomic increment of barrier counter */
-    __sync_fetch_and_add(&test_barrier, 1);
+    /* Atomic increment with release semantics - ensures increment visible before wait */
+    atomic_fetch_add_explicit(&test_barrier, 1, memory_order_release);
 
     /* CPU memory barrier - ensure increment visible immediately */
-    asm volatile("mfence" ::: "memory");
+    smp_mb();
 
-    /* Wait for all CPUs to arrive */
+    /* Wait for all CPUs to arrive - use acquire semantics to see latest value */
     int timeout = BARRIER_TIMEOUT;
-    while (test_barrier < expected && timeout > 0) {
-        asm volatile("pause");
+    int current = atomic_load_explicit(&test_barrier, memory_order_acquire);
+    while (current < expected && timeout > 0) {
+        cpu_relax();
         timeout--;
+        current = atomic_load_explicit(&test_barrier, memory_order_acquire);
     }
 
     if (timeout == 0) {
@@ -116,10 +126,10 @@ static int test_barrier_wait(int expected) {
  * test_barrier_reset - Reset barrier for next use
  */
 static void test_barrier_reset(void) {
-    /* Use atomic exchange to ensure write is visible to all CPUs */
-    __atomic_exchange_n(&test_barrier, 0, __ATOMIC_SEQ_CST);
+    /* Use atomic exchange with release to ensure write is visible to all CPUs */
+    atomic_exchange_explicit(&test_barrier, 0, memory_order_release);
     /* Full memory fence */
-    asm volatile("mfence" ::: "memory");
+    smp_mb();
 }
 
 /**
@@ -130,9 +140,9 @@ static void test_barrier_reset(void) {
  */
 static void test_set_phase(int phase) {
     /* Use atomic exchange to ensure write is visible to all CPUs immediately */
-    __atomic_exchange_n(&test_phase, phase, __ATOMIC_SEQ_CST);
+    atomic_exchange_explicit(&test_phase, phase, memory_order_relaxed);
     /* Force memory barrier */
-    asm volatile("mfence" ::: "memory");
+    smp_mb();
 }
 
 /**
@@ -146,8 +156,8 @@ static void test_set_phase(int phase) {
  */
 static int test_wait_phase(int phase) {
     int timeout = BARRIER_TIMEOUT;
-    while (test_phase != phase && timeout > 0) {
-        asm volatile("pause");
+    while (atomic_load_explicit(&test_phase, memory_order_relaxed) != phase && timeout > 0) {
+        cpu_relax();
         timeout--;
     }
     return (timeout == 0) ? -1 : 0;
@@ -169,7 +179,26 @@ static int test_get_active_cpu_count(void) {
  * Returns: New value after increment
  */
 static int test_atomic_inc(volatile int *ptr) {
-    return __sync_add_and_fetch(ptr, 1);
+    return __atomic_add_fetch(ptr, 1, __ATOMIC_SEQ_CST);
+}
+
+/**
+ * test_wait_for_flag - Wait for a flag to be set with acquire semantics
+ * @flag: Pointer to atomic_int flag to wait for
+ * @timeout_cycles: Maximum number of cycles to wait
+ *
+ * Returns: 0 on success (flag was set), -1 on timeout
+ *
+ * Uses atomic_load_explicit with acquire semantics to ensure proper memory ordering.
+ * This establishes a "happens-before" relationship with the CPU that called
+ * atomic_store_explicit with release semantics to set the flag.
+ */
+static int test_wait_for_flag(atomic_int *flag, int timeout_cycles) {
+    while (!atomic_load_explicit(flag, memory_order_acquire) && timeout_cycles > 0) {
+        cpu_relax();
+        timeout_cycles--;
+    }
+    return (timeout_cycles == 0) ? -1 : 0;
 }
 
 /* ============================================================================
@@ -341,7 +370,7 @@ static int test4_rwlock_basic(void) {
 
     /* Initialize rwlock */
     rwlock_init(&lock);
-    if (lock.counter != 0) {
+    if (atomic_load_explicit(&lock.counter, memory_order_relaxed) != 0) {
         test_puts("  FAIL: RWLock not initialized to unlocked state\n");
         return -1;
     }
@@ -349,7 +378,7 @@ static int test4_rwlock_basic(void) {
 
     /* Acquire read lock */
     spin_read_lock(&lock);
-    if (lock.counter <= 0) {
+    if (atomic_load_explicit(&lock.counter, memory_order_relaxed) <= 0) {
         test_puts("  FAIL: Read lock did not increment counter\n");
         spin_read_unlock(&lock);
         return -1;
@@ -358,7 +387,7 @@ static int test4_rwlock_basic(void) {
 
     /* Release read lock */
     spin_read_unlock(&lock);
-    if (lock.counter != 0) {
+    if (atomic_load_explicit(&lock.counter, memory_order_relaxed) != 0) {
         test_puts("  FAIL: Read lock did not decrement counter\n");
         return -1;
     }
@@ -366,7 +395,7 @@ static int test4_rwlock_basic(void) {
 
     /* Acquire write lock */
     spin_write_lock(&lock);
-    if (lock.counter != -1) {
+    if (atomic_load_explicit(&lock.counter, memory_order_relaxed) != -1) {
         test_puts("  FAIL: Write lock did not set counter to -1\n");
         spin_write_unlock(&lock);
         return -1;
@@ -375,7 +404,7 @@ static int test4_rwlock_basic(void) {
 
     /* Release write lock */
     spin_write_unlock(&lock);
-    if (lock.counter != 0) {
+    if (atomic_load_explicit(&lock.counter, memory_order_relaxed) != 0) {
         test_puts("  FAIL: Write lock did not reset counter\n");
         return -1;
     }
@@ -440,7 +469,7 @@ static int test6_lock_contention(int num_cpus) {
 
     /* Phase 1: Initialize and synchronize */
     if (test_is_bsp()) {
-        shared_counter = 0;
+        atomic_store_explicit(&shared_counter, 0, memory_order_relaxed);
         spin_lock_init(&test_lock1);
         for (int i = 0; i < SMP_MAX_CPUS; i++) {
             test_counter[i] = 0;
@@ -453,7 +482,7 @@ static int test6_lock_contention(int num_cpus) {
     for (int i = 0; i < ITERATIONS; i++) {
         irq_flags_t flags;
         spin_lock_irqsave(&test_lock1, &flags);
-        shared_counter++;
+        atomic_fetch_add(&shared_counter, 1);
         spin_unlock_irqrestore(&test_lock1, &flags);
     }
 
@@ -494,14 +523,19 @@ static int test6_lock_contention(int num_cpus) {
 
 /**
  * test7_trylock_contention - Test 7: Trylock contention (exactly one succeeds)
+ *
+ * Fixed: Uses proper acquire/release semantics for cross-CPU signaling.
+ * BSP waits for ALL APs to confirm they attempted trylock, eliminating race conditions.
+ * Works with any number of CPUs.
  */
 static int test7_trylock_contention(int num_cpus) {
     int my_cpu = test_get_cpu_index();
 
     if (test_is_bsp()) {
         test_puts("Test 7: Trylock contention...\n");
-        test7_lock_ready = 0;  /* Initialize signal */
-        test_barrier_reset();  /* Reset barrier at start of test */
+        atomic_store_explicit(&test7_lock_ready, 0, memory_order_relaxed); /* Initialize signal */
+        atomic_store_explicit(&test7_ap_confirmed, 0, memory_order_relaxed); /* Initialize confirmation */
+        test_barrier_reset();        /* Reset barrier at start of test */
     }
 
     /* Phase 1: Initialize and synchronize */
@@ -509,11 +543,8 @@ static int test7_trylock_contention(int num_cpus) {
         spin_lock_init(&test_lock1);
     }
     test_barrier_wait(num_cpus);
-    if (test_is_bsp()) {
-        test_barrier_reset();  /* Reset for second barrier */
-    }
 
-    /* Phase 2: Test trylock - BSP holds lock, AP tries to acquire (should fail) */
+    /* Phase 2: Test trylock - BSP holds lock, ALL APs try to acquire (only BSP should succeed) */
     if (test_is_bsp()) {
         /* BSP: Acquire and hold lock */
         irq_flags_t flags;
@@ -523,19 +554,49 @@ static int test7_trylock_contention(int num_cpus) {
         spin_lock(&test_lock1);
         test_counter[my_cpu] = 1;  /* BSP acquired lock */
 
-        /* Signal AP that lock is held */
-        test7_lock_ready = 1;
-        asm volatile("mfence" ::: "memory");  /* Ensure write is visible */
+        /* Signal APs that lock is held (with release semantics) */
+        atomic_store_explicit(&test7_lock_ready, 1, memory_order_release);
 
-        /* Wait for AP to finish its attempt (AP will increment barrier) */
-        test_barrier_wait(num_cpus);
+        /* Small delay to ensure signal is visible to all APs */
+        for (volatile int i = 0; i < 1000; i++) {
+            cpu_relax();
+        }
+
+        /* Wait for ALL APs to confirm they attempted trylock */
+        /* We expect (num_cpus - 1) confirmations since BSP doesn't confirm */
+        int expected_confirmations = num_cpus - 1;
+        int confirmations = 0;
+        int timeout = SPIN_TIMEOUT * 10;  /* Extended timeout for multiple APs */
+
+        while (confirmations < expected_confirmations && timeout > 0) {
+            /* Check how many APs have confirmed */
+            confirmations = atomic_load_explicit(&test7_ap_confirmed, memory_order_acquire);
+            if (confirmations < expected_confirmations) {
+                cpu_relax();
+                timeout--;
+            }
+        }
+
+        if (timeout == 0) {
+            test_puts("  FAIL: AP confirmation timeout (got ");
+            test_put_hex(confirmations);
+            test_puts(" of ");
+            test_put_hex(expected_confirmations);
+            test_puts(" confirmations)\n");
+            spin_unlock(&test_lock1);
+            enable_interrupts();
+            return -1;
+        }
 
         spin_unlock(&test_lock1);
         enable_interrupts();
     } else {
-        /* AP: Wait for BSP to acquire lock, then try trylock */
-        while (!test7_lock_ready) {
-            asm volatile("pause");
+        /* AP: Wait for BSP to acquire lock (with acquire semantics) */
+        /* Add timeout to prevent infinite wait */
+        int wait_timeout = SPIN_TIMEOUT * 10;
+        while (!atomic_load_explicit(&test7_lock_ready, memory_order_acquire) && wait_timeout > 0) {
+            cpu_relax();
+            wait_timeout--;
         }
 
         irq_flags_t flags;
@@ -545,14 +606,20 @@ static int test7_trylock_contention(int num_cpus) {
         int success = spin_trylock(&test_lock1);
         test_counter[my_cpu] = success ? 1 : 0;
 
-        /* Signal BSP we're done */
-        __sync_fetch_and_add(&test_barrier, 1);
+        /* Confirm we completed trylock attempt (with release semantics) */
+        /* We increment the confirmation counter instead of just setting it */
+        atomic_fetch_add_explicit(&test7_ap_confirmed, 1, memory_order_release);
+        /* Full fence to ensure the increment is visible */
+        smp_mb();
 
         if (success) {
             spin_unlock(&test_lock1);
         }
 
-        enable_interrupts();
+        /* Restore interrupt state */
+        if (flags & (1 << 9)) {
+            enable_interrupts();
+        }
     }
 
     /* Phase 3: Synchronize and verify */
@@ -560,6 +627,9 @@ static int test7_trylock_contention(int num_cpus) {
 
     if (test_is_bsp()) {
         test_barrier_reset();  /* Reset for next test */
+
+        /* Memory barrier to ensure all counter updates visible */
+        smp_mb();
 
         int total_success = 0;
         for (int i = 0; i < num_cpus; i++) {
@@ -595,7 +665,7 @@ static int test8_rwlock_readers(int num_cpus) {
     /* Phase 1: Initialize and synchronize */
     if (test_is_bsp()) {
         rwlock_init(&test_rwlock);
-        shared_counter = 0;
+        atomic_store_explicit(&shared_counter, 0, memory_order_relaxed);
     }
     test_barrier_wait(num_cpus);
 
@@ -607,7 +677,7 @@ static int test8_rwlock_readers(int num_cpus) {
     spin_read_lock(&test_rwlock);
 
     /* Check that we can see the reader count */
-    if (test_rwlock.counter <= 0) {
+    if (atomic_load_explicit(&test_rwlock.counter, memory_order_relaxed) <= 0) {
         test_errors[my_cpu] = 1;
     } else {
         test_errors[my_cpu] = 0;
@@ -615,7 +685,7 @@ static int test8_rwlock_readers(int num_cpus) {
 
     /* Small delay while holding read lock */
     for (volatile int i = 0; i < 1000; i++) {
-        asm volatile("pause");
+        cpu_relax();
     }
 
     spin_read_unlock(&test_rwlock);
@@ -666,7 +736,7 @@ static int test9_rwlock_writer(int num_cpus) {
     /* Phase 1: Initialize and synchronize */
     if (test_is_bsp()) {
         rwlock_init(&test_rwlock);
-        shared_counter = 0;
+        atomic_store_explicit(&shared_counter, 0, memory_order_relaxed);
     }
     test_barrier_wait(num_cpus);
 
@@ -680,7 +750,7 @@ static int test9_rwlock_writer(int num_cpus) {
         spin_write_lock(&test_rwlock);
 
         /* Verify writer has exclusive access (counter == -1) */
-        if (test_rwlock.counter != -1) {
+        if (atomic_load_explicit(&test_rwlock.counter, memory_order_relaxed) != -1) {
             test_puts("  FAIL: Writer counter not -1\n");
             spin_write_unlock(&test_rwlock);
             enable_interrupts();
@@ -689,7 +759,7 @@ static int test9_rwlock_writer(int num_cpus) {
 
         /* Hold write lock briefly to ensure APs block */
         for (volatile int i = 0; i < 100000; i++) {
-            asm volatile("pause");
+            cpu_relax();
         }
 
         spin_write_unlock(&test_rwlock);
@@ -700,7 +770,7 @@ static int test9_rwlock_writer(int num_cpus) {
 
         /* Once we get here, writer has released */
         /* Verify we now have read access */
-        if (test_rwlock.counter <= 0) {
+        if (atomic_load_explicit(&test_rwlock.counter, memory_order_relaxed) <= 0) {
             test_errors[my_cpu] = 1;
         } else {
             test_errors[my_cpu] = 0;
@@ -745,6 +815,10 @@ static int test9_rwlock_writer(int num_cpus) {
  * test10_deadlock_prevention - Test 10: Deadlock prevention with consistent ordering
  *
  * All CPUs acquire locks in consistent order (lock1, then lock2) to prevent deadlock.
+ *
+ * Fixed: Each CPU signals completion with release semantics. BSP waits for all
+ * completion signals before verifying shared state, eliminating the race where
+ * BSP could verify before AP's final increment is globally visible.
  */
 static int test10_deadlock_prevention(int num_cpus) {
     int my_cpu = test_get_cpu_index();
@@ -758,12 +832,15 @@ static int test10_deadlock_prevention(int num_cpus) {
     if (test_is_bsp()) {
         spin_lock_init(&test_lock1);
         spin_lock_init(&test_lock2);
-        shared_counter = 0;
-        /* Reset per-CPU counters */
+        atomic_store_explicit(&shared_counter, 0, memory_order_relaxed);
+        /* Reset per-CPU counters and completion flags */
         for (int i = 0; i < SMP_MAX_CPUS; i++) {
             test_counter[i] = 0;
+            atomic_store_explicit(&test10_cpu_done[i], 0, memory_order_relaxed);
         }
     }
+    /* Memory barrier to ensure initialization visible before barrier */
+    smp_mb();
     test_barrier_wait(num_cpus);
 
     /* Phase 2: All CPUs execute critical section with consistent lock ordering */
@@ -778,7 +855,7 @@ static int test10_deadlock_prevention(int num_cpus) {
         spin_lock(&test_lock2);
 
         /* Critical section - use atomic increment for cross-CPU visibility */
-        __sync_fetch_and_add(&shared_counter, 1);
+        atomic_fetch_add(&shared_counter, 1);
 
         /* Release in reverse order */
         spin_unlock(&test_lock2);
@@ -790,16 +867,17 @@ static int test10_deadlock_prevention(int num_cpus) {
     /* Store per-CPU round count */
     test_counter[my_cpu] = local_rounds;
 
+    /* Signal completion with release semantics */
+    atomic_store_explicit(&test10_cpu_done[my_cpu], 1, memory_order_release);
+
     /* Restore interrupt state */
     if (flags & (1 << 9)) {
         enable_interrupts();
     }
 
-    /* Phase 3: Barrier and verify (both synchronize, BSP verifies) */
-    int barrier_result = test_barrier_wait(num_cpus);
-
-    /* Full memory barrier to ensure all critical sections are fully complete */
-    asm volatile("mfence" ::: "memory");
+    /* Phase 3: Single barrier for synchronization */
+    /* Note: counter is already at num_cpus from first barrier, so we expect num_cpus * 2 */
+    int barrier_result = test_barrier_wait(num_cpus * 2);
 
     if (barrier_result < 0) {
         if (test_is_bsp()) {
@@ -809,17 +887,25 @@ static int test10_deadlock_prevention(int num_cpus) {
         return -1;
     }
 
-    /* Phase 4: Final verification barrier */
+    /* Phase 4: BSP waits for all CPUs to confirm completion, then verifies */
     if (test_is_bsp()) {
         test_barrier_reset();
-    }
 
-    /* Both CPUs synchronize one more time */
-    test_barrier_wait(num_cpus);
-    asm volatile("mfence" ::: "memory");
+        /* Wait for each CPU to confirm completion */
+        for (int i = 0; i < num_cpus; i++) {
+            if (test_wait_for_flag(&test10_cpu_done[i], SPIN_TIMEOUT) < 0) {
+                test_puts("  FAIL: CPU ");
+                test_put_hex(i);
+                test_puts(" completion timeout\n");
+                return -1;
+            }
+        }
 
-    if (test_is_bsp()) {
-        test_barrier_reset();
+        /* Full barrier to ensure all shared_counter updates visible */
+        smp_mb();
+
+        /* Memory barrier to ensure all counter updates visible */
+        smp_mb();
 
         /* Calculate expected from per-CPU counters */
         int total_rounds = 0;
@@ -828,7 +914,7 @@ static int test10_deadlock_prevention(int num_cpus) {
         }
 
         int expected = num_cpus * 10;
-        int actual = __atomic_load_n(&shared_counter, __ATOMIC_ACQUIRE);
+        int actual = atomic_load_explicit(&shared_counter, memory_order_acquire);
 
         if (total_rounds == expected && actual == expected) {
             test_puts("  PASS: No deadlock, counter correct (");
@@ -979,7 +1065,7 @@ int run_spinlock_tests(void) {
 
         /* Small delay to ensure APs are ready and in test entry */
         for (volatile int i = 0; i < 2000000; i++) {
-            asm volatile("pause");
+            cpu_relax();
         }
 
         /* Start first test phase - this unblocks APs */
@@ -987,7 +1073,7 @@ int run_spinlock_tests(void) {
 
         /* Small delay for APs to wake up */
         for (volatile int i = 0; i < 200000; i++) {
-            asm volatile("pause");
+            cpu_relax();
         }
 
         /* Run SMP tests - APs will participate via spinlock_test_ap_entry()
@@ -1034,7 +1120,7 @@ int run_spinlock_tests(void) {
 
         /* Small delay before returning to halt loop */
         for (volatile int i = 0; i < 10000; i++) {
-            asm volatile("pause");
+            cpu_relax();
         }
 
     } else {

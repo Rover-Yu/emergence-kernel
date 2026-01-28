@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include "kernel/smp.h"
 #include "include/spinlock.h"
+#include "include/atomic.h"
+#include "include/barrier.h"
 #include "arch/x86_64/apic.h"
 
 /* External ACPI functions for getting APIC information */
@@ -237,7 +239,7 @@ void ap_start(void) {
     /* Atomically allocate CPU index using fetch-and-add
      * Each AP gets a unique index: 1, 2, 3, ... (BSP is always 0)
      * Atomic operation prevents race conditions when multiple APs boot */
-    int my_index = __sync_fetch_and_add(&next_cpu_id, 1);
+    int my_index = atomic_fetch_add(&next_cpu_id, 1);
 
     if (my_index <= 0 || my_index >= SMP_MAX_CPUS) {
         serial_puts("[AP] ERROR: Invalid CPU index!\n");

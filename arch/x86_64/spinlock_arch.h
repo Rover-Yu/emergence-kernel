@@ -4,15 +4,17 @@
 #define _ARCH_X86_64_SPINLOCK_H
 
 #include <stdint.h>
+#include "include/atomic.h"
+#include "include/barrier.h"
 
 /* Actual spin lock structure for x86_64 */
 struct arch_spinlock {
-    volatile int locked;  /* 0 = unlocked, 1 = locked */
+    atomic_int locked;  /* 0 = unlocked, 1 = locked */
 };
 
 /* Actual read-write lock structure for x86_64 */
 struct arch_rwlock {
-    volatile int counter;  /* Negative: writer, 0: unlocked, Positive: readers */
+    atomic_int counter;  /* Negative: writer, 0: unlocked, Positive: readers */
 };
 
 /* Static initializers */
@@ -52,14 +54,17 @@ static inline void arch_spin_lock_init(struct arch_spinlock *lock) {
  */
 static inline void arch_spin_lock(struct arch_spinlock *lock) {
     /* Test-and-set loop with adaptive spinning */
-    while (!__sync_bool_compare_and_swap(&lock->locked, 0, 1)) {
+    int expected = 0;
+    while (!atomic_compare_exchange_weak_explicit(&lock->locked, &expected, 1,
+                                                   memory_order_acquire, memory_order_relaxed)) {
+        expected = 0;
         /* Spin with pause to reduce bus contention */
-        while (__sync_fetch_and_add(&lock->locked, 0)) {
-            asm volatile("pause" ::: "memory");
+        while (atomic_load_explicit(&lock->locked, memory_order_relaxed)) {
+            cpu_relax();
         }
     }
-    /* Compiler barrier - ensures memory operations are not reordered */
-    __asm__ __volatile__("" ::: "memory");
+    /* Acquire barrier ensures memory operations are not reordered */
+    barrier();
 }
 
 /**
@@ -67,10 +72,10 @@ static inline void arch_spin_lock(struct arch_spinlock *lock) {
  * @lock: Lock to release
  */
 static inline void arch_spin_unlock(struct arch_spinlock *lock) {
-    /* Memory barrier - ensures all memory operations complete before unlock */
-    __asm__ __volatile__("mfence" ::: "memory");
+    /* Release barrier ensures all memory operations complete before unlock */
+    smp_mb();
     /* Atomic store with release semantics */
-    __atomic_store_n(&lock->locked, 0, __ATOMIC_RELEASE);
+    atomic_store_explicit(&lock->locked, 0, memory_order_release);
 }
 
 /**
@@ -80,7 +85,9 @@ static inline void arch_spin_unlock(struct arch_spinlock *lock) {
  * Returns: 1 if lock was acquired, 0 if lock is already held
  */
 static inline int arch_spin_trylock(struct arch_spinlock *lock) {
-    return __sync_bool_compare_and_swap(&lock->locked, 0, 1);
+    int expected = 0;
+    return atomic_compare_exchange_strong_explicit(&lock->locked, &expected, 1,
+                                                    memory_order_acquire, memory_order_relaxed);
 }
 
 /* ============================================================================
@@ -161,14 +168,14 @@ static inline void arch_rwlock_init(struct arch_rwlock *lock) {
  */
 static inline void arch_spin_read_lock(struct arch_rwlock *lock) {
     /* Increment counter - if negative, a writer has the lock */
-    while (__sync_fetch_and_add(&lock->counter, 1) < 0) {
+    while (atomic_fetch_add_explicit(&lock->counter, 1, memory_order_acquire) < 0) {
         /* Failed - writer holds lock, back off and retry */
-        __sync_fetch_and_sub(&lock->counter, 1);
-        while (lock->counter < 0) {
-            asm volatile("pause" ::: "memory");
+        atomic_fetch_sub_explicit(&lock->counter, 1, memory_order_relaxed);
+        while (atomic_load_explicit(&lock->counter, memory_order_relaxed) < 0) {
+            cpu_relax();
         }
     }
-    __asm__ __volatile__("" ::: "memory");
+    barrier();
 }
 
 /**
@@ -176,8 +183,8 @@ static inline void arch_spin_read_lock(struct arch_rwlock *lock) {
  * @lock: Lock to release
  */
 static inline void arch_spin_read_unlock(struct arch_rwlock *lock) {
-    __asm__ __volatile__("" ::: "memory");
-    __sync_fetch_and_sub(&lock->counter, 1);
+    barrier();
+    atomic_fetch_sub_explicit(&lock->counter, 1, memory_order_release);
 }
 
 /**
@@ -188,14 +195,14 @@ static inline void arch_spin_read_unlock(struct arch_rwlock *lock) {
  */
 static inline void arch_spin_write_lock(struct arch_rwlock *lock) {
     /* Decrement counter - must reach -1 (no readers or other writers) */
-    while (__sync_fetch_and_add(&lock->counter, -1) != 0) {
+    while (atomic_fetch_add_explicit(&lock->counter, -1, memory_order_acquire) != 0) {
         /* Failed - others hold lock, back off and retry */
-        __sync_fetch_and_add(&lock->counter, 1);
-        while (lock->counter != 0) {
-            asm volatile("pause" ::: "memory");
+        atomic_fetch_add_explicit(&lock->counter, 1, memory_order_relaxed);
+        while (atomic_load_explicit(&lock->counter, memory_order_relaxed) != 0) {
+            cpu_relax();
         }
     }
-    __asm__ __volatile__("" ::: "memory");
+    barrier();
 }
 
 /**
@@ -203,8 +210,8 @@ static inline void arch_spin_write_lock(struct arch_rwlock *lock) {
  * @lock: Lock to release
  */
 static inline void arch_spin_write_unlock(struct arch_rwlock *lock) {
-    __asm__ __volatile__("" ::: "memory");
-    __sync_fetch_and_add(&lock->counter, 1);
+    barrier();
+    atomic_fetch_add_explicit(&lock->counter, 1, memory_order_release);
 }
 
 #endif /* _ARCH_X86_64_SPINLOCK_H */
