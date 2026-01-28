@@ -1,4 +1,4 @@
-/* JAKernel - Architecture-independent kernel main */
+/* Emergence Kernel - Architecture-independent kernel main */
 
 #include <stdint.h>
 #include "kernel/device.h"
@@ -64,7 +64,7 @@ void kernel_main(uint32_t multiboot_info_addr) {
 
     /* Print boot banner FIRST - before any other output */
     const char *banner_top    = "+============================================================+";
-    const char *banner_msg    = "|  JAkernel, Just another kernel but prompts only           |";
+    const char *banner_msg    = "|  Emergence Kernel - Intelligence through Emergence      |";
     const char *banner_bottom = "+============================================================+";
 
     /* Print banner to VGA (rows 0-2) */

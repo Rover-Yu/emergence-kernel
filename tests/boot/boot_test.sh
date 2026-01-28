@@ -12,7 +12,7 @@ set -e
 
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-KERNEL_ISO="${SCRIPT_DIR}/../../jakernel.iso"
+KERNEL_ISO="${SCRIPT_DIR}/../../emergence.iso"
 QEMU_TIMEOUT=5
 
 # Source test library (KERNEL_ISO must be set before sourcing)
@@ -47,7 +47,7 @@ main() {
     local boot_log=$(cat "$output_file" 2>/dev/null || echo "")
 
     # Test 1: Kernel greeting message
-    if echo "$boot_log" | grep -q "JAkernel"; then
+    if echo "$boot_log" | grep -q "Emergence Kernel"; then
         print_result "Kernel greeting message" "true"
     else
         print_result "Kernel greeting message" "false" "No greeting message found"

@@ -1,7 +1,7 @@
-/* JAKernel - Atomic Operations API */
+/* Emergence Kernel - Atomic Operations API */
 
-#ifndef _JAKERNEL_ATOMIC_H
-#define _JAKERNEL_ATOMIC_H
+#ifndef _EMERGENCE_ATOMIC_H
+#define _EMERGENCE_ATOMIC_H
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -190,4 +190,4 @@ static inline void atomic_signal_fence(memory_order order) {
     __atomic_signal_fence(order);
 }
 
-#endif /* _JAKERNEL_ATOMIC_H */
+#endif /* _EMERGENCE_ATOMIC_H */

@@ -1,4 +1,4 @@
-/* JAKernel - Local APIC Timer Driver */
+/* Emergence Kernel - Local APIC Timer Driver */
 
 #include <stdint.h>
 #include "arch/x86_64/timer.h"

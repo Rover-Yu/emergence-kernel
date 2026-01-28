@@ -1,4 +1,4 @@
-/* JAKernel - x86-64 IDT implementation */
+/* Emergence Kernel - x86-64 IDT implementation */
 
 #include <stdint.h>
 #include <stddef.h>

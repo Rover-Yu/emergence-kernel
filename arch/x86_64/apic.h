@@ -1,7 +1,7 @@
-/* JAKernel - x86-64 Local APIC and SMP support */
+/* Emergence Kernel - x86-64 Local APIC and SMP support */
 
-#ifndef JAKERNEL_ARCH_X86_64_APIC_H
-#define JAKERNEL_ARCH_X86_64_APIC_H
+#ifndef EMERGENCE_ARCH_X86_64_APIC_H
+#define EMERGENCE_ARCH_X86_64_APIC_H
 
 #include <stdint.h>
 
@@ -116,4 +116,4 @@ int is_bsp(void);
 /* APIC Timer initialization */
 void apic_timer_init(void);
 
-#endif /* JAKERNEL_ARCH_X86_64_APIC_H */
+#endif /* EMERGENCE_ARCH_X86_64_APIC_H */

@@ -1,4 +1,4 @@
-/* JAKernel - x86-64 RTC implementation */
+/* Emergence Kernel - x86-64 RTC implementation */
 
 #include <stdint.h>
 #include "arch/x86_64/rtc.h"

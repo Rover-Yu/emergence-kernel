@@ -1,4 +1,4 @@
-/* JAKernel - x86_64 Spin Lock Architecture-Specific Implementation */
+/* Emergence Kernel - x86_64 Spin Lock Architecture-Specific Implementation */
 
 #ifndef _ARCH_X86_64_SPINLOCK_H
 #define _ARCH_X86_64_SPINLOCK_H

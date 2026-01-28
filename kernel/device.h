@@ -1,7 +1,7 @@
-/* JAKernel - Device and Driver Framework Core */
+/* Emergence Kernel - Device and Driver Framework Core */
 
-#ifndef JAKERNEL_KERNEL_DEVICE_H
-#define JAKERNEL_KERNEL_DEVICE_H
+#ifndef EMERGENCE_KERNEL_DEVICE_H
+#define EMERGENCE_KERNEL_DEVICE_H
 
 #include <stdint.h>
 
@@ -75,4 +75,4 @@ int device_probe_all(void);
 /* Initialize all devices in priority order */
 int device_init_all(void);
 
-#endif /* JAKERNEL_KERNEL_DEVICE_H */
+#endif /* EMERGENCE_KERNEL_DEVICE_H */

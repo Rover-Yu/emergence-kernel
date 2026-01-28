@@ -1,4 +1,4 @@
-/* JAKernel - Architecture-Independent Spin Lock Interface */
+/* Emergence Kernel - Architecture-Independent Spin Lock Interface */
 
 #ifndef _KERNEL_SPINLOCK_H
 #define _KERNEL_SPINLOCK_H

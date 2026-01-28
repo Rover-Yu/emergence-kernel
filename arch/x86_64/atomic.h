@@ -1,4 +1,4 @@
-/* JAKernel - x86_64 Optimized Atomic Operations */
+/* Emergence Kernel - x86_64 Optimized Atomic Operations */
 
 #ifndef _ARCH_X86_64_ATOMIC_H
 #define _ARCH_X86_64_ATOMIC_H

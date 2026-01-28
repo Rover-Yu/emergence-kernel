@@ -1,4 +1,4 @@
-/* JAKernel - x86-64 VGA text mode output */
+/* Emergence Kernel - x86-64 VGA text mode output */
 
 #include <stdint.h>
 #include "arch/x86_64/vga.h"

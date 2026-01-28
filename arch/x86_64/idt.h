@@ -1,7 +1,7 @@
-/* JAKernel - x86-64 Interrupt Descriptor Table (IDT) */
+/* Emergence Kernel - x86-64 Interrupt Descriptor Table (IDT) */
 
-#ifndef JAKERNEL_ARCH_X86_64_IDT_H
-#define JAKERNEL_ARCH_X86_64_IDT_H
+#ifndef EMERGENCE_ARCH_X86_64_IDT_H
+#define EMERGENCE_ARCH_X86_64_IDT_H
 
 #include <stdint.h>
 
@@ -53,4 +53,4 @@ static inline void disable_interrupts(void) {
 /* Timer handler (called from ISR) */
 void timer_handler(void);
 
-#endif /* JAKERNEL_ARCH_X86_64_IDT_H */
+#endif /* EMERGENCE_ARCH_X86_64_IDT_H */

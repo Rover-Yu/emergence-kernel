@@ -1,4 +1,4 @@
-/* JAKernel - Multiboot2 parser */
+/* Emergence Kernel - Multiboot2 parser */
 
 #include <stdint.h>
 #include "kernel/multiboot2.h"

@@ -1,7 +1,7 @@
-/* JAKernel - x86-64 I/O port operations */
+/* Emergence Kernel - x86-64 I/O port operations */
 
-#ifndef JAKERNEL_ARCH_X86_64_IO_H
-#define JAKERNEL_ARCH_X86_64_IO_H
+#ifndef EMERGENCE_ARCH_X86_64_IO_H
+#define EMERGENCE_ARCH_X86_64_IO_H
 
 #include <stdint.h>
 
@@ -41,4 +41,4 @@ static inline uint32_t inl(uint16_t port) {
     return ret;
 }
 
-#endif /* JAKERNEL_ARCH_X86_64_IO_H */
+#endif /* EMERGENCE_ARCH_X86_64_IO_H */

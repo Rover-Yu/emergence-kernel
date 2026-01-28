@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# test_lib.sh - Reusable testing library for JAKernel QEMU log tests
+# test_lib.sh - Reusable testing library for Emergence Kernel QEMU log tests
 #
 # This library provides common functions for running QEMU, capturing output,
 # and making assertions about kernel behavior based on log analysis.
@@ -70,7 +70,7 @@ run_qemu_capture() {
     local iso_path="${4:-$KERNEL_ISO}"
 
     # Create temp file for serial output
-    SERIAL_OUTPUT="/tmp/jakernel_test_$$"
+    SERIAL_OUTPUT="/tmp/emergence_test_$$"
 
     # Run QEMU with serial output to file, timeout after specified seconds
     # Redirect both stdout and stderr to /dev/null to suppress QEMU monitor output

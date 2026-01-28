@@ -1,6 +1,6 @@
-# JAKernel Test Suite
+# Emergence Kernel Test Suite
 
-This directory contains the test suite for JAKernel, organized by component.
+This directory contains the test suite for Emergence Kernel, organized by component.
 
 ## Directory Structure
 
@@ -125,7 +125,7 @@ Example test script structure:
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-KERNEL_ISO="${SCRIPT_DIR}/../../jakernel.iso"
+KERNEL_ISO="${SCRIPT_DIR}/../../emergence.iso"
 source "${SCRIPT_DIR}/../lib/test_lib.sh"
 
 main() {

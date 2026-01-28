@@ -1,7 +1,7 @@
-/* JAKernel - SMP (Symmetric Multi-Processing) support */
+/* Emergence Kernel - SMP (Symmetric Multi-Processing) support */
 
-#ifndef JAKERNEL_KERNEL_SMP_H
-#define JAKERNEL_KERNEL_SMP_H
+#ifndef EMERGENCE_KERNEL_SMP_H
+#define EMERGENCE_KERNEL_SMP_H
 
 #include <stdint.h>
 #include "arch/x86_64/apic.h"
@@ -58,4 +58,4 @@ void ap_start(void);
 /* Start all APs */
 void smp_start_all_aps(void);
 
-#endif /* JAKERNEL_KERNEL_SMP_H */
+#endif /* EMERGENCE_KERNEL_SMP_H */

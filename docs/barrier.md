@@ -1,6 +1,6 @@
 # Memory Barrier API
 
-This document describes the JAKernel memory barrier API, which provides control over memory ordering in multi-processor environments.
+This document describes the Emergence Kernel memory barrier API, which provides control over memory ordering in multi-processor environments.
 
 ## Overview
 

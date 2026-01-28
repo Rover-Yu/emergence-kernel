@@ -1,6 +1,6 @@
-# JAKernel
+# Emergence Kernel
 
-> **JAKernel** 是一个完全由 LLM（Claude）通过 Prompts 编写的实验性 x86_64 操作系统内核，**零手写代码**。
+> **Emergence Kernel** 是一个完全由 LLM（Claude）通过 Prompts 编写的实验性 x86_64 操作系统内核，**零手写代码**。
 
 这是一个研究性内核项目，旨在探索大语言模型在操作系统内核开发领域的潜力边界。所有代码均通过自然语言对话生成，包括底层汇编、内存管理、多处理器支持等核心功能。
 
@@ -106,7 +106,7 @@ gdb -x .gdbinit
 ## 项目结构
 
 ```
-JAKernel/
+Emergence-Kernel/
 ├── arch/x86_64/          # 架构相关代码
 │   ├── boot.S           # 启动代码 (32-bit → 64-bit)
 │   ├── ap_trampoline.S  # AP 启动导引 (Real Mode → Long Mode)
@@ -235,7 +235,7 @@ Linux 风格的三阶段初始化：
 
 ```
 +============================================================+
-|  JAkernel, Just another kernel but prompts only           |
+|  Emergence Kernel - Intelligence through Emergence      |
 +============================================================+
 
 PMM: Initialized

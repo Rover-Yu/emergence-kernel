@@ -1,4 +1,4 @@
-/* JAKernel - x86-64 Local APIC implementation */
+/* Emergence Kernel - x86-64 Local APIC implementation */
 
 #include <stdint.h>
 #include "arch/x86_64/apic.h"

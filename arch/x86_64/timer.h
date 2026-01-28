@@ -1,7 +1,7 @@
-/* JAKernel - Local APIC Timer Driver */
+/* Emergence Kernel - Local APIC Timer Driver */
 
-#ifndef JAKERNEL_ARCH_X86_64_TIMER_H
-#define JAKERNEL_ARCH_X86_64_TIMER_H
+#ifndef EMERGENCE_ARCH_X86_64_TIMER_H
+#define EMERGENCE_ARCH_X86_64_TIMER_H
 
 #include <stdint.h>
 
@@ -16,4 +16,4 @@ void timer_start(void);
 void timer_stop(void);
 int timer_is_active(void);
 
-#endif /* JAKERNEL_ARCH_X86_64_TIMER_H */
+#endif /* EMERGENCE_ARCH_X86_64_TIMER_H */

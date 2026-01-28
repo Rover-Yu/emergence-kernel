@@ -1,4 +1,4 @@
-/* JAKernel - Simple doubly-linked list implementation (Linux-style) */
+/* Emergence Kernel - Simple doubly-linked list implementation (Linux-style) */
 
 #ifndef _KERNEL_LIST_H
 #define _KERNEL_LIST_H

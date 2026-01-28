@@ -1,4 +1,4 @@
-/* JAKernel - SMP implementation */
+/* Emergence Kernel - SMP implementation */
 
 #include <stddef.h>
 #include <stdint.h>

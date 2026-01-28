@@ -1,4 +1,4 @@
-/* JAKernel - Physical Memory Manager (Buddy System) */
+/* Emergence Kernel - Physical Memory Manager (Buddy System) */
 
 #ifndef _KERNEL_PMM_H
 #define _KERNEL_PMM_H

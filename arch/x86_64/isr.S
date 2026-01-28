@@ -1,4 +1,4 @@
-/* JAKernel - x86-64 Interrupt Service Routine (ISR) wrappers */
+/* Emergence Kernel - x86-64 Interrupt Service Routine (ISR) wrappers */
 
 .section .text
 

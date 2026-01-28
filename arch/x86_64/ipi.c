@@ -1,4 +1,4 @@
-/* JAKernel - x86-64 IPI (Inter-Processor Interrupt) Driver */
+/* Emergence Kernel - x86-64 IPI (Inter-Processor Interrupt) Driver */
 
 #include <stdint.h>
 #include <stddef.h>

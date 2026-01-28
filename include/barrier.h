@@ -1,7 +1,7 @@
-/* JAKernel - Memory Barrier API */
+/* Emergence Kernel - Memory Barrier API */
 
-#ifndef _JAKERNEL_BARRIER_H
-#define _JAKERNEL_BARRIER_H
+#ifndef _EMERGENCE_BARRIER_H
+#define _EMERGENCE_BARRIER_H
 
 /* Include atomic.h for memory_order types */
 #include "atomic.h"
@@ -62,4 +62,4 @@
         *(volatile typeof(ptr) *)(ptr) = (val); \
     } while (0)
 
-#endif /* _JAKERNEL_BARRIER_H */
+#endif /* _EMERGENCE_BARRIER_H */

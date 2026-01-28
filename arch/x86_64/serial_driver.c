@@ -1,4 +1,4 @@
-/* JAKernel - x86-64 Serial Port Driver (using device framework) */
+/* Emergence Kernel - x86-64 Serial Port Driver (using device framework) */
 
 #include <stdint.h>
 #include <stddef.h>

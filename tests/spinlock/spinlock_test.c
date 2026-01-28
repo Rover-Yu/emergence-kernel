@@ -1,4 +1,4 @@
-/* JAKernel - Spin Lock Tests */
+/* Emergence Kernel - Spin Lock Tests */
 
 #include <stddef.h>
 #include <stdint.h>

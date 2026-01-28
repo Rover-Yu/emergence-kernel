@@ -1,6 +1,6 @@
 # Atomic Operations API
 
-This document describes the JAKernel atomic operations API, which provides thread-safe atomic operations for multi-processor synchronization.
+This document describes the Emergence Kernel atomic operations API, which provides thread-safe atomic operations for multi-processor synchronization.
 
 ## Overview
 

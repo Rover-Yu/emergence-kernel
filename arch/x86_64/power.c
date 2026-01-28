@@ -1,4 +1,4 @@
-/* JAKernel - x86-64 power management implementation */
+/* Emergence Kernel - x86-64 power management implementation */
 
 #include "arch/x86_64/power.h"
 #include "arch/x86_64/io.h"

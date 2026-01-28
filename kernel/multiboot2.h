@@ -1,4 +1,4 @@
-/* JAKernel - Multiboot2 header structure definitions */
+/* Emergence Kernel - Multiboot2 header structure definitions */
 
 #ifndef _KERNEL_MULTIBOOT2_H
 #define _KERNEL_MULTIBOOT2_H

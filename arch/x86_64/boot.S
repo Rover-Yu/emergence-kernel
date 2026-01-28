@@ -1,4 +1,4 @@
-/* JAKernel - Multiboot2 header and entry point */
+/* Emergence Kernel - Multiboot2 header and entry point */
 
 /* Multiboot2 Header */
 .section .multiboot

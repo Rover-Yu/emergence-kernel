@@ -1,7 +1,7 @@
-/* JAKernel - x86-64 IPI (Inter-Processor Interrupt) Driver */
+/* Emergence Kernel - x86-64 IPI (Inter-Processor Interrupt) Driver */
 
-#ifndef JAKERNEL_ARCH_X86_64_IPI_H
-#define JAKERNEL_ARCH_X86_64_IPI_H
+#ifndef EMERGENCE_ARCH_X86_64_IPI_H
+#define EMERGENCE_ARCH_X86_64_IPI_H
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -15,4 +15,4 @@ int ipi_driver_init(void);
 /* IPI interrupt handler (called from ISR) */
 void ipi_isr_handler(void);
 
-#endif /* JAKERNEL_ARCH_X86_64_IPI_H */
+#endif /* EMERGENCE_ARCH_X86_64_IPI_H */

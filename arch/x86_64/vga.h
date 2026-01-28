@@ -1,7 +1,7 @@
-/* JAKernel - x86-64 VGA text mode interface */
+/* Emergence Kernel - x86-64 VGA text mode interface */
 
-#ifndef JAKERNEL_ARCH_X86_64_VGA_H
-#define JAKERNEL_ARCH_X86_64_VGA_H
+#ifndef EMERGENCE_ARCH_X86_64_VGA_H
+#define EMERGENCE_ARCH_X86_64_VGA_H
 
 #include <stdint.h>
 
@@ -21,4 +21,4 @@ void vga_init(void);
 void vga_putc(char c, int row, int col, uint8_t color);
 void vga_puts(const char *str, int row, int col, uint8_t color);
 
-#endif /* JAKERNEL_ARCH_X86_64_VGA_H */
+#endif /* EMERGENCE_ARCH_X86_64_VGA_H */

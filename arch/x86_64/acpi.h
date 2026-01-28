@@ -1,7 +1,7 @@
-/* JAKernel - x86-64 ACPI support */
+/* Emergence Kernel - x86-64 ACPI support */
 
-#ifndef JAKERNEL_ARCH_X86_64_ACPI_H
-#define JAKERNEL_ARCH_X86_64_ACPI_H
+#ifndef EMERGENCE_ARCH_X86_64_ACPI_H
+#define EMERGENCE_ARCH_X86_64_ACPI_H
 
 #include <stdint.h>
 
@@ -95,4 +95,4 @@ int acpi_get_apic_count(void);
  */
 uint8_t acpi_get_apic_id_by_index(int index);
 
-#endif /* JAKERNEL_ARCH_X86_64_ACPI_H */
+#endif /* EMERGENCE_ARCH_X86_64_ACPI_H */

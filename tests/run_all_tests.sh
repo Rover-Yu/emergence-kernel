@@ -1,8 +1,8 @@
 #!/bin/bash
 #
-# run_all_tests.sh - JAKernel Test Suite Runner
+# run_all_tests.sh - Emergence Kernel Test Suite Runner
 #
-# This script runs all JAKernel tests in sequence and provides
+# This script runs all Emergence Kernel tests in sequence and provides
 # a comprehensive summary of results.
 #
 # Usage: ./run_all_tests.sh
@@ -38,7 +38,7 @@ FAILED_TESTS=()
 print_suite_header() {
     echo ""
     echo "========================================"
-    echo "JAKernel Test Suite"
+    echo "Emergence Kernel Test Suite"
     echo "========================================"
     echo "Running ${#TESTS[@]} tests..."
     echo "========================================"
@@ -62,7 +62,7 @@ run_single_test() {
 
     # Run the test with optional CPU argument
     if [ -n "$cpu_arg" ]; then
-        if ./"$script" "$cpu_arg" > /tmp/jakernel_test_output_$$ 2>&1; then
+        if ./"$script" "$cpu_arg" > /tmp/emergence_test_output_$$ 2>&1; then
             echo -e "      ${GREEN}Test Result: PASS${NC}"
             SUITE_PASSED=$((SUITE_PASSED + 1))
         else
@@ -72,7 +72,7 @@ run_single_test() {
             FAILED_TESTS+=("$name")
         fi
     else
-        if ./"$script" > /tmp/jakernel_test_output_$$ 2>&1; then
+        if ./"$script" > /tmp/emergence_test_output_$$ 2>&1; then
             echo -e "      ${GREEN}Test Result: PASS${NC}"
             SUITE_PASSED=$((SUITE_PASSED + 1))
         else
@@ -84,7 +84,7 @@ run_single_test() {
     fi
 
     # Clean up output file
-    rm -f /tmp/jakernel_test_output_$$
+    rm -f /tmp/emergence_test_output_$$
 
     echo ""
 }

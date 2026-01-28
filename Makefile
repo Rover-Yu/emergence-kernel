@@ -1,7 +1,7 @@
-# JAKernel Makefile
+# Emergence Kernel Makefile
 
-KERNEL := jakernel
-ISO := jakernel.iso
+KERNEL := emergence
+ISO := emergence.iso
 BUILD_DIR := build
 ISO_DIR := isodir
 
@@ -111,7 +111,7 @@ $(ISO): $(KERNEL_ELF) | $(ISO_DIR)
 	cp $(KERNEL_ELF) $(ISO_DIR)/boot/$(KERNEL).elf
 	echo 'set timeout=0' > $(ISO_DIR)/boot/grub/grub.cfg
 	echo 'set default=0' >> $(ISO_DIR)/boot/grub/grub.cfg
-	echo 'menuentry "JAKernel" {' >> $(ISO_DIR)/boot/grub/grub.cfg
+	echo 'menuentry "Emergence Kernel" {' >> $(ISO_DIR)/boot/grub/grub.cfg
 	echo '    multiboot2 /boot/$(KERNEL).elf' >> $(ISO_DIR)/boot/grub/grub.cfg
 	echo '    boot' >> $(ISO_DIR)/boot/grub/grub.cfg
 	echo '}' >> $(ISO_DIR)/boot/grub/grub.cfg
@@ -130,7 +130,7 @@ clean:
 test: test-all
 
 test-all:
-	@echo "Running JAKernel test suite..."
+	@echo "Running Emergence Kernel test suite..."
 	@cd tests && ./run_all_tests.sh
 
 test-boot:

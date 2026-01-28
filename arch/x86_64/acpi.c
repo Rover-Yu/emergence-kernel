@@ -1,4 +1,4 @@
-/* JAKernel - x86-64 ACPI implementation */
+/* Emergence Kernel - x86-64 ACPI implementation */
 
 #include <stdint.h>
 #include <stddef.h>

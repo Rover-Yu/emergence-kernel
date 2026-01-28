@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-JAKernel is an educational x86_64 operating system kernel written in C and assembly. It implements:
+Emergence Kernel is an educational x86_64 operating system kernel written in C and assembly. It implements:
 - Multiboot2 boot with GRUB
 - Long Mode (64-bit) transition from real mode
 - Symmetric Multi-Processing (SMP) with AP startup via trampoline
@@ -53,7 +53,7 @@ gdb -x .gdbinit
 ### Build System
 - Uses a single Makefile with explicit dependency tracking
 - AP trampoline (`ap_trampoline.bin.S`) is built as 16-bit binary, then included via `incbin`
-- Output: `build/jakernel.elf` → `jakernel.iso` (multiboot2)
+- Output: `build/emergence.elf` → `emergence.iso` (multiboot2)
 
 ### Boot Flow (BSP - Bootstrap Processor)
 1. `_start` in `arch/x86_64/boot.S` (32-bit entry)

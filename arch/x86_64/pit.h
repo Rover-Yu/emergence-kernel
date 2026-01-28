@@ -1,7 +1,7 @@
-/* JAKernel - x86-64 8259 PIT (Programmable Interval Timer) */
+/* Emergence Kernel - x86-64 8259 PIT (Programmable Interval Timer) */
 
-#ifndef JAKERNEL_ARCH_X86_64_PIT_H
-#define JAKERNEL_ARCH_X86_64_PIT_H
+#ifndef EMERGENCE_ARCH_X86_64_PIT_H
+#define EMERGENCE_ARCH_X86_64_PIT_H
 
 #include <stdint.h>
 
@@ -27,4 +27,4 @@ void pit_init(uint32_t frequency);
 /* Read current counter value */
 uint16_t pit_read_counter(void);
 
-#endif /* JAKERNEL_ARCH_X86_64_PIT_H */
+#endif /* EMERGENCE_ARCH_X86_64_PIT_H */

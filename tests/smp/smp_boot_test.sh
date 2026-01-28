@@ -13,9 +13,9 @@ set -e
 
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-KERNEL_ISO="${SCRIPT_DIR}/../../jakernel.iso"
+KERNEL_ISO="${SCRIPT_DIR}/../../emergence.iso"
 QEMU_TIMEOUT=5
-SERIAL_OUTPUT="/tmp/jakernel_smp_test_$$"
+SERIAL_OUTPUT="/tmp/emergence_smp_test_$$"
 EXPECTED_CPU_COUNT=${1:-2}
 
 # Colors for output
@@ -114,7 +114,7 @@ parse_boot_logs() {
     local boot_log=$(cat "$SERIAL_OUTPUT" 2>/dev/null || echo "")
 
     # Test 1: Check kernel started
-    if echo "$boot_log" | grep -q "JAkernel"; then
+    if echo "$boot_log" | grep -q "Emergence Kernel"; then
         print_result "Kernel started" "true"
     else
         print_result "Kernel started" "false" "No kernel greeting found"

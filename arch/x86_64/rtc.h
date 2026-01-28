@@ -1,7 +1,7 @@
-/* JAKernel - x86-64 RTC (Real Time Clock) for periodic interrupts */
+/* Emergence Kernel - x86-64 RTC (Real Time Clock) for periodic interrupts */
 
-#ifndef JAKERNEL_ARCH_X86_64_RTC_H
-#define JAKERNEL_ARCH_X86_64_RTC_H
+#ifndef EMERGENCE_ARCH_X86_64_RTC_H
+#define EMERGENCE_ARCH_X86_64_RTC_H
 
 #include <stdint.h>
 
@@ -39,4 +39,4 @@ uint8_t rtc_read(uint8_t reg);
 /* Write RTC register */
 void rtc_write(uint8_t reg, uint8_t value);
 
-#endif /* JAKERNEL_ARCH_X86_64_RTC_H */
+#endif /* EMERGENCE_ARCH_X86_64_RTC_H */

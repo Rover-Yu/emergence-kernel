@@ -1,4 +1,4 @@
-/* JAKernel - Physical Memory Manager (Buddy System Implementation) */
+/* Emergence Kernel - Physical Memory Manager (Buddy System Implementation) */
 
 #include <stdint.h>
 #include "kernel/pmm.h"

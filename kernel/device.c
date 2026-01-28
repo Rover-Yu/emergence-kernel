@@ -1,4 +1,4 @@
-/* JAKernel - Device and Driver Framework Implementation */
+/* Emergence Kernel - Device and Driver Framework Implementation */
 
 #include <stddef.h>
 #include "kernel/device.h"
