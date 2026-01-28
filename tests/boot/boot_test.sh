@@ -85,10 +85,10 @@ main() {
     fi
 
     # Test 7: Spinlock tests complete
-    if echo "$boot_log" | grep -q "ALLDONE"; then
-        print_result "Kernel tests complete" "true" "ALLDONE found"
+    if echo "$boot_log" | grep -q "system is shutting down"; then
+        print_result "Kernel tests complete" "true" "Shutdown message found"
     else
-        print_result "Kernel tests complete" "false" "ALLDONE not found"
+        print_result "Kernel tests complete" "false" "Shutdown message not found"
     fi
 
     print_summary

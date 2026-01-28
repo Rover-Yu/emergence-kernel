@@ -16,8 +16,8 @@
 #define SHUTDOWN_CMD_VBOX    0x34
 
 void system_shutdown(void) {
-    /* Print ALLDONE and exit QEMU cleanly */
-    serial_puts("ALLDONE\n");
+    /* Print shutdown message and exit QEMU cleanly */
+    serial_puts("system is shutting down\n");
 
     /* Try QEMU/Bochs shutdown port first (8-bit write for predictable exit code) */
     outb(SHUTDOWN_PORT_QEMU, SHUTDOWN_CMD_QEMU);
