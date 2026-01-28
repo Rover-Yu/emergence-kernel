@@ -747,6 +747,8 @@ static int test9_rwlock_writer(int num_cpus) {
  * All CPUs acquire locks in consistent order (lock1, then lock2) to prevent deadlock.
  */
 static int test10_deadlock_prevention(int num_cpus) {
+    int my_cpu = test_get_cpu_index();
+
     if (test_is_bsp()) {
         test_puts("Test 10: Deadlock prevention...\n");
         test_barrier_reset();  /* Reset barrier at start of test */
@@ -757,6 +759,10 @@ static int test10_deadlock_prevention(int num_cpus) {
         spin_lock_init(&test_lock1);
         spin_lock_init(&test_lock2);
         shared_counter = 0;
+        /* Reset per-CPU counters */
+        for (int i = 0; i < SMP_MAX_CPUS; i++) {
+            test_counter[i] = 0;
+        }
     }
     test_barrier_wait(num_cpus);
 
@@ -765,17 +771,24 @@ static int test10_deadlock_prevention(int num_cpus) {
     asm volatile("pushf\npop %0" : "=rm"(flags));
     disable_interrupts();
 
+    /* Track local rounds */
+    int local_rounds = 0;
     for (int round = 0; round < 10; round++) {
         spin_lock(&test_lock1);
         spin_lock(&test_lock2);
 
-        /* Critical section */
-        shared_counter++;
+        /* Critical section - use atomic increment for cross-CPU visibility */
+        __sync_fetch_and_add(&shared_counter, 1);
 
         /* Release in reverse order */
         spin_unlock(&test_lock2);
         spin_unlock(&test_lock1);
+
+        local_rounds++;
     }
+
+    /* Store per-CPU round count */
+    test_counter[my_cpu] = local_rounds;
 
     /* Restore interrupt state */
     if (flags & (1 << 9)) {
@@ -783,23 +796,52 @@ static int test10_deadlock_prevention(int num_cpus) {
     }
 
     /* Phase 3: Barrier and verify (both synchronize, BSP verifies) */
+    int barrier_result = test_barrier_wait(num_cpus);
+
+    /* Full memory barrier to ensure all critical sections are fully complete */
+    asm volatile("mfence" ::: "memory");
+
+    if (barrier_result < 0) {
+        if (test_is_bsp()) {
+            test_puts("  FAIL: Barrier timeout in phase 3\n");
+            test_barrier_reset();
+        }
+        return -1;
+    }
+
+    /* Phase 4: Final verification barrier */
+    if (test_is_bsp()) {
+        test_barrier_reset();
+    }
+
+    /* Both CPUs synchronize one more time */
     test_barrier_wait(num_cpus);
+    asm volatile("mfence" ::: "memory");
 
     if (test_is_bsp()) {
-        test_barrier_reset();  /* Only BSP resets barrier */
+        test_barrier_reset();
+
+        /* Calculate expected from per-CPU counters */
+        int total_rounds = 0;
+        for (int i = 0; i < num_cpus; i++) {
+            total_rounds += test_counter[i];
+        }
 
         int expected = num_cpus * 10;
+        int actual = __atomic_load_n(&shared_counter, __ATOMIC_ACQUIRE);
 
-        if (shared_counter == expected) {
+        if (total_rounds == expected && actual == expected) {
             test_puts("  PASS: No deadlock, counter correct (");
-            test_put_hex(shared_counter);
+            test_put_hex(actual);
             test_puts(")\n");
             test_puts("Test 10 PASSED\n\n");
             return 0;
         } else {
-            test_puts("  FAIL: Counter incorrect (");
-            test_put_hex(shared_counter);
-            test_puts(" != ");
+            test_puts("  FAIL: Counter incorrect (shared=");
+            test_put_hex(actual);
+            test_puts(" total_rounds=");
+            test_put_hex(total_rounds);
+            test_puts(" expected=");
             test_put_hex(expected);
             test_puts(")\n");
             return -1;

@@ -67,9 +67,10 @@ static inline void arch_spin_lock(struct arch_spinlock *lock) {
  * @lock: Lock to release
  */
 static inline void arch_spin_unlock(struct arch_spinlock *lock) {
-    /* Compiler barrier - ensures all memory operations complete before unlock */
-    __asm__ __volatile__("" ::: "memory");
-    lock->locked = 0;
+    /* Memory barrier - ensures all memory operations complete before unlock */
+    __asm__ __volatile__("mfence" ::: "memory");
+    /* Atomic store with release semantics */
+    __atomic_store_n(&lock->locked, 0, __ATOMIC_RELEASE);
 }
 
 /**
