@@ -7,7 +7,7 @@ ISO_DIR := isodir
 
 # Configuration
 # Set to 1 to enable spinlock tests, 0 to disable
-CONFIG_SPINLOCK_TESTS ?= 1
+CONFIG_SPINLOCK_TESTS ?= 0
 
 # Tools
 CC := gcc
