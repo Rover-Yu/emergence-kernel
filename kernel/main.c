@@ -27,7 +27,7 @@ static void kernel_halt(void) {
 }
 
 /* Helper: Print hex value to serial */
-static void serial_put_hex(uint64_t value) {
+static void __attribute__((unused)) serial_put_hex(uint64_t value) {
     const char hex_chars[] = "0123456789ABCDEF";
     char buf[17];
     int i;

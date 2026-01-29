@@ -12,6 +12,10 @@
 extern int acpi_get_apic_count(void);
 extern uint8_t acpi_get_apic_id_by_index(int index);
 
+/* External serial output functions */
+extern void serial_puts(const char *str);
+extern void serial_putc(char c);
+
 /* Stack area for AP CPUs (aligned to 16 bytes) */
 static uint8_t ap_stacks[SMP_MAX_CPUS][CPU_STACK_SIZE] __attribute__((aligned(16)));
 
@@ -239,9 +243,6 @@ void smp_start_all_aps(void) {
  * Context: Called with interrupts disabled, running on dedicated AP stack
  */
 void ap_start(void) {
-    extern void serial_puts(const char *str);
-    extern void serial_putc(char c);
-
     /* Atomically allocate CPU index using fetch-and-add
      * Each AP gets a unique index: 1, 2, 3, ... (BSP is always 0)
      * Atomic operation prevents race conditions when multiple APs boot */
