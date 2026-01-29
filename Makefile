@@ -5,15 +5,13 @@ ISO := emergence.iso
 BUILD_DIR := build
 ISO_DIR := isodir
 
+# ========================================================================
 # Configuration
-# Set to 1 to enable spinlock tests, 0 to disable
-CONFIG_SPINLOCK_TESTS ?= 0
-# Set to 1 to enable PMM tests, 0 to disable
-CONFIG_PMM_TESTS ?= 0
-# Set to 1 to enable AP startup debug marks on serial, 0 to disable
-CONFIG_SMP_AP_DEBUG ?= 0
-# Set to 1 to enable APIC timer test, 0 to disable
-CONFIG_APIC_TIMER_TEST ?= 1
+# ========================================================================
+# Load kernel configuration
+# Priority: .config (local override) > kernel.config (default)
+-include .config
+include kernel.config
 
 # Tools
 CC := gcc

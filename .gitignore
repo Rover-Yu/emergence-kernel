@@ -18,3 +18,6 @@ session-*.md
 cscope.*
 cscope.*.out
 tags
+
+# Local configuration overrides
+.config
