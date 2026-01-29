@@ -147,11 +147,13 @@ void kernel_main(uint32_t multiboot_info_addr) {
         lapic_init();
         smp_init();
 
+#if CONFIG_APIC_TIMER_TEST
         /* Initialize APIC Timer for high-frequency interrupts */
-        //apic_timer_init();
+        apic_timer_init();
 
         /* Activate APIC timer */
-        //timer_start();  /* Disabled: APIC timer tests interfere with spin lock tests */
+        timer_start();
+#endif
 
         serial_puts("BSP: Initialization complete\n");
     }

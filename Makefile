@@ -13,7 +13,7 @@ CONFIG_PMM_TESTS ?= 0
 # Set to 1 to enable AP startup debug marks on serial, 0 to disable
 CONFIG_SMP_AP_DEBUG ?= 0
 # Set to 1 to enable APIC timer test, 0 to disable
-CONFIG_APIC_TIMER_TEST ?= 0
+CONFIG_APIC_TIMER_TEST ?= 1
 
 # Tools
 CC := gcc
