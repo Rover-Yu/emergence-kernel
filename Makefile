@@ -8,6 +8,8 @@ ISO_DIR := isodir
 # Configuration
 # Set to 1 to enable spinlock tests, 0 to disable
 CONFIG_SPINLOCK_TESTS ?= 0
+# Set to 1 to enable PMM tests, 0 to disable
+CONFIG_PMM_TESTS ?= 0
 
 # Tools
 CC := gcc
@@ -18,6 +20,7 @@ GRUB_MKRESCUE := grub-mkrescue
 # Flags (x86_64 with multiboot support)
 CFLAGS := -ffreestanding -O2 -Wall -g -nostdlib -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2 -I.
 CFLAGS += -DCONFIG_SPINLOCK_TESTS=$(CONFIG_SPINLOCK_TESTS)
+CFLAGS += -DCONFIG_PMM_TESTS=$(CONFIG_PMM_TESTS)
 LDFLAGS := -nostdlib -m elf_x86_64
 
 # Architecture-specific sources (x86_64)

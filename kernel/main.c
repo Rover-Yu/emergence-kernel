@@ -95,6 +95,7 @@ void kernel_main(uint32_t multiboot_info_addr) {
     pmm_init(multiboot_info_addr);
     serial_puts("PMM: Initialized\n");
 
+#if CONFIG_PMM_TESTS
     /* PMM Tests */
     serial_puts("[ PMM tests ] Running allocation tests...\n");
 
@@ -134,6 +135,7 @@ void kernel_main(uint32_t multiboot_info_addr) {
     serial_puts(" (should be same as page1 if coalesced)\n");
 
     serial_puts("[ PMM tests ] Tests complete\n");
+#endif /* CONFIG_PMM_TESTS */
 
     /* BSP specific initialization - must complete BEFORE starting APs */
     /* Get CPU ID first to determine if we're BSP or AP */
