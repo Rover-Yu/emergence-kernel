@@ -10,6 +10,8 @@ ISO_DIR := isodir
 CONFIG_SPINLOCK_TESTS ?= 0
 # Set to 1 to enable PMM tests, 0 to disable
 CONFIG_PMM_TESTS ?= 0
+# Set to 1 to enable AP startup debug marks on serial, 0 to disable
+CONFIG_SMP_AP_DEBUG ?= 0
 
 # Tools
 CC := gcc
@@ -21,6 +23,7 @@ GRUB_MKRESCUE := grub-mkrescue
 CFLAGS := -ffreestanding -O2 -Wall -g -nostdlib -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2 -I.
 CFLAGS += -DCONFIG_SPINLOCK_TESTS=$(CONFIG_SPINLOCK_TESTS)
 CFLAGS += -DCONFIG_PMM_TESTS=$(CONFIG_PMM_TESTS)
+CFLAGS += -DCONFIG_SMP_AP_DEBUG=$(CONFIG_SMP_AP_DEBUG)
 LDFLAGS := -nostdlib -m elf_x86_64
 
 # Architecture-specific sources (x86_64)
@@ -102,8 +105,9 @@ $(BUILD_DIR)/test_%.o: $(TESTS_DIR)/%.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Compile AP trampoline (as 64-bit assembly, uses PIC)
+# Use CC to get C preprocessor for conditional compilation
 $(TRAMPOLINE_OBJ): $(TRAMPOLINE_SRC) | $(BUILD_DIR)
-	$(AS) $(ASFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -c $< -o $@
 
 # Link kernel (trampoline is included as regular object)
 $(KERNEL_ELF): $(OBJS)

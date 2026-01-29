@@ -15,6 +15,13 @@
  *   or call/pop technique in 16/32-bit modes
  */
 
+/* Debug marks configuration - set to 1 to enable AP trampoline debug output */
+#if CONFIG_SMP_AP_DEBUG
+#define AP_TRAMPOLINE_DEBUG 1
+#else
+#define AP_TRAMPOLINE_DEBUG 0
+#endif
+
 /* ========================================================================
  * CONSTANTS - Hardware addresses and offsets
  * ======================================================================== */
@@ -77,10 +84,12 @@ trampoline_start:
     mov %ax, %ss
     mov $REAL_MODE_STACK, %sp
 
+#if AP_TRAMPOLINE_DEBUG
     /* Debug output "H" to serial (COM1) */
     mov $SERIAL_PORT, %dx
     mov $'H', %al
     out %al, %dx
+#endif
 
     /* ========================================================================
      * Load GDT32 for Protected Mode using position-independent addressing
@@ -95,10 +104,12 @@ get_eip_gdt:
     /* Load GDTR from computed address */
     lgdt (%si)
 
+#if AP_TRAMPOLINE_DEBUG
     /* Debug: Output "G" */
     mov $SERIAL_PORT, %dx
     mov $'G', %al
     out %al, %dx
+#endif
 
     /* ============================================================
      * Enable Protected Mode
@@ -121,10 +132,12 @@ halt_loop:
      * ============================================================ */
     .code32
 pm_entry:
+#if AP_TRAMPOLINE_DEBUG
     /* Debug: Output "3" - reached protected mode */
     mov $SERIAL_PORT, %edx
     mov $'3', %al
     out %al, %edx
+#endif
 
     /* Set up data segments */
     mov $PM_DATA_SELECTOR, %eax
@@ -139,10 +152,12 @@ pm_entry:
     or $(1 << 5), %eax    /* Set PAE bit (bit 5) */
     mov %eax, %cr4
 
+#if AP_TRAMPOLINE_DEBUG
     /* Debug: Output "A" */
     mov $0x3F8, %edx
     mov $'A', %al
     out %al, %edx
+#endif
 
     /* ============================================================
      * Load CR3 using GOT-based PIC (32-bit mode)
@@ -162,10 +177,12 @@ get_eip_pm:
     mov %cr3, %eax
     mov %eax, %cr3
 
+#if AP_TRAMPOLINE_DEBUG
     /* Debug: Output "P" */
     mov $0x3F8, %edx
     mov $'P', %al
     out %al, %edx
+#endif
 
     /* ============================================================
      * Enable Long Mode
@@ -175,10 +192,12 @@ get_eip_pm:
     or $(1 << 8), %eax    /* Set LME bit (bit 8) */
     wrmsr
 
+#if AP_TRAMPOLINE_DEBUG
     /* Debug: Output "L" */
     mov $0x3F8, %edx
     mov $'L', %al
     out %al, %edx
+#endif
 
     /* ============================================================
      * Enable Paging (activates Long Mode)
@@ -187,10 +206,12 @@ get_eip_pm:
     or $(1 << 31), %eax   /* Set PG bit (bit 31) */
     mov %eax, %cr0
 
+#if AP_TRAMPOLINE_DEBUG
     /* Debug: Output "X" */
     mov $0x3F8, %edx
     mov $'X', %al
     out %al, %edx
+#endif
 
     /* ============================================================
      * Load 64-bit GDT
@@ -202,10 +223,12 @@ get_eip_gdt64:
     add $OFFSET_GDT64_GDTR, %eax  /* Add GDT64 GDTR offset */
     lgdt (%eax)
 
+#if AP_TRAMPOLINE_DEBUG
     /* Debug: Output "D" */
     mov $0x3F8, %edx
     mov $'D', %al
     out %al, %edx
+#endif
 
     /* ============================================================
      * Far Jump to 64-bit Mode using retf technique
@@ -259,10 +282,12 @@ gdt64:
 .code64
 .global ap_trampoline_stub
 ap_trampoline_stub:
+#if AP_TRAMPOLINE_DEBUG
     /* Debug: Output 'S' to serial (stub reached in 64-bit mode) */
     mov $0x3F8, %edx
     mov $'S', %al
     out %al, %edx
+#endif
 
     /* ============================================================
      * Set up AP stack
@@ -272,9 +297,11 @@ ap_trampoline_stub:
     movq $0xFFFF, %rsp
     movq %rsp, %rbp
 
+#if AP_TRAMPOLINE_DEBUG
     /* Debug: Output 'Q' to confirm stack was set */
     mov $'Q', %al
     out %al, %edx
+#endif
 
     /* Clear segment registers */
     mov $0, %ax
@@ -284,9 +311,11 @@ ap_trampoline_stub:
     mov %ax, %fs
     mov %ax, %gs
 
+#if AP_TRAMPOLINE_DEBUG
     /* Debug: Output 'A' to serial */
     mov $'A', %al
     out %al, %edx
+#endif
 
     /* ============================================================
      * Load IDT from address
@@ -296,22 +325,28 @@ ap_trampoline_stub:
      */
     movabs $idt_ptr, %rcx             /* Load idt_ptr address directly */
 
+#if AP_TRAMPOLINE_DEBUG
     /* Debug: Output 'I' - before IDT load */
     mov $'I', %al
     out %al, %edx
+#endif
 
     testq %rcx, %rcx                  /* Check if pointer is valid */
     jz skip_idt_load                  /* Skip if NULL (shouldn't happen) */
     lidt (%rcx)                       /* Load IDT - now exceptions can be handled */
 
+#if AP_TRAMPOLINE_DEBUG
     /* Debug: Output 'L' - after IDT load */
     mov $'L', %al
     out %al, %edx
+#endif
 skip_idt_load:
 
+#if AP_TRAMPOLINE_DEBUG
     /* Debug: Output 'T' - about to jump to ap_start */
     mov $'T', %al
     out %al, %edx
+#endif
 
     /* Disable interrupts and do DIRECT jump to test_ap_start
      * NOTE: Indirect jump (jmp *%rax) doesn't work, must use direct jump */
@@ -336,10 +371,12 @@ skip_idt_load:
      */
     .global test_ap_start
 test_ap_start:
+#if AP_TRAMPOLINE_DEBUG
     /* Output 'W' to confirm we reached the jump target */
     mov $0x3F8, %edx
     mov $'W', %al
     out %al, %edx
+#endif
 
     /* Jump to the real ap_start function in C */
     jmp ap_start

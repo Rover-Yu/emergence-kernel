@@ -145,14 +145,18 @@ void smp_init(void) {
  */
 void smp_start_all_aps(void) {
     extern int ap_startup(uint8_t apic_id, uint32_t startup_addr);
+#if CONFIG_SMP_AP_DEBUG
     extern void serial_puts(const char *str);
     extern void serial_putc(char c);
+#endif
 
     /* AP trampoline is at 0x7000 (page 7)
      * Page number for STARTUP IPI = 0x7000 >> 12 = 7 */
     const uint32_t TRAMPOLINE_PAGE = 7;
 
+#if CONFIG_SMP_AP_DEBUG
     serial_puts("SMP: Starting all Application Processors...\n");
+#endif
 
     /* Disable interrupts during AP startup to avoid interference */
     asm volatile ("cli");
@@ -178,9 +182,11 @@ void smp_start_all_aps(void) {
         int ret = ap_startup(apic_id, TRAMPOLINE_PAGE);
 
         if (ret < 0) {
+#if CONFIG_SMP_AP_DEBUG
             serial_puts("SMP: AP ");
             serial_putc('0' + i);
             serial_puts(" startup FAILED!\n");
+#endif
             cpu_info[i].state = CPU_OFFLINE;
             continue;  /* Skip failed AP and try the next one */
         }
