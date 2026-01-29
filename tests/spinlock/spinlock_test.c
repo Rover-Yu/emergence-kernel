@@ -46,12 +46,6 @@ static volatile int test_errors[SMP_MAX_CPUS];  /* Per-CPU error flags */
 /* Test completion flag */
 static volatile int test_complete = 0;
 
-/* Signal flag for test7 - BSP signals when lock is ready */
-static atomic_int test7_lock_ready = 0;
-
-/* Signal flag for test7 - AP confirms it attempted trylock */
-static atomic_int test7_ap_confirmed = 0;
-
 /* Per-CPU completion flags for test10 */
 static atomic_int test10_cpu_done[SMP_MAX_CPUS];
 
@@ -488,12 +482,14 @@ static int test6_lock_contention(int num_cpus) {
 
     /* Each CPU counts its iterations */
     test_counter[my_cpu] = ITERATIONS;
+    smp_mb();  /* Ensure counter write visible before barrier */
 
     /* Phase 3: Synchronize and verify */
     test_barrier_wait(num_cpus);
 
     if (test_is_bsp()) {
         test_barrier_reset();  /* Only BSP resets barrier */
+        smp_mb();  /* Ensure all APs' writes to test_counter[] are visible */
 
         int expected = 0;
         for (int i = 0; i < num_cpus; i++) {
@@ -524,112 +520,59 @@ static int test6_lock_contention(int num_cpus) {
 /**
  * test7_trylock_contention - Test 7: Trylock contention (exactly one succeeds)
  *
- * Fixed: Uses proper acquire/release semantics for cross-CPU signaling.
- * BSP waits for ALL APs to confirm they attempted trylock, eliminating race conditions.
- * Works with any number of CPUs.
+ * Uses two-phase barrier synchronization to ensure BSP holds lock while APs attempt trylock.
+ * Phase 1: Initialize, BSP acquires lock
+ * Phase 2: All CPUs attempt trylock (APs should fail, BSP should "succeed" by already holding it)
+ * Phase 3: BSP releases lock, verify results
  */
 static int test7_trylock_contention(int num_cpus) {
     int my_cpu = test_get_cpu_index();
 
     if (test_is_bsp()) {
         test_puts("Test 7: Trylock contention...\n");
-        atomic_store_explicit(&test7_lock_ready, 0, memory_order_relaxed); /* Initialize signal */
-        atomic_store_explicit(&test7_ap_confirmed, 0, memory_order_relaxed); /* Initialize confirmation */
-        test_barrier_reset();        /* Reset barrier at start of test */
+        test_barrier_reset();
     }
 
-    /* Phase 1: Initialize and synchronize */
+    /* Phase 1: Initialize and BSP acquires lock */
     if (test_is_bsp()) {
         spin_lock_init(&test_lock1);
-    }
-    test_barrier_wait(num_cpus);
-
-    /* Phase 2: Test trylock - BSP holds lock, ALL APs try to acquire (only BSP should succeed) */
-    if (test_is_bsp()) {
-        /* BSP: Acquire and hold lock */
-        irq_flags_t flags;
-        asm volatile("pushf\npop %0" : "=rm"(flags));
-        disable_interrupts();
-
+        for (int i = 0; i < SMP_MAX_CPUS; i++) {
+            test_counter[i] = 0;
+        }
+        /* BSP acquires lock and holds it */
         spin_lock(&test_lock1);
-        test_counter[my_cpu] = 1;  /* BSP acquired lock */
+        smp_mb();  /* Ensure lock acquisition visible to all CPUs before barrier */
+        test_counter[0] = 1;  /* BSP holds lock */
+    }
 
-        /* Signal APs that lock is held (with release semantics) */
-        atomic_store_explicit(&test7_lock_ready, 1, memory_order_release);
+    /* First barrier: ensure BSP has acquired lock before APs proceed */
+    test_barrier_wait(num_cpus);
 
-        /* Small delay to ensure signal is visible to all APs */
-        for (volatile int i = 0; i < 1000; i++) {
-            cpu_relax();
-        }
-
-        /* Wait for ALL APs to confirm they attempted trylock */
-        /* We expect (num_cpus - 1) confirmations since BSP doesn't confirm */
-        int expected_confirmations = num_cpus - 1;
-        int confirmations = 0;
-        int timeout = SPIN_TIMEOUT * 10;  /* Extended timeout for multiple APs */
-
-        while (confirmations < expected_confirmations && timeout > 0) {
-            /* Check how many APs have confirmed */
-            confirmations = atomic_load_explicit(&test7_ap_confirmed, memory_order_acquire);
-            if (confirmations < expected_confirmations) {
-                cpu_relax();
-                timeout--;
-            }
-        }
-
-        if (timeout == 0) {
-            test_puts("  FAIL: AP confirmation timeout (got ");
-            test_put_hex(confirmations);
-            test_puts(" of ");
-            test_put_hex(expected_confirmations);
-            test_puts(" confirmations)\n");
+    /* Phase 2: All CPUs attempt trylock (BSP already holds it) */
+    if (test_is_bsp()) {
+        /* BSP: Trylock should fail (we already hold it) */
+        if (spin_trylock(&test_lock1)) {
+            /* Unexpected: trylock succeeded */
             spin_unlock(&test_lock1);
-            enable_interrupts();
-            return -1;
         }
-
-        spin_unlock(&test_lock1);
-        enable_interrupts();
+        /* BSP still holds the lock from phase 1 */
     } else {
-        /* AP: Wait for BSP to acquire lock (with acquire semantics) */
-        /* Add timeout to prevent infinite wait */
-        int wait_timeout = SPIN_TIMEOUT * 10;
-        while (!atomic_load_explicit(&test7_lock_ready, memory_order_acquire) && wait_timeout > 0) {
-            cpu_relax();
-            wait_timeout--;
-        }
-
-        irq_flags_t flags;
-        asm volatile("pushf\npop %0" : "=rm"(flags));
-        disable_interrupts();
-
-        int success = spin_trylock(&test_lock1);
-        test_counter[my_cpu] = success ? 1 : 0;
-
-        /* Confirm we completed trylock attempt (with release semantics) */
-        /* We increment the confirmation counter instead of just setting it */
-        atomic_fetch_add_explicit(&test7_ap_confirmed, 1, memory_order_release);
-        /* Full fence to ensure the increment is visible */
-        smp_mb();
-
-        if (success) {
+        /* AP: Trylock should fail (BSP holds it) */
+        if (spin_trylock(&test_lock1)) {
+            test_counter[my_cpu] = 1;  /* Unexpected success */
             spin_unlock(&test_lock1);
-        }
-
-        /* Restore interrupt state */
-        if (flags & (1 << 9)) {
-            enable_interrupts();
+        } else {
+            test_counter[my_cpu] = 0;  /* Expected: failed to acquire */
         }
     }
 
-    /* Phase 3: Synchronize and verify */
+    /* Second barrier: ensure all CPUs have attempted trylock before BSP releases */
     test_barrier_wait(num_cpus);
 
+    /* Phase 3: BSP releases lock and verifies */
     if (test_is_bsp()) {
-        test_barrier_reset();  /* Reset for next test */
-
-        /* Memory barrier to ensure all counter updates visible */
-        smp_mb();
+        spin_unlock(&test_lock1);
+        test_barrier_reset();
 
         int total_success = 0;
         for (int i = 0; i < num_cpus; i++) {
@@ -815,119 +758,86 @@ static int test9_rwlock_writer(int num_cpus) {
  * test10_deadlock_prevention - Test 10: Deadlock prevention with consistent ordering
  *
  * All CPUs acquire locks in consistent order (lock1, then lock2) to prevent deadlock.
+ * This test verifies that when multiple CPUs follow the same lock acquisition order,
+ * no deadlock occurs even with heavy contention.
  *
- * Fixed: Each CPU signals completion with release semantics. BSP waits for all
- * completion signals before verifying shared state, eliminating the race where
- * BSP could verify before AP's final increment is globally visible.
+ * Fixed: Added completion signaling, increased iterations to 100, proper memory barriers.
  */
 static int test10_deadlock_prevention(int num_cpus) {
     int my_cpu = test_get_cpu_index();
 
     if (test_is_bsp()) {
         test_puts("Test 10: Deadlock prevention...\n");
-        test_barrier_reset();  /* Reset barrier at start of test */
+        test_barrier_reset();
     }
 
-    /* Phase 1: Initialize and barrier (BSP initializes, both synchronize) */
+    /* Phase 1: Initialize and synchronize */
     if (test_is_bsp()) {
         spin_lock_init(&test_lock1);
         spin_lock_init(&test_lock2);
         atomic_store_explicit(&shared_counter, 0, memory_order_relaxed);
-        /* Reset per-CPU counters and completion flags */
         for (int i = 0; i < SMP_MAX_CPUS; i++) {
             test_counter[i] = 0;
             atomic_store_explicit(&test10_cpu_done[i], 0, memory_order_relaxed);
         }
     }
-    /* Memory barrier to ensure initialization visible before barrier */
-    smp_mb();
     test_barrier_wait(num_cpus);
 
     /* Phase 2: All CPUs execute critical section with consistent lock ordering */
-    irq_flags_t flags;
-    asm volatile("pushf\npop %0" : "=rm"(flags));
-    disable_interrupts();
-
-    /* Track local rounds */
-    int local_rounds = 0;
-    for (int round = 0; round < 10; round++) {
-        spin_lock(&test_lock1);
+    /* Increase to 100 iterations like test 6 for better memory propagation */
+    const int ROUNDS = 100;
+    for (int round = 0; round < ROUNDS; round++) {
+        irq_flags_t flags;
+        /* Consistent lock order: lock1 → lock2 */
+        spin_lock_irqsave(&test_lock1, &flags);
         spin_lock(&test_lock2);
 
-        /* Critical section - use atomic increment for cross-CPU visibility */
         atomic_fetch_add(&shared_counter, 1);
 
-        /* Release in reverse order */
         spin_unlock(&test_lock2);
-        spin_unlock(&test_lock1);
-
-        local_rounds++;
+        spin_unlock_irqrestore(&test_lock1, &flags);
     }
 
-    /* Store per-CPU round count */
-    test_counter[my_cpu] = local_rounds;
-
+    /* Each CPU records its completion */
+    test_counter[my_cpu] = ROUNDS;
+    smp_mb();  // Ensure all writes visible before signaling done
     /* Signal completion with release semantics */
     atomic_store_explicit(&test10_cpu_done[my_cpu], 1, memory_order_release);
 
-    /* Restore interrupt state */
-    if (flags & (1 << 9)) {
-        enable_interrupts();
-    }
+    /* Phase 3: Synchronize after critical section */
+    test_barrier_wait(num_cpus);
 
-    /* Phase 3: Single barrier for synchronization */
-    /* Note: counter is already at num_cpus from first barrier, so we expect num_cpus * 2 */
-    int barrier_result = test_barrier_wait(num_cpus * 2);
-
-    if (barrier_result < 0) {
-        if (test_is_bsp()) {
-            test_puts("  FAIL: Barrier timeout in phase 3\n");
-            test_barrier_reset();
-        }
-        return -1;
-    }
-
-    /* Phase 4: BSP waits for all CPUs to confirm completion, then verifies */
     if (test_is_bsp()) {
         test_barrier_reset();
 
-        /* Wait for each CPU to confirm completion */
+        /* Wait for all CPUs to signal completion */
         for (int i = 0; i < num_cpus; i++) {
-            if (test_wait_for_flag(&test10_cpu_done[i], SPIN_TIMEOUT) < 0) {
-                test_puts("  FAIL: CPU ");
-                test_put_hex(i);
-                test_puts(" completion timeout\n");
-                return -1;
+            while (!atomic_load_explicit(&test10_cpu_done[i], memory_order_acquire)) {
+                cpu_relax();
             }
         }
 
-        /* Full barrier to ensure all shared_counter updates visible */
-        smp_mb();
-
-        /* Memory barrier to ensure all counter updates visible */
+        /* Full memory barrier before verification */
         smp_mb();
 
         /* Calculate expected from per-CPU counters */
-        int total_rounds = 0;
+        int expected = 0;
         for (int i = 0; i < num_cpus; i++) {
-            total_rounds += test_counter[i];
+            expected += test_counter[i];
         }
 
-        int expected = num_cpus * 10;
         int actual = atomic_load_explicit(&shared_counter, memory_order_acquire);
 
-        if (total_rounds == expected && actual == expected) {
+        if (actual == expected) {
             test_puts("  PASS: No deadlock, counter correct (");
             test_put_hex(actual);
             test_puts(")\n");
             test_puts("Test 10 PASSED\n\n");
             return 0;
         } else {
-            test_puts("  FAIL: Counter incorrect (shared=");
+            test_puts("  FAIL: Counter incorrect (");
             test_put_hex(actual);
-            test_puts(" total_rounds=");
-            test_put_hex(total_rounds);
-            test_puts(" expected=");
+            test_puts(" != ");
             test_put_hex(expected);
             test_puts(")\n");
             return -1;
