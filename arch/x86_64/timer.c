@@ -35,9 +35,11 @@ void timer_stop(void);  /* Declared in timer.h, need forward declaration here */
  */
 void apic_timer_handler(void) {
     if (apic_timer_active && apic_timer_count < (int)NUM_QUOTES) {
+#if CONFIG_APIC_TIMER_TEST
         serial_puts("[ APIC tests ]");
         serial_puts(math_quotes[apic_timer_count]);
         serial_puts("\n");
+#endif
         apic_timer_count++;
 
         /* Stop timer after 5 quotes - mask the hardware interrupt */
@@ -56,9 +58,11 @@ void apic_timer_handler(void) {
  */
 void timer_handler(void) {
     if (apic_timer_active && apic_timer_count < (int)NUM_QUOTES) {
+#if CONFIG_APIC_TIMER_TEST
         serial_puts("[ APIC tests ]");
         serial_puts(math_quotes[apic_timer_count]);
         serial_puts("\n");
+#endif
         apic_timer_count++;
 
         /* Stop timer after 5 quotes - mask the hardware interrupt */

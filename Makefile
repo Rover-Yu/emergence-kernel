@@ -12,6 +12,8 @@ CONFIG_SPINLOCK_TESTS ?= 0
 CONFIG_PMM_TESTS ?= 0
 # Set to 1 to enable AP startup debug marks on serial, 0 to disable
 CONFIG_SMP_AP_DEBUG ?= 0
+# Set to 1 to enable APIC timer test, 0 to disable
+CONFIG_APIC_TIMER_TEST ?= 0
 
 # Tools
 CC := gcc
@@ -24,6 +26,7 @@ CFLAGS := -ffreestanding -O2 -Wall -g -nostdlib -mcmodel=large -mno-red-zone -mn
 CFLAGS += -DCONFIG_SPINLOCK_TESTS=$(CONFIG_SPINLOCK_TESTS)
 CFLAGS += -DCONFIG_PMM_TESTS=$(CONFIG_PMM_TESTS)
 CFLAGS += -DCONFIG_SMP_AP_DEBUG=$(CONFIG_SMP_AP_DEBUG)
+CFLAGS += -DCONFIG_APIC_TIMER_TEST=$(CONFIG_APIC_TIMER_TEST)
 LDFLAGS := -nostdlib -m elf_x86_64
 
 # Architecture-specific sources (x86_64)
