@@ -43,7 +43,7 @@
 - **IDT 设置** - 完整的中断描述符表
 - **异常处理器** - 除零、页错误等异常处理
 - **ISR 桩架** - 汇编中断服务例程
-- **APIC 定时器** - 高频定时器中断（RTC 已因 QEMU 重置问题移除）
+- **APIC 定时器** - 高频定时器中断（数学名言输出）
 
 #### 设备驱动框架
 - **Linux 风格驱动模型** - probe/init/remove 模式
@@ -78,7 +78,7 @@
 ### 快速开始
 
 ```bash
-# 编译内核和 ISO
+# 编译内核和 ISO（使用默认配置）
 make
 
 # 运行 (2 CPUs)
@@ -89,6 +89,35 @@ make run
 
 # 清理构建文件
 make clean
+```
+
+### 配置选项
+
+内核支持多种可配置选项，通过 `kernel.config` 文件或命令行参数控制：
+
+| 选项 | 默认值 | 说明 |
+|------|--------|------|
+| `CONFIG_SPINLOCK_TESTS` | 0 | 启用自旋锁测试套件 |
+| `CONFIG_PMM_TESTS` | 0 | 启用物理内存管理测试 |
+| `CONFIG_APIC_TIMER_TEST` | 1 | 启用 APIC 定时器测试（数学名言输出） |
+| `CONFIG_SMP_AP_DEBUG` | 0 | 启用 AP 启动调试标记（串口输出 H→G→3→A→P→L→X→D→S→Q→A→I→L→T→W） |
+
+**配置优先级：**
+1. 命令行参数：`make CONFIG_SPINLOCK_TESTS=1`
+2. 本地覆盖：`.config` 文件（不提交到 git）
+3. 默认配置：`kernel.config` 文件
+
+**示例：**
+```bash
+# 启用自旋锁测试
+make CONFIG_SPINLOCK_TESTS=1
+
+# 启用 AP 调试标记
+make CONFIG_SMP_AP_DEBUG=1
+
+# 创建本地配置文件（永久覆盖）
+cp kernel.config .config
+nano .config  # 编辑配置
 ```
 
 ### GDB 调试
@@ -128,13 +157,22 @@ Emergence-Kernel/
 │   ├── device.c         # 设备驱动框架
 │   ├── pmm.c            # 物理内存管理（伙伴系统）
 │   ├── multiboot2.c     # Multiboot2 解析
-│   ├── list.h           # 双向链表
-│   └── spinlock_test.c  # 自旋锁测试套件
+│   └── list.h           # 双向链表
 ├── include/             # 公共头文件
-│   └── spinlock.h       # 自旋锁公共接口
+│   ├── spinlock.h       # 自旋锁公共接口
+│   ├── atomic.h         # 原子操作
+│   ├── barrier.h        # 内存屏障
+│   └── smp.h            # SMP 接口
 ├── tests/               # 测试代码
-│   └── timer_test.c     # 定时器测试
-└── Makefile             # 构建系统
+│   ├── boot/            # 启动集成测试
+│   ├── smp/             # SMP 集成测试
+│   ├── timer/           # 定时器集成测试
+│   ├── spinlock/        # 内核测试代码
+│   └── lib/             # 测试框架库
+├── kernel.config        # 内核配置文件（默认）
+├── .config              # 本地配置覆盖（不提交）
+├── Makefile             # 构建系统
+└── CLAUDE.md            # Claude Code 项目指南
 ```
 
 ---
@@ -170,7 +208,7 @@ Emergence-Kernel/
 | AP 启动 | ✅ 完成 | 多核成功启动，状态管理完整 |
 | 中断处理 | ✅ 完成 | IDT 和异常处理正常 |
 | APIC 初始化 | ✅ 完成 | Local APIC 和 I/O APIC |
-| APIC 定时器 | ✅ 完成 | 高频定时器中断 |
+| APIC 定时器 | ✅ 完成 | 高频定时器中断，数学名言输出 |
 | 设备驱动框架 | ✅ 完成 | probe/init/remove 模式 |
 | 物理内存管理 | ✅ 完成 | 伙伴系统分配器，支持 Multiboot2 |
 | 同步原语 | ✅ 完成 | 自旋锁、读写锁、IRQ 安全锁 |
@@ -187,6 +225,7 @@ AP 启动导引使用位置无关代码 (PIC)，通过 GOT 实现符号解析：
 - **16-bit** → **32-bit** 使用 `data32 ljmp` 远跳转
 - **32-bit** → **64-bit** 使用 `retf` 技巧
 - 无需运行时修补，链接器填充 GOT
+- **条件编译调试标记**：通过 `CONFIG_SMP_AP_DEBUG` 控制 H→G→3→A→P→L→X→D→S→Q→A→I→L→T→W 输出
 
 ### 伙伴系统内存分配器
 基于 Linux 内核的 buddy 算法：
@@ -201,6 +240,7 @@ AP 启动导引使用位置无关代码 (PIC)，通过 GOT 实现符号解析：
 - **IRQ 安全锁** - 保存/恢复 RFLAGS，防止中断死锁
 - **读写锁** - 原子计数器实现，支持多读者
 - **PAUSE 指令** - 降低自旋功耗
+- **内存屏障修复**：Test 6 修复了 BSP 读取 test_counter 的内存可见性问题
 
 ### 汇编助记符优化
 ```assembly
@@ -219,6 +259,13 @@ Linux 风格的三阶段初始化：
 1. **注册驱动** - `driver_register()`
 2. **探测设备** - `device_probe()` (匹配 match_id/match_mask)
 3. **初始化设备** - 按 `init_priority` 排序执行
+
+### 配置系统
+灵活的构建配置：
+- **kernel.config** - 默认配置（提交到 git）
+- **.config** - 本地覆盖（不提交）
+- **命令行** - 临时覆盖 `make CONFIG_XXX=1`
+- **条件编译** - 所有测试和调试功能可独立控制
 
 ---
 
@@ -242,25 +289,22 @@ Linux 风格的三阶段初始化：
 ░░░   > Learning with Every Boot   ░░░
 ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
 
-PMM: Initialized
-[ PMM tests ] Running allocation tests...
-[ PMM tests ] Allocated page1 at 0x1000000, page2 at 0x1001000
-[ PMM tests ] Allocated 32KB block at 0x1002000
-[ PMM tests ] Freed pages (buddy coalescing)
-[ PMM tests ] Free: 0x1F8 / Total: 0x200
-[ PMM tests ] Allocated 2-page block at 0x1000000 (should be same as page1 if coalesced)
-[ PMM tests ] Tests complete
+PMM: Initializing...
 BSP: Initializing...
-SMP: Starting spin lock tests...
-[ Spin lock tests ] Starting spin lock test suite...
-[ Spin lock tests ] Number of CPUs: 2
-[ Spin lock tests ] === Single-CPU Tests ===
-[ Spin lock tests ] Test 1: Basic lock operations...
-[ Spin lock tests ] Test 1 PASSED
-...
-[ Spin lock tests ] Result: ALL TESTS PASSED
-SMP: All spin lock tests PASSED
-System: Shutdown complete
+APIC: LAPIC_VER = 0x00050014
+APIC: APIC version=D maxlvt=5
+APIC: Local APIC initialized
+BSP: Initialization complete
+CPU 0 (APIC ID 0): Successfully booted
+SMP: Starting APs...
+SMP: All APs startup complete. 1/1 APs ready
+[ APIC tests ] 1. Mathematics is queen of sciences. - Gauss
+[ APIC tests ] 2. Pure math is poetry of logic. - Einstein
+[ APIC tests ] 3. Math reveals secrets to lovers. - Cantor
+[ APIC tests ] 4. Proposing questions exceeds solving. - Cantor
+[ APIC tests ] 5. God created natural numbers. - Kronecker
+system is shutting down
+SHUTDOWN: Port I/O failed, halting...
 ```
 
 ---

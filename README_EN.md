@@ -43,7 +43,7 @@ This is a research kernel project aimed at exploring the boundaries of LLM capab
 - **IDT Setup** - Complete Interrupt Descriptor Table
 - **Exception Handlers** - Divide by zero, page fault, etc.
 - **ISR Stubs** - Assembly interrupt service routines
-- **APIC Timer** - High-frequency timer interrupts (RTC removed due to QEMU resets)
+- **APIC Timer** - High-frequency timer interrupts (mathematician quotes output)
 
 #### Device Driver Framework
 - **Linux-style Driver Model** - probe/init/remove pattern
@@ -78,7 +78,7 @@ This is a research kernel project aimed at exploring the boundaries of LLM capab
 ### Quick Start
 
 ```bash
-# Build kernel and ISO
+# Build kernel and ISO (with default configuration)
 make
 
 # Run (2 CPUs)
@@ -89,6 +89,35 @@ make run
 
 # Clean build artifacts
 make clean
+```
+
+### Configuration Options
+
+The kernel supports several configuration options controlled via `kernel.config` or command-line parameters:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `CONFIG_SPINLOCK_TESTS` | 0 | Enable spin lock test suite |
+| `CONFIG_PMM_TESTS` | 0 | Enable physical memory manager tests |
+| `CONFIG_APIC_TIMER_TEST` | 1 | Enable APIC timer test (mathematician quotes output) |
+| `CONFIG_SMP_AP_DEBUG` | 0 | Enable AP startup debug marks (serial output H→G→3→A→P→L→X→D→S→Q→A→I→L→T→W) |
+
+**Configuration Priority:**
+1. Command-line: `make CONFIG_SPINLOCK_TESTS=1`
+2. Local override: `.config` file (not committed to git)
+3. Default: `kernel.config` file
+
+**Examples:**
+```bash
+# Enable spin lock tests
+make CONFIG_SPINLOCK_TESTS=1
+
+# Enable AP debug marks
+make CONFIG_SMP_AP_DEBUG=1
+
+# Create local config file (permanent override)
+cp kernel.config .config
+nano .config  # Edit configuration
 ```
 
 ### GDB Debugging
@@ -128,13 +157,22 @@ Emergence-Kernel/
 │   ├── device.c         # Device driver framework
 │   ├── pmm.c            # Physical Memory Manager (buddy system)
 │   ├── multiboot2.c     # Multiboot2 parsing
-│   ├── list.h           # Doubly-linked list
-│   └── spinlock_test.c  # Spin lock test suite
+│   └── list.h           # Doubly-linked list
 ├── include/             # Public headers
-│   └── spinlock.h       # Spin lock public interface
+│   ├── spinlock.h       # Spin lock public interface
+│   ├── atomic.h         # Atomic operations
+│   ├── barrier.h        # Memory barriers
+│   └── smp.h            # SMP interface
 ├── tests/               # Test code
-│   └── timer_test.c     # Timer tests
-└── Makefile             # Build system
+│   ├── boot/            # Boot integration tests
+│   ├── smp/             # SMP integration tests
+│   ├── timer/           # Timer integration tests
+│   ├── spinlock/        # Kernel test code
+│   └── lib/             # Test framework library
+├── kernel.config        # Kernel configuration file (default)
+├── .config              # Local configuration override (not committed)
+├── Makefile             # Build system
+└── CLAUDE.md            # Claude Code project guide
 ```
 
 ---
@@ -170,7 +208,7 @@ Emergence-Kernel/
 | AP Boot | ✅ Complete | Multi-core boot with state management |
 | Interrupt Handling | ✅ Complete | IDT and exception handlers working |
 | APIC Init | ✅ Complete | Local APIC and I/O APIC |
-| APIC Timer | ✅ Complete | High-frequency timer interrupts |
+| APIC Timer | ✅ Complete | High-frequency timer interrupts with math quotes |
 | Device Framework | ✅ Complete | probe/init/remove pattern |
 | Physical Memory Manager | ✅ Complete | Buddy system allocator with Multiboot2 |
 | Synchronization Primitives | ✅ Complete | Spin locks, RW locks, IRQ-safe locks |
@@ -187,6 +225,7 @@ AP startup trampoline uses Position-Independent Code (PIC) with GOT-based symbol
 - **16-bit** → **32-bit** using `data32 ljmp` far jump
 - **32-bit** → **64-bit** using `retf` technique
 - No runtime patching needed; linker populates GOT
+- **Conditional debug marks**: Control H→G→3→A→P→L→X→D→S→Q→A→I→L→T→W output via `CONFIG_SMP_AP_DEBUG`
 
 ### Buddy System Memory Allocator
 Based on the Linux kernel buddy algorithm:
@@ -201,6 +240,7 @@ Complete SMP synchronization primitives:
 - **IRQ-safe locks** - Saves/restores RFLAGS to prevent interrupt deadlocks
 - **Read-write locks** - Atomic counter implementation, multiple readers
 - **PAUSE instruction** - Reduces power consumption while spinning
+- **Memory barrier fix**: Test 6 fixed memory visibility issue for BSP reading test_counter
 
 ### Assembly Mnemonic Optimization
 ```assembly
@@ -219,6 +259,13 @@ Linux-style three-phase initialization:
 1. **Register Drivers** - `driver_register()`
 2. **Probe Devices** - `device_probe()` (match by match_id/match_mask)
 3. **Init Devices** - Execute in `init_priority` order
+
+### Configuration System
+Flexible build configuration:
+- **kernel.config** - Default configuration (committed to git)
+- **.config** - Local override (not committed)
+- **Command line** - Temporary override `make CONFIG_XXX=1`
+- **Conditional compilation** - All test and debug features independently controllable
 
 ---
 
@@ -242,25 +289,22 @@ All code in this project is generated via **Claude Code** (claude.ai/code):
 ░░░   > Learning with Every Boot   ░░░
 ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
 
-PMM: Initialized
-[ PMM tests ] Running allocation tests...
-[ PMM tests ] Allocated page1 at 0x1000000, page2 at 0x1001000
-[ PMM tests ] Allocated 32KB block at 0x1002000
-[ PMM tests ] Freed pages (buddy coalescing)
-[ PMM tests ] Free: 0x1F8 / Total: 0x200
-[ PMM tests ] Allocated 2-page block at 0x1000000 (should be same as page1 if coalesced)
-[ PMM tests ] Tests complete
+PMM: Initializing...
 BSP: Initializing...
-SMP: Starting spin lock tests...
-[ Spin lock tests ] Starting spin lock test suite...
-[ Spin lock tests ] Number of CPUs: 2
-[ Spin lock tests ] === Single-CPU Tests ===
-[ Spin lock tests ] Test 1: Basic lock operations...
-[ Spin lock tests ] Test 1 PASSED
-...
-[ Spin lock tests ] Result: ALL TESTS PASSED
-SMP: All spin lock tests PASSED
-System: Shutdown complete
+APIC: LAPIC_VER = 0x00050014
+APIC: APIC version=D maxlvt=5
+APIC: Local APIC initialized
+BSP: Initialization complete
+CPU 0 (APIC ID 0): Successfully booted
+SMP: Starting APs...
+SMP: All APs startup complete. 1/1 APs ready
+[ APIC tests ] 1. Mathematics is queen of sciences. - Gauss
+[ APIC tests ] 2. Pure math is poetry of logic. - Einstein
+[ APIC tests ] 3. Math reveals secrets to lovers. - Cantor
+[ APIC tests ] 4. Proposing questions exceeds solving. - Cantor
+[ APIC tests ] 5. God created natural numbers. - Kronecker
+system is shutting down
+SHUTDOWN: Port I/O failed, halting...
 ```
 
 ---
