@@ -165,3 +165,7 @@ test-apic-timer:
 test-smp:
 	@echo "Running SMP Boot Test..."
 	@cd tests && ./smp/smp_boot_test.sh 2
+
+test-nested-kernel:
+	@echo "Running Nested Kernel Invariants Test..."
+	@cd tests && ./monitor/nested_kernel_invariants_test.sh
