@@ -15,6 +15,8 @@
 # Usage: ./nested_kernel_invariants_test.sh
 #
 
+set -e
+
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 KERNEL_ISO="${SCRIPT_DIR}/../../emergence.iso"
@@ -31,50 +33,6 @@ print_header() {
     echo "CPU Count: 1"
     echo "ISO: ${KERNEL_ISO}"
     echo ""
-}
-
-# Check for a specific invariant pass/fail in output
-# The output format has INV header on one line, result on following lines:
-#   VERIFY: [Inv 1] Description:
-#   VERIFY:   details - PASS
-#
-# For Invariant 6, the format spans 3 lines:
-#   VERIFY: [Inv 6] CR3 loaded with pre-declared PTP:
-#   VERIFY:   Current CR3: 0x...
-#   VERIFY:   monitor_pml4_phys: 0x..., unpriv_pml4_phys: 0x... - PASS
-check_invariant() {
-    local inv_num="$1"
-    local inv_name="$2"
-    local output="$3"
-
-    # Get the verification output AFTER "Page table switch complete"
-    # This ensures we check the final state where all invariants should pass
-    # We need to find the LAST verification output (after unprivileged switch)
-    local final_verification=$(echo "$output" | sed -n '/Page table switch complete/,$p' | tail -n +2)
-
-    # Check if the invariant line exists
-    if ! echo "$final_verification" | grep -q "VERIFY: \[Inv ${inv_num}\]"; then
-        print_result "Invariant ${inv_num}: ${inv_name}" "false" "No verification output found"
-        return 1
-    fi
-
-    # For Invariant 6, need to check line 3 after header (A 2 instead of A 1)
-    # For other invariants, check line 2 after header (A 1)
-    local lines_after=1
-    if [ "$inv_num" = "6" ]; then
-        lines_after=2
-    fi
-
-    # Check the lines AFTER the INV header for PASS or FAIL
-    local result=$(echo "$final_verification" | grep -A ${lines_after} "VERIFY: \[Inv ${inv_num}\]" | tail -1)
-
-    if echo "$result" | grep -q "PASS"; then
-        print_result "Invariant ${inv_num}: ${inv_name}" "true"
-        return 0
-    else
-        print_result "Invariant ${inv_num}: ${inv_name}" "false" "Invariant check shows FAIL or missing result"
-        return 1
-    fi
 }
 
 # Main test execution
@@ -112,60 +70,49 @@ main() {
     print_result "CR3 switch to unprivileged mode" "true"
 
     echo ""
-    echo "Checking all 6 Nested Kernel invariants:"
+    echo "Checking Nested Kernel invariant results:"
     echo ""
 
-    # Count total passes
+    # Count total passes - look for "[CPU X] Nested Kernel invariants: PASS"
+    # The new quiet mode format: [CPU 0] Nested Kernel invariants: PASS
     local total_passed=0
-    local total_tests=6
+    local total_cpus=0
 
-    # Invariant 1: PTPs read-only in outer kernel
-    if check_invariant 1 "PTPs read-only in outer kernel" "$boot_log"; then
-        total_passed=$((total_passed + 1))
-    fi
-
-    # Invariant 2: CR0.WP enforcement active
-    if check_invariant 2 "CR0.WP enforcement active" "$boot_log"; then
-        total_passed=$((total_passed + 1))
-    fi
-
-    # Invariant 3: Global mappings accessible in both views
-    if check_invariant 3 "Global mappings accessible in both views" "$boot_log"; then
-        total_passed=$((total_passed + 1))
-    fi
-
-    # Invariant 4: Context switch mechanism
-    if check_invariant 4 "Context switch mechanism" "$boot_log"; then
-        total_passed=$((total_passed + 1))
-    fi
-
-    # Invariant 5: PTPs writable in nested kernel
-    if check_invariant 5 "PTPs writable in nested kernel" "$boot_log"; then
-        total_passed=$((total_passed + 1))
-    fi
-
-    # Invariant 6: CR3 loaded with pre-declared PTP
-    if check_invariant 6 "CR3 loaded with pre-declared PTP" "$boot_log"; then
-        total_passed=$((total_passed + 1))
-    fi
+    # Check each CPU's result
+    for cpu in 0 1 2 3; do
+        if echo "$boot_log" | grep -q "\[CPU $cpu\] Nested Kernel invariants: PASS"; then
+            print_result "CPU $cpu invariants" "true"
+            total_passed=$((total_passed + 1))
+        elif echo "$boot_log" | grep -q "\[CPU $cpu\] Nested Kernel invariants: FAIL"; then
+            print_result "CPU $cpu invariants" "false" "Invariant check failed"
+        fi
+        # Count how many CPUs we saw (either PASS or FAIL)
+        if echo "$boot_log" | grep -q "\[CPU $cpu\] Nested Kernel invariants:"; then
+            total_cpus=$((total_cpus + 1))
+        fi
+    done
 
     echo ""
     echo "Nested Kernel Invariants Summary:"
-    echo "  Passed: ${total_passed}/${total_tests}"
+    echo "  Passed: ${total_passed}/${total_cpus}"
 
-    # Check final verdict (from final verification after unprivileged switch)
-    local final_verification=$(echo "$boot_log" | sed -n '/Page table switch complete/,$p' | tail -n +2)
-    if echo "$final_verification" | grep -q "VERIFY: PASS - All 6 Nested Kernel invariants enforced"; then
+    # Check that we got the expected number of CPUs
+    if [ "$total_cpus" -lt 1 ]; then
+        echo "  Status: ERROR - No CPU results found"
+        print_summary
+        exit 1
+    fi
+
+    # All CPUs should pass
+    if [ "$total_passed" -eq "$total_cpus" ]; then
         echo "  Status: ALL INVARIANTS ENFORCED"
-    elif echo "$final_verification" | grep -q "VERIFY: FAIL - Some invariants violated"; then
-        echo "  Status: SOME INVARIANTS VIOLATED"
     else
-        echo "  Status: VERDICT UNKNOWN"
+        echo "  Status: SOME INVARIANTS VIOLATED"
     fi
 
     # Update test counters
     TESTS_PASSED=$total_passed
-    TESTS_FAILED=$((total_tests - total_passed))
+    TESTS_FAILED=$((total_cpus - total_passed))
 
     print_summary
 }

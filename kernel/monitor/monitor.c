@@ -108,14 +108,21 @@ static void monitor_protect_state(void) {
  * correctly enforced.
  *
  * Invariants are checked in numerical order: 1, 2, 3, 4, 5, 6
+ *
+ * Output behavior:
+ * - Always shows final PASS/FAIL result
+ * - Shows per-invariant details only if CONFIG_INVARIANTS_VERBOSE=1
  */
 void monitor_verify_invariants(void) {
     extern int smp_get_cpu_index(void);
 
     int cpu_id = smp_get_cpu_index();
+
+#if CONFIG_INVARIANTS_VERBOSE
     serial_puts("\n=== Nested Kernel Invariant Verification (CPU ");
     serial_putc('0' + cpu_id);
     serial_puts(") ===\n");
+#endif
 
     /* Get physical address of unpriv_pd to find PD entry */
     uint64_t unpriv_pd_phys = virt_to_phys(unpriv_pd);
@@ -135,6 +142,7 @@ void monitor_verify_invariants(void) {
     bool context_switch_available;
     uint64_t current_cr3;
 
+#if CONFIG_INVARIANTS_VERBOSE
     /* === Invariant 1: Protected data is read-only in outer kernel === */
     serial_puts("VERIFY: [Inv 1] PTPs read-only in outer kernel:\n");
     serial_puts("VERIFY:   unpriv_pd writable bit: ");
@@ -145,6 +153,7 @@ void monitor_verify_invariants(void) {
     } else {
         serial_puts("FAIL\n");
     }
+#endif
 
     /* === Invariant 2: Write-protection permissions enforced === */
     {
@@ -153,6 +162,7 @@ void monitor_verify_invariants(void) {
         cr0_wp_enabled = (cr0 & (1 << 16));
     }
 
+#if CONFIG_INVARIANTS_VERBOSE
     serial_puts("VERIFY: [Inv 2] CR0.WP enforcement active:\n");
     serial_puts("VERIFY:   CR0.WP bit: ");
     serial_putc(cr0_wp_enabled ? '1' : '0');
@@ -162,6 +172,7 @@ void monitor_verify_invariants(void) {
     } else {
         serial_puts("FAIL\n");
     }
+#endif
 
     /* === Invariant 3: Global mappings accessible in both views === */
     /* Check that PML4 entries are identical for identity-mapped regions */
@@ -174,6 +185,7 @@ void monitor_verify_invariants(void) {
         }
     }
 
+#if CONFIG_INVARIANTS_VERBOSE
     serial_puts("VERIFY: [Inv 3] Global mappings accessible in both views:\n");
     serial_puts("VERIFY:   PML4 entries compared: 512 entries, mismatches: ");
     if (mismatch_count == 0) {
@@ -187,11 +199,13 @@ void monitor_verify_invariants(void) {
     } else {
         serial_puts("FAIL\n");
     }
+#endif
 
     /* === Invariant 4: Context switch consistency === */
     /* Verify that we can access privileged mode via monitor call */
     context_switch_available = (monitor_pml4_phys != 0 && unpriv_pml4_phys != 0);
 
+#if CONFIG_INVARIANTS_VERBOSE
     serial_puts("VERIFY: [Inv 4] Context switch mechanism:\n");
     serial_puts("VERIFY:   monitor_call_stub available - ");
     if (context_switch_available) {
@@ -199,8 +213,10 @@ void monitor_verify_invariants(void) {
     } else {
         serial_puts("FAIL\n");
     }
+#endif
 
     /* === Invariant 5: All PTPs marked read-only in outer kernel === */
+#if CONFIG_INVARIANTS_VERBOSE
     serial_puts("VERIFY: [Inv 5] PTPs writable in nested kernel:\n");
     serial_puts("VERIFY:   monitor_pd writable bit: ");
     serial_putc(monitor_writable ? '1' : '0');
@@ -210,6 +226,7 @@ void monitor_verify_invariants(void) {
     } else {
         serial_puts("FAIL\n");
     }
+#endif
 
     /* === Invariant 6: CR3 only loaded with pre-declared PTP === */
     /* Check that current CR3 is one of the two pre-declared PTPs */
@@ -217,6 +234,7 @@ void monitor_verify_invariants(void) {
     cr3_is_predeclared = (current_cr3 == monitor_pml4_phys) ||
                          (current_cr3 == unpriv_pml4_phys);
 
+#if CONFIG_INVARIANTS_VERBOSE
     serial_puts("VERIFY: [Inv 6] CR3 loaded with pre-declared PTP:\n");
     serial_puts("VERIFY:   Current CR3: 0x");
     serial_put_hex(current_cr3);
@@ -231,19 +249,49 @@ void monitor_verify_invariants(void) {
     } else {
         serial_puts("FAIL\n");
     }
+#endif
 
     /* === Final Verdict === */
     bool all_pass = !unpriv_writable && monitor_writable && cr0_wp_enabled &&
                    global_mappings_match && cr3_is_predeclared &&
                    context_switch_available;
 
-    if (all_pass) {
-        serial_puts("VERIFY: PASS - All 6 Nested Kernel invariants enforced\n");
-    } else {
-        serial_puts("VERIFY: FAIL - Some invariants violated!\n");
-    }
-
+#if CONFIG_INVARIANTS_VERBOSE
     serial_puts("=== Verification Complete ===\n\n");
+#endif
+
+    /* Always print final result (both verbose and quiet modes) */
+    if (all_pass) {
+        serial_puts("[CPU ");
+        serial_putc('0' + cpu_id);
+        serial_puts("] Nested Kernel invariants: PASS\n");
+    } else {
+        serial_puts("[CPU ");
+        serial_putc('0' + cpu_id);
+        serial_puts("] Nested Kernel invariants: FAIL!\n");
+
+#if !CONFIG_INVARIANTS_VERBOSE
+        /* In quiet mode, show which invariants failed */
+        if (unpriv_writable) {
+            serial_puts("  [Inv 1] FAIL: PTPs not read-only in outer kernel\n");
+        }
+        if (!cr0_wp_enabled) {
+            serial_puts("  [Inv 2] FAIL: CR0.WP not enforced\n");
+        }
+        if (!global_mappings_match) {
+            serial_puts("  [Inv 3] FAIL: Global mappings don't match\n");
+        }
+        if (!context_switch_available) {
+            serial_puts("  [Inv 4] FAIL: Context switch unavailable\n");
+        }
+        if (!monitor_writable) {
+            serial_puts("  [Inv 5] FAIL: PTPs not writable in nested kernel\n");
+        }
+        if (!cr3_is_predeclared) {
+            serial_puts("  [Inv 6] FAIL: CR3 not pre-declared\n");
+        }
+#endif
+    }
 }
 
 /* Initialize monitor page tables */
