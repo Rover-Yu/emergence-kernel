@@ -219,3 +219,30 @@ void serial_puts(const char *str) {
 void serial_unlock(void) {
     serial_lock_release();
 }
+
+/**
+ * serial_put_hex - Write a hexadecimal value to COM1
+ * @value: 64-bit value to write in hex
+ */
+void serial_put_hex(uint64_t value) {
+    const char hex_chars[] = "0123456789ABCDEF";
+    char buf[17];
+    int i;
+
+    if (value == 0) {
+        serial_puts("0");
+        return;
+    }
+
+    for (i = 15; i >= 0; i--) {
+        buf[i] = hex_chars[value & 0xF];
+        value >>= 4;
+        if (value == 0) break;
+    }
+
+    while (i < 15 && buf[i] == '0') i++;
+
+    while (i <= 15) {
+        serial_putc(buf[i++]);
+    }
+}

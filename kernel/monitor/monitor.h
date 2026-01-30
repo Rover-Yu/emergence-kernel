@@ -24,6 +24,9 @@ extern uint64_t unpriv_pml4_phys;     /* Restricted unprivileged view */
 /* Monitor initialization */
 void monitor_init(void);
 
+/* Verify Nested Kernel invariants (called after CR0.WP is set) */
+void monitor_verify_invariants(void);
+
 /* Get unprivileged CR3 value for switching */
 uint64_t monitor_get_unpriv_cr3(void);
 

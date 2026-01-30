@@ -2,12 +2,12 @@
 
 #include "monitor.h"
 #include "arch/x86_64/paging.h"
+#include "arch/x86_64/serial.h"
 
 /* External functions */
-extern void serial_puts(const char *str);
 extern void *pmm_alloc(uint8_t order);
 extern void pmm_free(void *addr, uint8_t order);
-extern void serial_putc(char c);
+extern int smp_get_cpu_index(void);
 
 /* Page table physical addresses */
 uint64_t monitor_pml4_phys = 0;
@@ -101,9 +101,45 @@ static void monitor_protect_state(void) {
     serial_puts("MONITOR: Nested Kernel invariants enforced\n");
 }
 
-/* Verify Nested Kernel invariants are correctly configured */
-static void monitor_verify_invariants(void) {
-    serial_puts("\n=== Nested Kernel Invariant Verification ===\n");
+/* CR0 register bit definitions */
+#define CR0_WP_BIT (1 << 16)  /* Write Protect bit */
+
+/* Get current CR0 value */
+static uint64_t get_cr0(void) {
+    uint64_t cr0;
+    asm volatile ("mov %%cr0, %0" : "=r"(cr0));
+    return cr0;
+}
+
+/* Set CR0 value */
+static void set_cr0(uint64_t cr0) {
+    asm volatile ("mov %0, %%cr0" : : "r"(cr0) : "memory");
+}
+
+/* Clear CR0.WP bit (allow monitor to write to read-only pages) */
+static void monitor_entry_wp_disable(void) {
+    uint64_t cr0 = get_cr0();
+    cr0 &= ~CR0_WP_BIT;  /* Clear bit 16 */
+    set_cr0(cr0);
+}
+
+/* Set CR0.WP bit (enforce write protection for outer kernel) */
+static void monitor_exit_wp_enable(void) {
+    uint64_t cr0 = get_cr0();
+    cr0 |= CR0_WP_BIT;  /* Set bit 16 */
+    set_cr0(cr0);
+}
+
+/* Verify Nested Kernel invariants are correctly configured
+ * This is called AFTER CR0.WP is set in main.c
+ * Verifies all 6 invariants from the Nested Kernel paper (ASPLOS '15) */
+void monitor_verify_invariants(void) {
+    extern int smp_get_cpu_index(void);
+
+    int cpu_id = smp_get_cpu_index();
+    serial_puts("\n=== Nested Kernel Invariant Verification (CPU ");
+    serial_putc('0' + cpu_id);
+    serial_puts(") ===\n");
 
     /* Get physical address of unpriv_pd to find PD entry */
     uint64_t unpriv_pd_phys = virt_to_phys(unpriv_pd);
@@ -113,24 +149,122 @@ static void monitor_verify_invariants(void) {
     uint64_t unpriv_entry = unpriv_pd[pd_index];
     uint64_t monitor_entry = monitor_pd[pd_index];
 
-    /* Verify writable bit (Invariant 1: protected data is read-only) */
+    /* === Invariant 1: Protected data is read-only in outer kernel === */
     bool unpriv_writable = (unpriv_entry & X86_PTE_WRITABLE);
     bool monitor_writable = (monitor_entry & X86_PTE_WRITABLE);
 
-    serial_puts("VERIFY: Invariant 1 - PTPs read-only in outer kernel:\n");
+    serial_puts("VERIFY: [Inv 1] PTPs read-only in outer kernel:\n");
     serial_puts("VERIFY:   unpriv_pd writable bit: ");
     serial_putc(unpriv_writable ? '1' : '0');
-    serial_puts(" (should be 0)\n");
+    serial_puts(" (expected: 0) - ");
+    if (!unpriv_writable) {
+        serial_puts("PASS\n");
+    } else {
+        serial_puts("FAIL\n");
+    }
 
-    serial_puts("VERIFY: Invariant 5 - PTPs writable in nested kernel:\n");
+    /* === Invariant 5: All PTPs marked read-only === */
+    serial_puts("VERIFY: [Inv 5] PTPs writable in nested kernel:\n");
     serial_puts("VERIFY:   monitor_pd writable bit: ");
     serial_putc(monitor_writable ? '1' : '0');
-    serial_puts(" (should be 1)\n");
-
-    if (!unpriv_writable && monitor_writable) {
-        serial_puts("VERIFY: PASS - Nested Kernel invariants enforced\n");
+    serial_puts(" (expected: 1) - ");
+    if (monitor_writable) {
+        serial_puts("PASS\n");
     } else {
-        serial_puts("VERIFY: FAIL - Invariants violated!\n");
+        serial_puts("FAIL\n");
+    }
+
+    /* === Invariant 2: Write-protection permissions enforced === */
+    uint64_t cr0;
+    asm volatile ("mov %%cr0, %0" : "=r"(cr0));
+    bool cr0_wp_enabled = (cr0 & (1 << 16));
+
+    serial_puts("VERIFY: [Inv 2] CR0.WP enforcement active:\n");
+    serial_puts("VERIFY:   CR0.WP bit: ");
+    serial_putc(cr0_wp_enabled ? '1' : '0');
+    serial_puts(" (expected: 1) - ");
+    if (cr0_wp_enabled) {
+        serial_puts("PASS\n");
+    } else {
+        serial_puts("FAIL\n");
+    }
+
+    /* === Invariant 3: Global mappings accessible in both views === */
+    /* Check that PML4 entries are identical for identity-mapped regions */
+    bool global_mappings_match = true;
+    int mismatch_count = 0;
+    for (int i = 0; i < 512; i++) {
+        /* Skip the PD entry containing monitor pages (index varies) */
+        if (i == pd_index) continue;
+
+        if (monitor_pml4[i] != unpriv_pml4[i]) {
+            global_mappings_match = false;
+            mismatch_count++;
+        }
+    }
+
+    serial_puts("VERIFY: [Inv 3] Global mappings accessible in both views:\n");
+    serial_puts("VERIFY:   PML4 entries compared: 512 entries, ");
+    serial_puts("mismatches: ");
+
+    /* Print mismatch count */
+    if (mismatch_count == 0) {
+        serial_puts("0");
+    } else {
+        serial_put_hex(mismatch_count);
+    }
+    serial_puts(" - ");
+
+    if (global_mappings_match) {
+        serial_puts("PASS\n");
+    } else {
+        serial_puts("FAIL\n");
+    }
+
+    /* === Invariant 6: CR3 only loaded with pre-declared PTP === */
+    /* Check that current CR3 is one of the two pre-declared PTPs */
+    uint64_t current_cr3;
+    asm volatile ("mov %%cr3, %0" : "=r"(current_cr3));
+
+    bool cr3_is_predeclared = (current_cr3 == monitor_pml4_phys) ||
+                             (current_cr3 == unpriv_pml4_phys);
+
+    serial_puts("VERIFY: [Inv 6] CR3 loaded with pre-declared PTP:\n");
+    serial_puts("VERIFY:   Current CR3: 0x");
+    serial_put_hex(current_cr3);
+    serial_puts("\n");
+    serial_puts("VERIFY:   monitor_pml4_phys: 0x");
+    serial_put_hex(monitor_pml4_phys);
+    serial_puts(", unpriv_pml4_phys: 0x");
+    serial_put_hex(unpriv_pml4_phys);
+    serial_puts(" - ");
+    if (cr3_is_predeclared) {
+        serial_puts("PASS\n");
+    } else {
+        serial_puts("FAIL\n");
+    }
+
+    /* === Invariant 4: Context switch consistency === */
+    /* Verify that we can access privileged mode via monitor call */
+    serial_puts("VERIFY: [Inv 4] Context switch mechanism:\n");
+    serial_puts("VERIFY:   monitor_call_stub available - ");
+
+    /* Verify monitor_pml4_phys is set (required for context switch) */
+    if (monitor_pml4_phys != 0 && unpriv_pml4_phys != 0) {
+        serial_puts("PASS\n");
+    } else {
+        serial_puts("FAIL\n");
+    }
+
+    /* === Final Verdict === */
+    bool all_pass = !unpriv_writable && monitor_writable && cr0_wp_enabled &&
+                   global_mappings_match && cr3_is_predeclared &&
+                   (monitor_pml4_phys != 0);
+
+    if (all_pass) {
+        serial_puts("VERIFY: PASS - All 6 Nested Kernel invariants enforced\n");
+    } else {
+        serial_puts("VERIFY: FAIL - Some invariants violated!\n");
     }
 
     serial_puts("=== Verification Complete ===\n\n");

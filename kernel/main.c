@@ -23,6 +23,7 @@ extern void serial_putc(char c);
 extern void monitor_init(void);
 extern uint64_t monitor_get_unpriv_cr3(void);
 extern uint64_t monitor_pml4_phys;
+extern void monitor_verify_invariants(void);
 
 /* Architecture-independent halt function */
 static void kernel_halt(void) {
@@ -183,8 +184,22 @@ void kernel_main(uint32_t multiboot_info_addr) {
         uint64_t unpriv_cr3 = monitor_get_unpriv_cr3();
         if (unpriv_cr3 != 0) {
             serial_puts("KERNEL: Switching to unprivileged mode\n");
+
+#if CONFIG_CR0_WP_CONTROL
+            /* Enable write protection enforcement */
+            /* Set CR0.WP=1 so outer kernel cannot modify read-only PTEs */
+            uint64_t cr0;
+            asm volatile ("mov %%cr0, %0" : "=r"(cr0));
+            cr0 |= (1 << 16);  /* Set CR0.WP bit */
+            asm volatile ("mov %0, %%cr0" : : "r"(cr0) : "memory");
+            serial_puts("KERNEL: CR0.WP enabled (write protection enforced)\n");
+#endif
+
             asm volatile ("mov %0, %%cr3" : : "r"(unpriv_cr3) : "memory");
             serial_puts("KERNEL: Page table switch complete\n");
+
+            /* Verify all Nested Kernel invariants (including CR0.WP) */
+            monitor_verify_invariants();
         } else {
             serial_puts("KERNEL: Monitor initialization failed\n");
         }

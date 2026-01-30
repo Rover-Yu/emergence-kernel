@@ -9,6 +9,7 @@
 /* Serial port functions */
 void serial_putc(char c);
 void serial_puts(const char *str);
+void serial_put_hex(uint64_t value);
 void serial_unlock(void);
 
 #endif /* EMERGENCE_ARCH_X86_64_SERIAL_H */
