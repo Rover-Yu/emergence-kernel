@@ -101,35 +101,6 @@ static void monitor_protect_state(void) {
     serial_puts("MONITOR: Nested Kernel invariants enforced\n");
 }
 
-/* CR0 register bit definitions */
-#define CR0_WP_BIT (1 << 16)  /* Write Protect bit */
-
-/* Get current CR0 value */
-static uint64_t get_cr0(void) {
-    uint64_t cr0;
-    asm volatile ("mov %%cr0, %0" : "=r"(cr0));
-    return cr0;
-}
-
-/* Set CR0 value */
-static void set_cr0(uint64_t cr0) {
-    asm volatile ("mov %0, %%cr0" : : "r"(cr0) : "memory");
-}
-
-/* Clear CR0.WP bit (allow monitor to write to read-only pages) */
-static void monitor_entry_wp_disable(void) {
-    uint64_t cr0 = get_cr0();
-    cr0 &= ~CR0_WP_BIT;  /* Clear bit 16 */
-    set_cr0(cr0);
-}
-
-/* Set CR0.WP bit (enforce write protection for outer kernel) */
-static void monitor_exit_wp_enable(void) {
-    uint64_t cr0 = get_cr0();
-    cr0 |= CR0_WP_BIT;  /* Set bit 16 */
-    set_cr0(cr0);
-}
-
 /* Verify Nested Kernel invariants are correctly configured
  *
  * This is called ONLY from unprivileged kernel mode (after CR3 switch in main.c)

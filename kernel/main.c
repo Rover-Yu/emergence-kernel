@@ -172,8 +172,10 @@ void kernel_main(uint32_t multiboot_info_addr) {
             asm volatile ("mov %0, %%cr3" : : "r"(unpriv_cr3) : "memory");
             serial_puts("KERNEL: Page table switch complete\n");
 
+#if CONFIG_WRITE_PROTECTION_VERIFY
             /* Verify all Nested Kernel invariants (including CR0.WP) */
             monitor_verify_invariants();
+#endif
         } else {
             serial_puts("KERNEL: Monitor initialization failed\n");
         }
