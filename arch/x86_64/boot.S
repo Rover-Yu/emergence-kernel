@@ -88,6 +88,19 @@ boot_pdpt:
 boot_pd:
     .skip 4096
 
+/* Monitor page tables for nested kernel architecture */
+.section .bss
+.align 4096
+.global monitor_pml4, monitor_pdpt, monitor_pd
+monitor_pml4: .skip 4096
+monitor_pdpt: .skip 4096
+monitor_pd:   .skip 4096
+
+.global unpriv_pml4, unpriv_pdpt, unpriv_pd
+unpriv_pml4:  .skip 4096
+unpriv_pdpt:  .skip 4096
+unpriv_pd:    .skip 4096
+
 /* GDT for 64-bit mode */
 .section .rodata
 .align 16

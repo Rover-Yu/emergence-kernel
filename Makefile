@@ -29,7 +29,7 @@ LDFLAGS := -nostdlib -m elf_x86_64
 
 # Architecture-specific sources (x86_64)
 ARCH_DIR := arch/x86_64
-ARCH_BOOT_SRC := $(ARCH_DIR)/boot.S $(ARCH_DIR)/isr.S
+ARCH_BOOT_SRC := $(ARCH_DIR)/boot.S $(ARCH_DIR)/isr.S $(ARCH_DIR)/monitor/monitor_call.S
 ARCH_LINKER := $(ARCH_DIR)/linker.ld
 ARCH_C_SRCS := $(ARCH_DIR)/vga.c $(ARCH_DIR)/serial_driver.c $(ARCH_DIR)/apic.c $(ARCH_DIR)/acpi.c $(ARCH_DIR)/idt.c $(ARCH_DIR)/timer.c $(ARCH_DIR)/rtc.c $(ARCH_DIR)/ipi.c $(ARCH_DIR)/power.c
 
@@ -40,7 +40,8 @@ TRAMPOLINE_OBJ := $(BUILD_DIR)/ap_trampoline.o
 # Architecture-independent kernel sources
 KERNEL_DIR := kernel
 KERNEL_C_SRCS := $(KERNEL_DIR)/main.c $(KERNEL_DIR)/device.c $(KERNEL_DIR)/smp.c \
-                 $(KERNEL_DIR)/pmm.c $(KERNEL_DIR)/multiboot2.c
+                 $(KERNEL_DIR)/pmm.c $(KERNEL_DIR)/multiboot2.c \
+                 $(KERNEL_DIR)/monitor/monitor.c
 
 # Spinlock test sources (conditionally compiled)
 SPINLOCK_TEST_SRC := tests/spinlock/spinlock_test.c
@@ -56,7 +57,8 @@ C_SRCS := $(ARCH_C_SRCS) $(KERNEL_C_SRCS)
 
 # Objects
 ARCH_BOOT_OBJ := $(patsubst $(ARCH_DIR)/%.S,$(BUILD_DIR)/boot_%.o,$(ARCH_DIR)/boot.S) \
-                $(patsubst $(ARCH_DIR)/%.S,$(BUILD_DIR)/isr_%.o,$(ARCH_DIR)/isr.S)
+                $(patsubst $(ARCH_DIR)/%.S,$(BUILD_DIR)/isr_%.o,$(ARCH_DIR)/isr.S) \
+                $(BUILD_DIR)/boot_monitor_monitor_call.o
 ARCH_OBJS := $(patsubst $(ARCH_DIR)/%.c,$(BUILD_DIR)/arch_%.o,$(ARCH_C_SRCS))
 KERNEL_OBJS := $(patsubst $(KERNEL_DIR)/%.c,$(BUILD_DIR)/kernel_%.o,$(KERNEL_C_SRCS))
 TESTS_OBJS := $(patsubst $(TESTS_DIR)/%.c,$(BUILD_DIR)/test_%.o,$(TESTS_C_SRCS))
@@ -87,12 +89,21 @@ $(BUILD_DIR)/boot_%.o: $(ARCH_DIR)/boot.S | $(BUILD_DIR)
 $(BUILD_DIR)/isr_%.o: $(ARCH_DIR)/isr.S | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+# Compile monitor assembly files
+$(BUILD_DIR)/boot_monitor_%.o: $(ARCH_DIR)/monitor/%.S | $(BUILD_DIR)
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
 # Compile architecture-specific C files
 $(BUILD_DIR)/arch_%.o: $(ARCH_DIR)/%.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Compile architecture-independent kernel C files
 $(BUILD_DIR)/kernel_%.o: $(KERNEL_DIR)/%.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/kernel_monitor/%.o: $(KERNEL_DIR)/monitor/%.c | $(BUILD_DIR)
+	@mkdir -p $(BUILD_DIR)/kernel_monitor
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Compile spinlock test (from tests/spinlock/) - only if enabled

@@ -41,10 +41,11 @@ static inline void wrmsr(uint32_t msr, uint64_t value) {
  *
  * Returns: Register value
  *
- * Direct pointer access for MMIO reads.
+ * Direct APIC access - APIC is outside monitor.
+ * The APIC MMIO region is mapped in both monitor and unprivileged page tables
+ * via boot_pd[503], so we can always access it directly.
  */
 uint32_t lapic_read(uint32_t offset) {
-    /* Use inline assembly with explicit memory barrier for MMIO read */
     volatile uint32_t *addr = (volatile uint32_t *)((char *)lapic_base + offset);
     uint32_t value;
 
@@ -68,10 +69,11 @@ uint32_t lapic_read(uint32_t offset) {
  * @offset: Register offset from base
  * @value: Value to write
  *
- * Direct pointer access for MMIO writes.
+ * Direct APIC access - APIC is outside monitor.
+ * The APIC MMIO region is mapped in both monitor and unprivileged page tables
+ * via boot_pd[503], so we can always access it directly.
  */
 void lapic_write(uint32_t offset, uint32_t value) {
-    /* Use inline assembly with explicit memory barrier for MMIO write */
     volatile uint32_t *addr = (volatile uint32_t *)((char *)lapic_base + offset);
 
     /* Memory barrier before MMIO write */

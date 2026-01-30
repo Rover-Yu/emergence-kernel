@@ -16,6 +16,9 @@ extern uint8_t acpi_get_apic_id_by_index(int index);
 extern void serial_puts(const char *str);
 extern void serial_putc(char c);
 
+/* External monitor functions */
+extern uint64_t monitor_get_unpriv_cr3(void);
+
 /* Stack area for AP CPUs (aligned to 16 bytes) */
 static uint8_t ap_stacks[SMP_MAX_CPUS][CPU_STACK_SIZE] __attribute__((aligned(16)));
 
@@ -259,6 +262,15 @@ void ap_start(void) {
     /* Set up stack */
     cpu_info[my_index].stack_top = &ap_stacks[my_index][CPU_STACK_SIZE];
     asm volatile ("mov %0, %%rsp" : : "r"(cpu_info[my_index].stack_top));
+
+    /* Switch to unprivileged page tables */
+    uint64_t unpriv_cr3 = monitor_get_unpriv_cr3();
+    if (unpriv_cr3 != 0) {
+        asm volatile ("mov %0, %%cr3" : : "r"(unpriv_cr3));
+        serial_puts("[AP] CPU");
+        serial_putc('0' + my_index);
+        serial_puts(" switched to unprivileged mode\n");
+    }
 
     cpu_info[my_index].state = CPU_ONLINE;
 

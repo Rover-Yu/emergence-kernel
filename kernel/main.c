@@ -19,6 +19,10 @@ extern int serial_driver_init(void);
 extern void serial_puts(const char *str);
 extern void serial_putc(char c);
 
+/* External monitor functions */
+extern void monitor_init(void);
+extern uint64_t monitor_get_unpriv_cr3(void);
+
 /* Architecture-independent halt function */
 static void kernel_halt(void) {
     while (1) {
@@ -169,6 +173,20 @@ void kernel_main(uint32_t multiboot_info_addr) {
     if (cpu_id == 0) {
         /* Initialize IPI driver */
         ipi_driver_init();
+
+        /* Initialize nested kernel monitor */
+        serial_puts("KERNEL: Initializing monitor...\n");
+        monitor_init();
+
+        /* Switch to unprivileged page tables */
+        uint64_t unpriv_cr3 = monitor_get_unpriv_cr3();
+        if (unpriv_cr3 != 0) {
+            serial_puts("KERNEL: Switching to unprivileged mode\n");
+            asm volatile ("mov %0, %%cr3" : : "r"(unpriv_cr3));
+            serial_puts("KERNEL: Page table switch complete\n");
+        } else {
+            serial_puts("KERNEL: Monitor initialization failed\n");
+        }
 
         /* Enable interrupts */
         enable_interrupts();
