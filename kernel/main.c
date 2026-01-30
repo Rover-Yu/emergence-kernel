@@ -16,8 +16,6 @@
 
 /* External driver initialization functions */
 extern int serial_driver_init(void);
-extern void serial_puts(const char *str);
-extern void serial_putc(char c);
 
 /* External monitor functions */
 extern void monitor_init(void);
@@ -29,30 +27,6 @@ extern void monitor_verify_invariants(void);
 static void kernel_halt(void) {
     while (1) {
         asm volatile ("hlt");
-    }
-}
-
-/* Helper: Print hex value to serial */
-static void __attribute__((unused)) serial_put_hex(uint64_t value) {
-    const char hex_chars[] = "0123456789ABCDEF";
-    char buf[17];
-    int i;
-
-    if (value == 0) {
-        serial_puts("0");
-        return;
-    }
-
-    for (i = 15; i >= 0; i--) {
-        buf[i] = hex_chars[value & 0xF];
-        value >>= 4;
-        if (value == 0) break;
-    }
-
-    while (i < 15 && buf[i] == '0') i++;
-
-    while (i <= 15) {
-        serial_putc(buf[i++]);
     }
 }
 
