@@ -22,6 +22,7 @@ extern void serial_putc(char c);
 /* External monitor functions */
 extern void monitor_init(void);
 extern uint64_t monitor_get_unpriv_cr3(void);
+extern uint64_t monitor_pml4_phys;
 
 /* Architecture-independent halt function */
 static void kernel_halt(void) {
@@ -182,7 +183,7 @@ void kernel_main(uint32_t multiboot_info_addr) {
         uint64_t unpriv_cr3 = monitor_get_unpriv_cr3();
         if (unpriv_cr3 != 0) {
             serial_puts("KERNEL: Switching to unprivileged mode\n");
-            asm volatile ("mov %0, %%cr3" : : "r"(unpriv_cr3));
+            asm volatile ("mov %0, %%cr3" : : "r"(unpriv_cr3) : "memory");
             serial_puts("KERNEL: Page table switch complete\n");
         } else {
             serial_puts("KERNEL: Monitor initialization failed\n");

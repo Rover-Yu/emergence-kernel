@@ -142,7 +142,7 @@ parse_boot_logs() {
     fi
 
     # Test 5: Check SMP AP startup initiated
-    if echo "$boot_log" | grep -q "SMP: Starting all Application Processors"; then
+    if echo "$boot_log" | grep -q "SMP: Starting APs"; then
         print_result "AP startup initiated" "true"
     else
         print_result "AP startup initiated" "false" "AP startup message not found"
