@@ -1,18 +1,12 @@
 ---
 name: tests
-description: 创建测试用例时，以及在提交代码之前运行测试用例时使用。
+description: Use when creating test cases, and when running tests before committing code.
 ---
 
-# 日志要求
+# Logging Requirements
 
-功能XXX的测试用例的日志，需要使用[XXX test]的前缀。
+Test case logs for feature XXX must use the `[XXX test]` prefix.
 
-# 内核源文件
+# Kernel Source File Test Logs
 
-所有测试用例的内核代码放在tests/kernel目录下。
-
-# 运行测试用例
-
-1. 运行脚本放在tests/scripts目录下，基于内核日志输出判断测试用例是否通过。
-2. 必须使用KVM运行用例，避免使用TCG模拟。
-2. 测试结束后用pkill -9 qemu-system-x86的方法确保清理掉残留进程。
+Kernel test logs must use the `[KERNEL TEST]` prefix.

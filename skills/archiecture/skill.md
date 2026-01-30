@@ -1,22 +1,16 @@
 ---
-name: 架构
-description: 设计规划新功能时。
+name: architecture
+description: Use when designing and planning new features.
 ---
 
-# 公共功能要求
+# Common Feature Requirements
 
-1. 支持SMP，公共的临界区需要使用锁保护。
-2. 体系结构相关的代码放在arch/${ARCH}下面，头文件放在arch/${ARCH}/include/下面。
-3. 体系结构无关的代码放在kernel/${SUBSYSTEM}下面，头文件放在include目录下面。
+1. Support SMP - shared critical sections must use lock protection.
+2. Architecture-specific code goes in `arch/${ARCH}/`, headers in `arch/${ARCH}/include/`.
+3. Architecture-independent code goes in `kernel/${SUBSYSTEM}`, headers in `include/` directory.
 
-# 硬件能力假定
+# Code Organization
 
-1. CPU具备64位寻址能力。
-2. CPU支持MMU。
-3. 支持x86-64体系结构，未来需要支持ARMv8a架构。
-4. 支持SMP。
-
-# 内核架构
-
-1. 采用nested kernel架构。
-2. 要求功能组件之间接口清晰。
+- Platform drivers: `arch/${ARCH}/drivers/`
+- Common utilities: `kernel/` or `lib/`
+- Public headers: `include/`
