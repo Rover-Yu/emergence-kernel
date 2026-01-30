@@ -18,6 +18,7 @@ extern void serial_putc(char c);
 
 /* External monitor functions */
 extern uint64_t monitor_get_unpriv_cr3(void);
+extern void monitor_verify_invariants(void);
 
 /* Stack area for AP CPUs (aligned to 16 bytes) */
 static uint8_t ap_stacks[SMP_MAX_CPUS][CPU_STACK_SIZE] __attribute__((aligned(16)));
@@ -266,10 +267,22 @@ void ap_start(void) {
     /* Switch to unprivileged page tables */
     uint64_t unpriv_cr3 = monitor_get_unpriv_cr3();
     if (unpriv_cr3 != 0) {
+#if CONFIG_CR0_WP_CONTROL
+        /* Enable write protection enforcement for AP */
+        /* Set CR0.WP=1 so outer kernel cannot modify read-only PTEs */
+        uint64_t cr0;
+        asm volatile ("mov %%cr0, %0" : "=r"(cr0));
+        cr0 |= (1 << 16);  /* Set CR0.WP bit */
+        asm volatile ("mov %0, %%cr0" : : "r"(cr0) : "memory");
+#endif
+
         asm volatile ("mov %0, %%cr3" : : "r"(unpriv_cr3));
         serial_puts("[AP] CPU");
         serial_putc('0' + my_index);
         serial_puts(" switched to unprivileged mode\n");
+
+        /* Verify Nested Kernel invariants on AP as well */
+        monitor_verify_invariants();
     }
 
     cpu_info[my_index].state = CPU_ONLINE;
