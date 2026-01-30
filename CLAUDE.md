@@ -88,7 +88,7 @@ gdb -x .gdbinit
 **Interrupts (`arch/x86_64/idt.c`, `arch/x86_64/isr.S`)**
 - IDT setup with exception handlers
 - ISR stubs in assembly, C handlers in idt.c
-- Timer interrupts (RTC, PIT) - currently disabled due to resets
+- Timer interrupts via APIC timer (high-frequency, math quotes)
 
 **APIC (`arch/x86_64/apic.c`)**
 - Local APIC (per-CPU) and I/O APIC (interrupt routing)
@@ -102,7 +102,6 @@ gdb -x .gdbinit
 ### Current State (as of recent commits)
 - AP startup via trampoline is implemented but being debugged
 - ACPI parsing temporarily disabled; uses default APIC IDs
-- RTC timer disabled (causes QEMU resets)
 - IPI handler EOI fix verified, test not yet implemented
 
 ## Testing

@@ -235,7 +235,6 @@ Emergence-Kernel/
 | Synchronization Primitives | ✅ Complete | Spin locks, RW locks, IRQ-safe locks |
 | Test Framework | ✅ Complete | PMM, spin lock, and nested kernel invariants tests |
 | ACPI Parsing | ⚠️ Partial | Using default APIC IDs for now |
-| RTC Timer | ❌ Removed | Removed due to QEMU reset issues |
 | **Nested Kernel** | ✅ Complete | All 6 invariants enforced on BSP and APs |
 | **Monitor Mode** | ✅ Complete | Privileged/unprivileged page table separation |
 | **CR0.WP Protection** | ✅ Complete | Two-level protection (PTE + CR0.WP) |
