@@ -2,10 +2,10 @@
 /* This stub switches from unprivileged to privileged mode to execute monitor calls */
 
 .section .text
-.global monitor_call_stub
-.type monitor_call_stub, @function
+.global nk_entry_trampoline
+.type nk_entry_trampoline, @function
 
-/* monitor_call_stub - Switch to privileged mode and execute monitor call
+/* nk_entry_trampoline - Switch to privileged mode and execute monitor call
  * Arguments:
  *   rdi = monitor_call_t call
  *   rsi = uint64_t arg1
@@ -15,7 +15,7 @@
  *   rax = monitor_ret_t.result
  *   rdx = monitor_ret_t.error
  */
-monitor_call_stub:
+nk_entry_trampoline:
     /* Save all registers */
     push %rbx
     push %rbp
@@ -71,7 +71,7 @@ monitor_call_stub:
 
     ret
 
-.size monitor_call_stub, . - monitor_call_stub
+.size nk_entry_trampoline, . - nk_entry_trampoline
 
 /* External symbols */
 .global monitor_pml4_phys

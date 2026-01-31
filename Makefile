@@ -29,6 +29,7 @@ CFLAGS += -DCONFIG_WRITE_PROTECTION_VERIFY=$(CONFIG_WRITE_PROTECTION_VERIFY)
 CFLAGS += -DCONFIG_CR0_WP_CONTROL=$(CONFIG_CR0_WP_CONTROL)
 CFLAGS += -DCONFIG_INVARIANTS_VERBOSE=$(CONFIG_INVARIANTS_VERBOSE)
 CFLAGS += -DCONFIG_PCD_STATS=$(CONFIG_PCD_STATS)
+CFLAGS += -DCONFIG_NK_PROTECTION_TESTS=$(CONFIG_NK_PROTECTION_TESTS)
 LDFLAGS := -nostdlib -m elf_x86_64
 
 # Architecture-specific sources (x86_64)
@@ -51,6 +52,10 @@ KERNEL_C_SRCS := $(KERNEL_DIR)/main.c $(KERNEL_DIR)/device.c $(KERNEL_DIR)/smp.c
 SPINLOCK_TEST_SRC := tests/spinlock/spinlock_test.c
 SPINLOCK_TEST_OBJ := $(BUILD_DIR)/kernel_spinlock_test.o
 
+# Nested kernel mappings protection test sources (conditionally compiled)
+NK_PROTECTION_TEST_SRC := tests/nested_kernel_mapping_protection/nk_protection_test.c
+NK_PROTECTION_TEST_OBJ := $(BUILD_DIR)/nk_protection_test.o
+
 # Test sources (reference only, not compiled into kernel)
 # These test files are kept for documentation purposes
 TESTS_DIR := tests
@@ -67,15 +72,51 @@ ARCH_OBJS := $(patsubst $(ARCH_DIR)/%.c,$(BUILD_DIR)/arch_%.o,$(ARCH_C_SRCS))
 KERNEL_OBJS := $(patsubst $(KERNEL_DIR)/%.c,$(BUILD_DIR)/kernel_%.o,$(KERNEL_C_SRCS))
 TESTS_OBJS := $(patsubst $(TESTS_DIR)/%.c,$(BUILD_DIR)/test_%.o,$(TESTS_C_SRCS))
 
-# Conditionally include spinlock test object
+# Conditionally include test objects
 ifeq ($(CONFIG_SPINLOCK_TESTS),1)
-OBJS := $(ARCH_BOOT_OBJ) $(ARCH_OBJS) $(KERNEL_OBJS) $(TESTS_OBJS) $(TRAMPOLINE_OBJ) $(SPINLOCK_TEST_OBJ)
-else
-OBJS := $(ARCH_BOOT_OBJ) $(ARCH_OBJS) $(KERNEL_OBJS) $(TESTS_OBJS) $(TRAMPOLINE_OBJ)
+TESTS_OBJS += $(SPINLOCK_TEST_OBJ)
 endif
+ifeq ($(CONFIG_NK_PROTECTION_TESTS),1)
+TESTS_OBJS += $(NK_PROTECTION_TEST_OBJ)
+endif
+
+OBJS := $(ARCH_BOOT_OBJ) $(ARCH_OBJS) $(KERNEL_OBJS) $(TESTS_OBJS) $(TRAMPOLINE_OBJ)
 KERNEL_ELF := $(BUILD_DIR)/$(KERNEL).elf
 
-.PHONY: all clean run test test-all test-boot test-apic-timer test-smp test-pcd test-nested-kernel
+.PHONY: all clean run run-debug test test-all test-boot test-apic-timer test-smp test-pcd test-nested-kernel test-nk-protection help
+
+help:
+	@echo "Emergence Kernel Make Targets"
+	@echo "=============================="
+	@echo ""
+	@echo "Build targets:"
+	@echo "  all              - Build kernel ISO (default)"
+	@echo "  clean            - Remove build artifacts"
+	@echo ""
+	@echo "Run targets:"
+	@echo "  run              - Run kernel in QEMU (4 CPUs, 128M RAM)"
+	@echo "  run-debug        - Run kernel in QEMU with GDB server on :1234"
+	@echo ""
+	@echo "Test targets:"
+	@echo "  test             - Run all tests (test-all)"
+	@echo "  test-all         - Run complete test suite"
+	@echo "  test-boot        - Basic kernel boot test (1 CPU)"
+	@echo "  test-apic-timer  - APIC timer interrupt test"
+	@echo "  test-smp         - SMP boot test (2 CPUs)"
+	@echo "  test-pcd         - Page Control Data test"
+	@echo "  test-nested-kernel     - Nested Kernel invariants test"
+	@echo "  test-nk-protection     - Nested Kernel mappings protection test"
+	@echo ""
+	@echo "Build options (override kernel.config):"
+	@echo "  make CONFIG_SPINLOCK_TESTS=1           - Enable spinlock tests"
+	@echo "  make CONFIG_PMM_TESTS=1                - Enable PMM tests"
+	@echo "  make CONFIG_SMP_AP_DEBUG=1             - Enable AP debug marks"
+	@echo "  make CONFIG_APIC_TIMER_TEST=1          - Enable APIC timer test"
+	@echo "  make CONFIG_WRITE_PROTECTION_VERIFY=1  - Verify write protection"
+	@echo "  make CONFIG_INVARIANTS_VERBOSE=1       - Verbose invariants output"
+	@echo "  make CONFIG_CR0_WP_CONTROL=1           - Enable CR0.WP control"
+	@echo "  make CONFIG_PCD_STATS=1                - Show PCD statistics"
+	@echo "  make CONFIG_NK_PROTECTION_TESTS=1      - Enable NK protection tests"
 
 all: $(ISO)
 
@@ -113,6 +154,12 @@ $(BUILD_DIR)/kernel_monitor/%.o: $(KERNEL_DIR)/monitor/%.c | $(BUILD_DIR)
 # Compile spinlock test (from tests/spinlock/) - only if enabled
 ifeq ($(CONFIG_SPINLOCK_TESTS),1)
 $(SPINLOCK_TEST_OBJ): $(SPINLOCK_TEST_SRC) | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+endif
+
+# Compile nested kernel mappings protection test (from tests/nested_kernel_mapping_protection/) - only if enabled
+ifeq ($(CONFIG_NK_PROTECTION_TESTS),1)
+$(NK_PROTECTION_TEST_OBJ): $(NK_PROTECTION_TEST_SRC) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 endif
 
@@ -175,3 +222,7 @@ test-pcd:
 test-nested-kernel:
 	@echo "Running Nested Kernel Invariants Test..."
 	@cd tests && ./monitor/nested_kernel_invariants_test.sh
+
+test-nk-protection:
+	@echo "Running Nested Kernel Mappings Protection Test..."
+	@cd tests && ./monitor/nk_protection_test.sh

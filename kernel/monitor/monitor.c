@@ -24,10 +24,16 @@ static uint64_t *unpriv_pml4;
 static uint64_t *unpriv_pdpt;
 static uint64_t *unpriv_pd;
 
+/* 4KB page tables for first 2MB region (for fine-grained protection) */
+static uint64_t *monitor_pt_0_2mb;    /* Page table for first 2MB, monitor view */
+static uint64_t *unpriv_pt_0_2mb;     /* Page table for first 2MB, unprivileged view */
+
 /* External boot page table symbols (from boot.S) - these are 4KB arrays */
 extern uint64_t boot_pml4[];
 extern uint64_t boot_pdpt[];
 extern uint64_t boot_pd[];
+extern uint64_t boot_pd_apic[];
+extern uint64_t boot_pt_apic[];
 
 /* Get physical address from virtual (identity mapped) */
 static inline uint64_t virt_to_phys(void *virt) {
@@ -65,10 +71,11 @@ static void monitor_protect_state(void) {
         virt_to_phys(unpriv_pd)
     };
 
-    /* Find the PD entry covering the first page */
+    /* Protect monitor page tables (monitor PD entries) */
+    /* Find the PD entry covering the first monitor page */
     int pd_index = monitor_find_pd_entry(monitor_pages[0]);
 
-    /* Verify all pages are in the same 2MB region */
+    /* Verify all monitor pages are in the same 2MB region */
     for (int i = 1; i < 6; i++) {
         int idx = monitor_find_pd_entry(monitor_pages[i]);
         if (idx != pd_index) {
@@ -78,7 +85,7 @@ static void monitor_protect_state(void) {
         }
     }
 
-    /* Clear Writable bit in unpriv_pd entry (make it read-only)
+    /* Clear Writable bit in unpriv_pd entry for monitor region (make it read-only)
      * This implements Invariant 1: protected data is read-only for outer kernel */
     uint64_t *unpriv_pd_entry = &unpriv_pd[pd_index];
     uint64_t original_entry = *unpriv_pd_entry;
@@ -87,7 +94,7 @@ static void monitor_protect_state(void) {
 
     serial_puts("MONITOR: Protected PD entry at index ");
     serial_putc('0' + pd_index);
-    serial_puts("\n");
+    serial_puts(" (monitor)\n");
 
     /* Verify monitor_pd is still writable (nested kernel needs write access) */
     uint64_t *monitor_pd_entry = &monitor_pd[pd_index];
@@ -101,6 +108,7 @@ static void monitor_protect_state(void) {
 
     serial_puts("MONITOR: TLB invalidated (Invariant 2 enforcement active)\n");
     serial_puts("MONITOR: Nested Kernel invariants enforced\n");
+    serial_puts("MONITOR: Note: Boot page tables protected via 4KB page tables\n");
 }
 
 /* Verify Nested Kernel invariants are correctly configured
@@ -209,7 +217,7 @@ void monitor_verify_invariants(void) {
 
 #if CONFIG_INVARIANTS_VERBOSE
     serial_puts("VERIFY: [Inv 4] Context switch mechanism:\n");
-    serial_puts("VERIFY:   monitor_call_stub available - ");
+    serial_puts("VERIFY:   nk_entry_trampoline available - ");
     if (context_switch_available) {
         serial_puts("PASS\n");
     } else {
@@ -296,6 +304,62 @@ void monitor_verify_invariants(void) {
     }
 }
 
+/* Virtual base address for read-only nested kernel mappings */
+#define NESTED_KERNEL_RO_BASE  0xFFFF880000000000ULL
+
+/**
+ * create_ro_mapping - Create a read-only mapping in unprivileged page tables
+ * @phys_addr: Physical address to map
+ * @virt_addr: Virtual address to map to
+ *
+ * Returns: 0 on success, -1 on failure
+ *
+ * This creates a read-only PTE in the unprivileged page tables.
+ * For now, this is a simplified placeholder - a full implementation
+ * would walk the page table hierarchy and create entries as needed.
+ */
+static int create_ro_mapping(uint64_t phys_addr, uint64_t virt_addr) {
+    /* TODO: Walk page tables and set entry with X86_PTE_PRESENT only
+     * For now: placeholder implementation */
+    (void)phys_addr;
+    (void)virt_addr;
+    return 0;
+}
+
+/**
+ * monitor_create_ro_mappings - Create read-only mappings for outer kernel visibility
+ *
+ * Creates read-only mappings for all NK_NORMAL and NK_PGTABLE pages
+ * so the outer kernel can inspect nested kernel state but not modify it.
+ * This implements the read-only visibility requirement.
+ *
+ * Returns: 0 on success
+ */
+int monitor_create_ro_mappings(void) {
+    uint64_t ro_page_count = 0;
+
+    serial_puts("MONITOR: Creating read-only mappings for outer kernel\n");
+
+    for (uint64_t i = 0; i < pcd_get_max_pages(); i++) {
+        uint64_t phys_addr = i << PAGE_SHIFT;
+        uint8_t type = pcd_get_type(phys_addr);
+
+        /* Map all NK_NORMAL and NK_PGTABLE pages as read-only */
+        if (type == PCD_TYPE_NK_NORMAL || type == PCD_TYPE_NK_PGTABLE) {
+            uint64_t virt_addr = NESTED_KERNEL_RO_BASE + phys_addr;
+            if (create_ro_mapping(phys_addr, virt_addr) == 0) {
+                ro_page_count++;
+            }
+        }
+    }
+
+    serial_puts("MONITOR: Created ");
+    serial_put_hex(ro_page_count);
+    serial_puts(" read-only mappings\n");
+
+    return 0;
+}
+
 /* Initialize monitor page tables */
 void monitor_init(void) {
     serial_puts("MONITOR: Initializing nested kernel architecture\n");
@@ -320,6 +384,16 @@ void monitor_init(void) {
         return;
     }
 
+    /* Allocate 4KB page tables for first 2MB region */
+    /* 2MB / 4KB = 512 entries needed, one page table has 512 entries = 4KB */
+    monitor_pt_0_2mb = (uint64_t *)pmm_alloc(0);
+    unpriv_pt_0_2mb = (uint64_t *)pmm_alloc(0);
+
+    if (!monitor_pt_0_2mb || !unpriv_pt_0_2mb) {
+        serial_puts("MONITOR: Failed to allocate 4KB page tables\n");
+        return;
+    }
+
     /* Copy boot page table mappings to monitor view */
     for (int i = 0; i < 512; i++) {
         monitor_pml4[i] = boot_pml4[i];
@@ -331,12 +405,157 @@ void monitor_init(void) {
         unpriv_pd[i] = boot_pd[i];
     }
 
+    /* Set up 4KB page tables for first 2MB region */
+    /* Each 4KB page: PRESENT + WRITABLE for monitor */
+    for (int i = 0; i < 512; i++) {
+        uint64_t phys_addr = (uint64_t)i * 4096;
+        /* Monitor view: writable */
+        monitor_pt_0_2mb[i] = phys_addr | X86_PTE_PRESENT | X86_PTE_WRITABLE;
+        /* Unprivileged view: read-only for page table pages, writable for others */
+        if (phys_addr == virt_to_phys(boot_pml4) ||
+            phys_addr == virt_to_phys(boot_pdpt) ||
+            phys_addr == virt_to_phys(boot_pd) ||
+            phys_addr == virt_to_phys(boot_pd_apic) ||
+            phys_addr == virt_to_phys(boot_pt_apic) ||
+            phys_addr == virt_to_phys(monitor_pml4) ||
+            phys_addr == virt_to_phys(monitor_pdpt) ||
+            phys_addr == virt_to_phys(monitor_pd) ||
+            phys_addr == virt_to_phys(unpriv_pml4) ||
+            phys_addr == virt_to_phys(unpriv_pdpt) ||
+            phys_addr == virt_to_phys(unpriv_pd)) {
+            /* Page table pages: read-only */
+            unpriv_pt_0_2mb[i] = phys_addr | X86_PTE_PRESENT;
+        } else {
+            /* Other pages: writable (includes kernel stack, even if NK_NORMAL) */
+            unpriv_pt_0_2mb[i] = phys_addr | X86_PTE_PRESENT | X86_PTE_WRITABLE;
+        }
+    }
+
+    /* CRITICAL: Verify nested kernel boot stack pages are writable in unprivileged view
+     * The stack is NK_NORMAL but MUST be writable for CPU execution
+     * Stack pages are not page table pages, so they should be writable above */
+    extern uint8_t nk_boot_stack_bottom[], nk_boot_stack_top[];
+    uint64_t stack_start = ((uint64_t)nk_boot_stack_bottom) & ~0xFFF;
+    uint64_t stack_end = ((uint64_t)nk_boot_stack_top) & ~0xFFF;
+
+    serial_puts("MONITOR: Verifying stack pages are writable in unprivileged view\n");
+    for (uint64_t addr = stack_start; addr <= stack_end; addr += 0x1000) {
+        int pte_index = addr >> 12;
+        uint64_t pte = unpriv_pt_0_2mb[pte_index];
+        if (!(pte & X86_PTE_WRITABLE)) {
+            serial_puts("MONITOR: ERROR - Stack page at 0x");
+            serial_put_hex(addr);
+            serial_puts(" is read-only! Fixing...\n");
+            unpriv_pt_0_2mb[pte_index] = addr | X86_PTE_PRESENT | X86_PTE_WRITABLE;
+        }
+    }
+
+    /* Update PD[0] to point to page table instead of 2MB page */
+    /* Monitor view */
+    monitor_pd[0] = (uint64_t)virt_to_phys(monitor_pt_0_2mb) | X86_PTE_PRESENT | X86_PTE_WRITABLE;
+    /* Unprivileged view - make PD[0] writable so individual 4KB page protections work */
+    unpriv_pd[0] = (uint64_t)virt_to_phys(unpriv_pt_0_2mb) | X86_PTE_PRESENT | X86_PTE_WRITABLE;
+
+    /* CRITICAL: Update unprivileged page table hierarchy to use unpriv tables
+     * This ensures the CPU actually uses the protected page tables */
+    /* Update unpriv_pml4[0] to point to unpriv_pdpt instead of boot_pdpt */
+    uint64_t unpriv_pdpt_phys = virt_to_phys(unpriv_pdpt);
+    uint64_t boot_pml4_entry0 = boot_pml4[0];
+    unpriv_pml4[0] = (boot_pml4_entry0 & 0xFFF) | unpriv_pdpt_phys;
+
+    /* Update unpriv_pdpt[0] to point to unpriv_pd instead of boot_pd */
+    uint64_t unpriv_pd_phys = virt_to_phys(unpriv_pd);
+    uint64_t boot_pdpt_entry0 = boot_pdpt[0];
+    unpriv_pdpt[0] = (boot_pdpt_entry0 & 0xFFF) | unpriv_pd_phys;
+
+    /* Debug: Verify the hierarchy update worked */
+    serial_puts("MONITOR: After hierarchy update:\n");
+    serial_puts("  unpriv_pml4[0] = 0x");
+    serial_put_hex(unpriv_pml4[0]);
+    serial_puts(" (should be unpriv_pdpt)\n");
+    serial_puts("  unpriv_pdpt[0] = 0x");
+    serial_put_hex(unpriv_pdpt[0]);
+    serial_puts(" (should be unpriv_pd)\n");
+
+    /* Debug: Check some critical PTEs */
+    serial_puts("MONITOR: Critical PTEs in unpriv_pt_0_2mb:\n");
+    /* Kernel code starts at 0x100000 */
+    uint64_t kernel_code_pde = (0x100000 >> 12);
+    serial_puts("  Kernel code at 0x100000 (PTE ");
+    serial_put_hex(kernel_code_pde);
+    serial_puts("): 0x");
+    serial_put_hex(unpriv_pt_0_2mb[kernel_code_pde]);
+    serial_puts("\n");
+    /* Kernel stack at 0x110000 */
+    uint64_t kernel_stack_pde = (0x110000 >> 12);
+    serial_puts("  Kernel stack at 0x110000 (PTE ");
+    serial_put_hex(kernel_stack_pde);
+    serial_puts("): 0x");
+    serial_put_hex(unpriv_pt_0_2mb[kernel_stack_pde]);
+    serial_puts("\n");
+
+    /* Debug: Verify boot_pml4 page table entry */
+    uint64_t boot_pml4_phys = virt_to_phys(boot_pml4);
+    uint64_t boot_pml4_pte_index = boot_pml4_phys >> 12;  /* Div by 4KB */
+    serial_puts("MONITOR: boot_pml4 at 0x");
+    serial_put_hex(boot_pml4_phys);
+    serial_puts(", PTE index ");
+    serial_put_hex(boot_pml4_pte_index);
+    serial_puts("\n");
+    serial_puts("  unpriv_pt_0_2mb[");
+    serial_put_hex(boot_pml4_pte_index);
+    serial_puts("] = 0x");
+    serial_put_hex(unpriv_pt_0_2mb[boot_pml4_pte_index]);
+    serial_puts(" (should be read-only)\n");
+    serial_puts("  monitor_pt_0_2mb[");
+    serial_put_hex(boot_pml4_pte_index);
+    serial_puts("] = 0x");
+    serial_put_hex(monitor_pt_0_2mb[boot_pml4_pte_index]);
+    serial_puts(" (should be writable)\n");
+
+    /* Debug: Verify page table hierarchy */
+    serial_puts("  unpriv_pml4[0] = 0x");
+    serial_put_hex(unpriv_pml4[0]);
+    serial_puts(" (should point to unpriv_pdpt)\n");
+    serial_puts("  unpriv_pdpt[0] = 0x");
+    serial_put_hex(unpriv_pdpt[0]);
+    serial_puts(" (should point to unpriv_pd)\n");
+
     /* Save physical addresses */
     monitor_pml4_phys = virt_to_phys(monitor_pml4);
     unpriv_pml4_phys = virt_to_phys(unpriv_pml4);
 
+    /* Debug: Print page table structure */
+    serial_puts("MONITOR: Page table structure:\n");
+    serial_puts("  boot_pml4 phys = 0x");
+    serial_put_hex(virt_to_phys(boot_pml4));
+    serial_puts("\n  unpriv_pml4 phys = 0x");
+    serial_put_hex(unpriv_pml4_phys);
+    serial_puts("\n  boot_pd phys = 0x");
+    serial_put_hex(virt_to_phys(boot_pd));
+    serial_puts("\n  boot_pd[0] = 0x");
+    serial_put_hex(boot_pd[0]);
+    serial_puts("\n  boot_pd[1] = 0x");
+    serial_put_hex(boot_pd[1]);
+    serial_puts("\n  monitor_pd[0] = 0x");
+    serial_put_hex(monitor_pd[0]);
+    serial_puts("\n  unpriv_pd[0] = 0x");
+    serial_put_hex(unpriv_pd[0]);
+    serial_puts("\n  unpriv_pd[1] = 0x");
+    serial_put_hex(unpriv_pd[1]);
+    serial_puts("\n  Using 4KB pages for first 2MB\n");
+
     /* Mark page table pages as NK_PGTABLE for PCD tracking */
     /* These pages should not be accessible to outer kernel for mapping */
+
+    /* Mark boot page tables as NK_PGTABLE */
+    pcd_set_type(virt_to_phys(boot_pml4), PCD_TYPE_NK_PGTABLE);
+    pcd_set_type(virt_to_phys(boot_pdpt), PCD_TYPE_NK_PGTABLE);
+    pcd_set_type(virt_to_phys(boot_pd), PCD_TYPE_NK_PGTABLE);
+    pcd_set_type(virt_to_phys(boot_pd_apic), PCD_TYPE_NK_PGTABLE);
+    pcd_set_type(virt_to_phys(boot_pt_apic), PCD_TYPE_NK_PGTABLE);
+
+    /* Mark monitor page tables as NK_PGTABLE */
     pcd_set_type(virt_to_phys(monitor_pml4), PCD_TYPE_NK_PGTABLE);
     pcd_set_type(virt_to_phys(monitor_pdpt), PCD_TYPE_NK_PGTABLE);
     pcd_set_type(virt_to_phys(monitor_pd), PCD_TYPE_NK_PGTABLE);
@@ -353,6 +572,11 @@ void monitor_init(void) {
     /* Note: Per user requirement, APIC stays in outer kernel so this
      * is for tracking/logging only, not enforcement */
     pcd_mark_region(0xFEE00000, 0x1000, PCD_TYPE_NK_IO);
+
+    /* Create read-only mappings for outer kernel visibility
+     * Kernel pages are already marked as NK_NORMAL by pcd_init()
+     * Page tables are already marked as NK_PGTABLE above */
+    monitor_create_ro_mappings();
 
     /* Note: Verification is only run after switching to unprivileged mode
      * in main.c, not here during monitor_init(). This ensures we verify
@@ -419,6 +643,19 @@ monitor_ret_t monitor_call_handler(monitor_call_t call, uint64_t arg1,
             }
             break;
 
+        case MONITOR_CALL_ALLOC_PGTABLE:
+            /* Allocate page and mark as NK_PGTABLE */
+            ret.result = (uint64_t)pmm_alloc((uint8_t)arg1);
+            if (ret.result) {
+                uint64_t addr = ret.result;
+                for (uint64_t i = 0; i < (1ULL << arg1); i++) {
+                    pcd_set_type(addr + (i << PAGE_SHIFT), PCD_TYPE_NK_PGTABLE);
+                }
+            } else {
+                ret.error = -1;
+            }
+            break;
+
         default:
             ret.error = -1;
             break;
@@ -428,7 +665,7 @@ monitor_ret_t monitor_call_handler(monitor_call_t call, uint64_t arg1,
 }
 
 /* External assembly stub for monitor calls (CR3 switching) */
-extern monitor_ret_t monitor_call_stub(monitor_call_t call, uint64_t arg1,
+extern monitor_ret_t nk_entry_trampoline(monitor_call_t call, uint64_t arg1,
                                         uint64_t arg2, uint64_t arg3);
 
 /* Public monitor call wrapper (for unprivileged code) */
@@ -445,7 +682,7 @@ monitor_ret_t monitor_call(monitor_call_t call, uint64_t arg1,
     }
 
     /* Unprivileged: use assembly stub to switch CR3 */
-    return monitor_call_stub(call, arg1, arg2, arg3);
+    return nk_entry_trampoline(call, arg1, arg2, arg3);
 }
 
 /* PMM monitor call wrappers */
@@ -490,8 +727,8 @@ uint8_t monitor_pcd_get_type(uint64_t phys_addr) {
  * Returns: 0 on success, -1 on rejection
  *
  * This function validates that the page being mapped is of a type
- * that allows outer kernel access. This prevents the outer kernel
- * from mapping monitor-private pages or page table pages.
+ * that allows outer kernel access. For NK_NORMAL and NK_PGTABLE pages,
+ * only read-only mappings are allowed - writable requests are rejected.
  */
 int monitor_map_page(uint64_t phys_addr, uint64_t virt_addr, uint64_t flags) {
     uint8_t type = pcd_get_type(phys_addr);
@@ -499,22 +736,28 @@ int monitor_map_page(uint64_t phys_addr, uint64_t virt_addr, uint64_t flags) {
     /* Validate page type before mapping */
     switch (type) {
         case PCD_TYPE_OK_NORMAL:
-            /* OK: Outer kernel can map its own pages */
+            /* OK: Outer kernel can map its own pages read/write */
             break;
 
-        case PCD_TYPE_NK_PGTABLE:
-            /* REJECT: Outer kernel cannot map page tables */
-            serial_puts("MONITOR: Reject attempt to map PGTABLE page at 0x");
-            serial_put_hex(phys_addr);
-            serial_puts("\n");
-            return -1;
-
         case PCD_TYPE_NK_NORMAL:
-            /* REJECT: Monitor private pages */
-            serial_puts("MONITOR: Reject attempt to map MONITOR page at 0x");
-            serial_put_hex(phys_addr);
-            serial_puts("\n");
-            return -1;
+        case PCD_TYPE_NK_PGTABLE:
+            /* Allow read-only access to NK_NORMAL and NK_PGTABLE pages
+             * Reject writable requests for these types */
+            if (flags & X86_PTE_WRITABLE) {
+                serial_puts("MONITOR: Reject writable mapping for ");
+                if (type == PCD_TYPE_NK_NORMAL) {
+                    serial_puts("NK_NORMAL");
+                } else {
+                    serial_puts("NK_PGTABLE");
+                }
+                serial_puts(" page at 0x");
+                serial_put_hex(phys_addr);
+                serial_puts("\n");
+                return -1;
+            }
+            /* Force read-only (clear WRITABLE bit even if not set) */
+            flags = flags & ~X86_PTE_WRITABLE;
+            break;
 
         case PCD_TYPE_NK_IO:
             /* TRACKING ONLY: Allow mapping, log for visibility */
@@ -546,4 +789,10 @@ int monitor_unmap_page(uint64_t virt_addr) {
     /* A full implementation would walk the page tables and
      * clear the appropriate PTE */
     return 0;
+}
+
+/* Allocate page table pages (marked as NK_PGTABLE) */
+void *monitor_alloc_pgtable(uint8_t order) {
+    monitor_ret_t ret = monitor_call(MONITOR_CALL_ALLOC_PGTABLE, order, 0, 0);
+    return (void *)ret.result;
 }

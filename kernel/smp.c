@@ -20,8 +20,8 @@ extern void serial_putc(char c);
 extern uint64_t monitor_get_unpriv_cr3(void);
 extern void monitor_verify_invariants(void);
 
-/* Stack area for AP CPUs (aligned to 16 bytes) */
-static uint8_t ap_stacks[SMP_MAX_CPUS][CPU_STACK_SIZE] __attribute__((aligned(16)));
+/* Stack area for outer kernel CPUs (aligned to 16 bytes) */
+uint8_t ok_cpu_stacks[SMP_MAX_CPUS][CPU_STACK_SIZE] __attribute__((aligned(16)));
 
 /* Per-CPU information */
 static smp_cpu_info_t cpu_info[SMP_MAX_CPUS];
@@ -261,7 +261,7 @@ void ap_start(void) {
     current_cpu_index = my_index;
 
     /* Set up stack */
-    cpu_info[my_index].stack_top = &ap_stacks[my_index][CPU_STACK_SIZE];
+    cpu_info[my_index].stack_top = &ok_cpu_stacks[my_index][CPU_STACK_SIZE];
     asm volatile ("mov %0, %%rsp" : : "r"(cpu_info[my_index].stack_top));
 
     /* Switch to unprivileged page tables */

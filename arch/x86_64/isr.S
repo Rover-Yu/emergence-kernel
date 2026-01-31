@@ -316,6 +316,20 @@ general_protection_isr_handler:
 
 .global page_fault_isr_handler
 page_fault_isr_handler:
+    /* Read CR2 (faulting address) into RDI (first argument) */
+    mov %cr2, %rdi
+
+    /* Read error code from stack into RSI (second argument) */
+    /* Error code is at offset 120 from RSP after ISR_HANDLER macro */
+    mov 120(%rsp), %rsi
+
+    /* Read saved RIP from stack into RDX (third argument) */
+    mov 128(%rsp), %rdx
+
+    /* Call C handler with fault information */
+    call page_fault_handler
+
+    /* C handler should have initiated shutdown - if we return, halt */
     cli
     hlt
     jmp page_fault_isr_handler

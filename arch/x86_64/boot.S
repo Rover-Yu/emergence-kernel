@@ -25,7 +25,7 @@ multiboot_header_end:
 .extern ap_start              /* AP entry point function */
 .extern idt_ptr                /* IDT pointer structure in kernel BSS */
 .extern boot_pml4              /* PML4 page table address */
-.extern ap_stack_end           /* End of AP stack (top address) */
+.extern nk_trampoline_stack_end    /* End of AP trampoline stack (top address) */
 
 /* External placeholder symbols from AP trampoline
  * These are patched at runtime with the actual addresses */
@@ -49,9 +49,11 @@ cpu_boot_counter:
 /* Boot stack (temporary, for 32-bit code) */
 .section .bss
 .align 16
-stack_bottom:
+.global nk_boot_stack_bottom
+.global nk_boot_stack_top
+nk_boot_stack_bottom:
     .skip 16384  /* 16 KiB stack */
-stack_top:
+nk_boot_stack_top:
 
 /* Page tables for APIC mapping */
 .section .bss
@@ -66,14 +68,14 @@ boot_pd_apic:
 boot_pt_apic:
     .skip 4096
 
-/* AP stacks (one for each AP) */
+/* AP trampoline stack (temporary, used during AP startup) */
 .section .bss
 .align 16
-.global ap_stack_bottom
-.global ap_stack_end
-ap_stack_bottom:
+.global nk_trampoline_stack_bottom
+.global nk_trampoline_stack_end
+nk_trampoline_stack_bottom:
     .skip 16384  /* 16 KiB for APs */
-ap_stack_end:
+nk_trampoline_stack_end:
 
 /* Page tables for Long Mode (must be aligned) */
 .section .bss
@@ -148,7 +150,7 @@ boot_is_bsp:
      * ============================================================ */
 
     /* Set up temporary stack */
-    mov $stack_top, %esp
+    mov $nk_boot_stack_top, %esp
 
     /* Save Multiboot info pointer (passed in ebx) */
     mov %ebx, %esi
@@ -280,7 +282,7 @@ boot_is_bsp:
      * ============================================================
      * No runtime patching needed - symbols resolved by linker via GOT.
      * The trampoline uses PIC with GOT-based addressing for all
-     * kernel symbols (boot_pml4, ap_start, idt_ptr, ap_stack_end).
+     * kernel symbols (boot_pml4, ap_start, idt_ptr, nk_trampoline_stack_end).
      */
 
     /* ---- CR Register Configuration ---- */
@@ -336,7 +338,7 @@ halt_loop:
 
 long_mode_start:
     /* Set up 64-bit stack */
-    mov $stack_top, %rsp
+    mov $nk_boot_stack_top, %rsp
 
     /* Clear segment registers */
     mov $0, %ax
@@ -388,7 +390,7 @@ ap_entry:
 .code64
 ap_mode_64:
     /* Set up AP stack (use separate stack area) */
-    mov $ap_stack_end, %rsp
+    mov $nk_trampoline_stack_end, %rsp
 
     /* Clear segment registers */
     mov $0, %ax

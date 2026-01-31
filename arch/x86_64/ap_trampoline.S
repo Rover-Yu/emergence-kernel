@@ -8,9 +8,9 @@
  * The linker populates the GOT at build time - NO runtime patching needed!
  *
  * TRAMPOLINE MEMORY LAYOUT (physical addresses):
- *   0x7000 - Real mode entry point (.ap_trampoline)
- *   0x7F00 - GDT64 (.ap_trampoline_gdt64)
- *   0x8000 - 64-bit stub (.ap_trampoline_stub)
+ *   0x7000 - Real mode entry point (.ok_ap_boot_trampoline)
+ *   0x7F00 - GDT64 (.ok_ap_boot_trampoline_gdt64)
+ *   0x8000 - 64-bit stub (.ok_ap_boot_trampoline_stub)
  *   GOT entries are accessed via RIP-relative addressing in 64-bit mode
  *   or call/pop technique in 16/32-bit modes
  */
@@ -63,14 +63,16 @@
 .extern boot_pml4        /* PML4 page table address */
 .extern ap_start         /* AP entry point function */
 .extern idt_ptr          /* IDT pointer structure in kernel BSS */
-.extern ap_stack_end     /* End of AP stack (top address) */
+.extern nk_trampoline_stack_end     /* End of AP stack (top address) */
 
 /* ============================================================
  * Real mode and protected mode code section
  * ============================================================ */
-.section .ap_trampoline, "ax"
+.section .ok_ap_boot_trampoline, "ax"
 .global trampoline_start
+.global ok_ap_boot_trampoline
 trampoline_start:
+ok_ap_boot_trampoline:
     .code16
 
     cli
@@ -234,7 +236,7 @@ get_eip_gdt64:
      * Far Jump to 64-bit Mode using retf technique
      * ============================================================ */
     pushl $LM_CODE_SELECTOR  /* 64-bit code segment selector */
-    pushl $STUB_PHYSICAL  /* Offset to ap_trampoline_stub (0x8000) */
+    pushl $STUB_PHYSICAL  /* Offset to ok_ap_boot_trampoline_stub (0x8000) */
     retf
 
     .code64
@@ -243,7 +245,7 @@ halt:
     jmp halt
 
     /* ============================================================
-     * GDTR Structures (at fixed addresses within .ap_trampoline)
+     * GDTR Structures (at fixed addresses within .ok_ap_boot_trampoline)
      * ============================================================ */
     .org 0x1E0
 gdt32_gdtr:
@@ -269,7 +271,7 @@ gdt32:
 /* ============================================================
  * GDT64 - For 64-bit Long Mode at physical 0x7F00
  * ============================================================ */
-.section .ap_trampoline_gdt64, "a"
+.section .ok_ap_boot_trampoline_gdt64, "a"
 gdt64:
     .quad 0x0000000000000000                       /* Null descriptor */
     .quad 0x00209A0000000000                       /* 64-bit code segment */
@@ -278,10 +280,10 @@ gdt64:
 /* ============================================================
  * AP Trampoline Stub - 64-bit entry point at physical 0x8000
  * ============================================================ */
-.section .ap_trampoline_stub, "ax"
+.section .ok_ap_boot_trampoline_stub, "ax"
 .code64
-.global ap_trampoline_stub
-ap_trampoline_stub:
+.global ok_ap_boot_trampoline_stub
+ok_ap_boot_trampoline_stub:
 #if AP_TRAMPOLINE_DEBUG
     /* Debug: Output 'S' to serial (stub reached in 64-bit mode) */
     mov $0x3F8, %edx
@@ -356,7 +358,7 @@ skip_idt_load:
     /* Should never reach here */
     cli
     hlt
-    jmp ap_trampoline_stub
+    jmp ok_ap_boot_trampoline_stub
 
     /* ============================================================
      * test_ap_start - Bridge function for AP startup
@@ -403,7 +405,7 @@ ap_start_placeholder:
 idt_ptr_placeholder:
     .quad 0xDEADBEEFCAFEBABE  /* Patched by BSP with actual idt_ptr address */
 
-    .size ap_trampoline_stub, . - ap_trampoline_stub
+    .size ok_ap_boot_trampoline_stub, . - ok_ap_boot_trampoline_stub
 
 /* ============================================================
  * GOT (Global Offset Table) - Populated by linker at build time
@@ -412,11 +414,11 @@ idt_ptr_placeholder:
  * The linker fills in the actual addresses during the link phase.
  * Each entry is 8 bytes (64-bit pointer).
  */
-.section .ap_trampoline_got, "a"
+.section .ok_ap_boot_trampoline_got, "a"
 .align 8
 .global trampoline_got
 trampoline_got:
     .quad boot_pml4      /* GOT[0]: PML4 page table address */
     .quad ap_start       /* GOT[1]: AP entry point function */
     .quad idt_ptr        /* GOT[2]: IDT pointer structure */
-    .quad ap_stack_end   /* GOT[3]: AP stack end address */
+    .quad nk_trampoline_stack_end   /* GOT[3]: AP stack end address */

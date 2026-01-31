@@ -243,6 +243,14 @@ void kernel_main(uint32_t multiboot_info_addr) {
         }
 #endif
 
+#if CONFIG_NK_PROTECTION_TESTS
+        /* Run nested kernel mappings protection tests - these will trigger faults and shutdown */
+        serial_puts("KERNEL: Starting nested kernel mappings protection tests...\n");
+        extern int run_nk_protection_tests(void);
+        run_nk_protection_tests();  /* Never returns */
+        serial_puts("KERNEL: NK protection tests returned unexpectedly\n");
+#endif
+
         /* BSP waits with interrupts enabled for timer interrupts to fire
          * The HLT instruction will wake up on each interrupt */
         system_shutdown();

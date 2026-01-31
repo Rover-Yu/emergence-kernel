@@ -2,11 +2,20 @@
 
 #include "kernel/pcd.h"
 #include "kernel/pmm.h"
+#include "kernel/smp.h"
 #include "arch/x86_64/serial.h"
 
 /* External symbols for kernel region */
 extern char _kernel_start[];
 extern char _kernel_end[];
+
+/* External symbols for nested kernel stacks (from boot.S .bss section) */
+extern uint8_t nk_boot_stack_bottom[];   /* Nested kernel boot stack in boot.S */
+extern uint8_t nk_boot_stack_top[];
+extern uint8_t nk_trampoline_stack_bottom[]; /* AP trampoline stack area in boot.S */
+extern uint8_t nk_trampoline_stack_end[];
+
+/* Note: ap_stacks in smp.c is static - it's covered by default NK_NORMAL initialization */
 
 /* PCD state - global instance */
 static pcd_state_t pcd_state;
@@ -134,6 +143,29 @@ void pcd_init(void) {
     uint64_t kernel_start = (uint64_t)_kernel_start;
     uint64_t kernel_end = (uint64_t)_kernel_end;
     pcd_mark_region(kernel_start, kernel_end - kernel_start, PCD_TYPE_NK_NORMAL);
+
+    /* Mark nested kernel stacks as NK_NORMAL (monitor-owned, read-only for outer kernel) */
+    serial_puts("PCD: Marking nested kernel stacks as NK_NORMAL\n");
+
+    /* Nested kernel boot stack (16 KiB in boot.S) */
+    uint64_t nk_boot_stack_start = (uint64_t)nk_boot_stack_bottom;
+    uint64_t nk_boot_stack_size = (uint64_t)nk_boot_stack_top - (uint64_t)nk_boot_stack_bottom;
+    pcd_mark_region(nk_boot_stack_start, nk_boot_stack_size, PCD_TYPE_NK_NORMAL);
+
+    /* AP trampoline stack area from boot.S (16 KiB) */
+    uint64_t trampoline_stack_start = (uint64_t)nk_trampoline_stack_bottom;
+    uint64_t trampoline_stack_size = (uint64_t)nk_trampoline_stack_end - (uint64_t)nk_trampoline_stack_bottom;
+    pcd_mark_region(trampoline_stack_start, trampoline_stack_size, PCD_TYPE_NK_NORMAL);
+
+    /* Mark outer kernel CPU stacks as OK_NORMAL for outer kernel use */
+    serial_puts("PCD: Marking outer kernel CPU stacks as OK_NORMAL\n");
+
+    /* ok_cpu_stacks is defined in smp.c - we need to get its address */
+    extern uint8_t ok_cpu_stacks[];
+    uint64_t ok_stacks_start = (uint64_t)ok_cpu_stacks;
+    /* ok_cpu_stacks[SMP_MAX_CPUS][CPU_STACK_SIZE] = 4 * 16384 = 64KB */
+    uint64_t ok_stacks_size = SMP_MAX_CPUS * CPU_STACK_SIZE;
+    pcd_mark_region(ok_stacks_start, ok_stacks_size, PCD_TYPE_OK_NORMAL);
 
     serial_puts("PCD: Initialized successfully\n");
 }

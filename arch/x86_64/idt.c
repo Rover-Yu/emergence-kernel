@@ -2,8 +2,12 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdbool.h>
 #include "arch/x86_64/idt.h"
 #include "arch/x86_64/io.h"
+#include "arch/x86_64/serial.h"
+#include "kernel/monitor/monitor.h"
+#include "arch/x86_64/power.h"
 
 /* IDT array - 256 entries for x86-64 */
 static idt_entry_t idt[IDT_ENTRIES];
@@ -156,4 +160,34 @@ void idt_init(void) {
 
     /* Load IDT using lidt instruction */
     asm volatile ("lidt %0" : : "m"(idt_ptr));
+}
+
+/* External monitor variable - used to verify unprivileged mode */
+extern uint64_t unpriv_pml4_phys;
+
+/**
+ * page_fault_handler - Handle page fault with logging from outer kernel
+ * @fault_addr: Faulting virtual address from CR2
+ * @error_code: Page fault error code from stack
+ * @fault_ip: Instruction pointer where fault occurred
+ *
+ * NOTE: This handler runs in outer kernel mode (unprivileged).
+ * It logs the fault and initiates shutdown directly without switching
+ * to monitor mode, since system_shutdown() is callable from outer kernel.
+ *
+ * IMPORTANT: This handler must be very simple to avoid causing additional
+ * faults (double faults). Avoid complex functions that might fault.
+ */
+void page_fault_handler(uint64_t fault_addr, uint64_t error_code, uint64_t fault_ip) {
+    /* Very simple fault handler - minimal processing to avoid double faults
+     * Just call system_shutdown() which will print the shutdown message
+     * and cleanly shut down the system */
+
+    /* Shutdown directly from outer kernel */
+    extern void system_shutdown(void);
+    system_shutdown();
+
+    /* Should never reach here */
+    asm volatile ("cli; hlt");
+    while (1) asm volatile ("hlt");
 }

@@ -18,6 +18,7 @@ typedef enum {
     MONITOR_CALL_GET_PAGE_TYPE,  /* Query PCD type */
     MONITOR_CALL_MAP_PAGE,       /* Map page with validation */
     MONITOR_CALL_UNMAP_PAGE,     /* Unmap page */
+    MONITOR_CALL_ALLOC_PGTABLE,  /* Allocate page as NK_PGTABLE */
 } monitor_call_t;
 
 /* Monitor page table physical addresses (set by monitor_init) */
@@ -26,6 +27,9 @@ extern uint64_t unpriv_pml4_phys;     /* Restricted unprivileged view */
 
 /* Monitor initialization */
 void monitor_init(void);
+
+/* Create read-only mappings for outer kernel visibility */
+int monitor_create_ro_mappings(void);
 
 /* Verify Nested Kernel invariants (called after CR0.WP is set) */
 void monitor_verify_invariants(void);
@@ -50,5 +54,8 @@ uint8_t monitor_pcd_get_type(uint64_t phys_addr);
 /* Mapping functions with validation */
 int monitor_map_page(uint64_t phys_addr, uint64_t virt_addr, uint64_t flags);
 int monitor_unmap_page(uint64_t virt_addr);
+
+/* Page table allocation (auto-marked as NK_PGTABLE) */
+void *monitor_alloc_pgtable(uint8_t order);
 
 #endif /* KERNEL_MONITOR_MONITOR_H */
