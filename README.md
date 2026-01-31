@@ -58,59 +58,17 @@ make clean
 
 ```
 Emergence-Kernel/
-├── arch/x86_64/          # Architecture-specific code
-│   ├── boot.S           # Boot code (32-bit → 64-bit)
-│   ├── ap_trampoline.S  # AP startup trampoline (Real Mode → Long Mode)
-│   ├── apic.c           # Local APIC / I/O APIC
-│   ├── idt.c            # Interrupt Descriptor Table
-│   ├── isr.S            # Interrupt Service Routine stubs
-│   ├── vga.c            # VGA text mode driver
-│   ├── serial_driver.c  # Serial driver
-│   ├── acpi.c           # ACPI parsing
-│   ├── timer.c          # Timer framework
-│   ├── ipi.c            # Inter-Processor Interrupts
-│   ├── monitor/         # Nested Kernel monitor (privileged mode)
-│   │   ├── monitor.c     # Monitor core implementation
-│   │   ├── monitor.h     # Monitor public interface
-│   │   └── monitor_call.S # Assembly stub for CR3/CR0.WP switching
-│   ├── paging.h         # x86_64 paging constants
-│   └── power.c          # Power management (shutdown)
-├── kernel/              # Architecture-independent code
-│   ├── main.c           # Kernel main function
-│   ├── smp.c            # Multiprocessor support
-│   ├── device.c         # Device driver framework
-│   ├── monitor/         # Nested Kernel (shared headers)
-│   │   └── monitor.h     # Monitor public interface
-│   ├── pmm.c            # Physical Memory Manager (buddy system)
-│   └── multiboot2.c     # Multiboot2 parsing
-├── include/             # Public headers
-│   ├── spinlock.h       # Spin lock public interface
-│   ├── atomic.h         # Atomic operations
-│   ├── barrier.h        # Memory barriers
-│   └── smp.h            # SMP interface
-├── tests/               # Test code
-│   ├── boot/            # Boot integration tests
-│   ├── monitor/         # Nested Kernel invariants test
-│   ├── smp/             # SMP integration tests
-│   ├── timer/           # Timer integration tests
-│   ├── spinlock/        # Kernel test code
-│   └── lib/             # Test framework library
-├── docs/                # Documentation
-│   ├── BUILD_CONFIG.md  # Build configuration (English)
-│   ├── BUILD_CONFIG_CN.md # Build configuration (中文)
-│   ├── atomic.md        # Atomic operations API
-│   └── barrier.md       # Memory barrier API
-├── skills/              # Claude Code skills
-│   ├── architecture/    # Architecture design guidelines
-│   ├── build/           # Build requirements
-│   ├── coding/          # Code generation guidelines
-│   └── tests/           # Test guidelines
-├── kernel.config        # Kernel configuration file (default)
-├── .config              # Local configuration override (not committed)
-├── Makefile             # Build system
-├── CLAUDE.md            # Claude Code project guide
-├── README.md            # This file (English)
-└── README_CN.md         # README (中文)
+├── arch/x86_64/          # x86_64 architecture-specific code (boot, APIC, IDT, timers, drivers, monitor)
+├── kernel/               # Architecture-independent kernel code (SMP, device framework, PMM, multiboot2)
+├── include/              # Public headers (spinlock, atomic, barrier, SMP interfaces)
+├── tests/                # Test suite (boot, SMP, timer, monitor invariants, framework library)
+├── docs/                 # API documentation (atomic, barrier, monitor API)
+├── skills/               # Claude Code skills (architecture, build, tests guidelines)
+├── kernel.config         # Default kernel configuration
+├── .config               # Local configuration override (not committed)
+├── Makefile              # Build system
+├── CLAUDE.md             # Claude Code project guide
+└── README.md             # This file
 ```
 
 ---
