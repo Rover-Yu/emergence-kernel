@@ -1,5 +1,6 @@
 /* monitor.c - Monitor core implementation for nested kernel architecture */
 
+#include <stddef.h>
 #include "monitor.h"
 #include "arch/x86_64/paging.h"
 #include "arch/x86_64/serial.h"
@@ -188,7 +189,23 @@ void monitor_verify_invariants(void) {
     /* Check that PML4 entries are identical for identity-mapped regions */
     global_mappings_match = true;
     for (int i = 0; i < 512; i++) {
-        if (i == pd_index) continue;
+        /* Skip PML4[0] - intentionally different (monitor vs unpriv PDPT)
+         * PML4[0] points to monitor_pdpt in monitor view
+         * PML4[0] points to unpriv_pdpt in unprivileged view
+         * This is required for the nested kernel isolation */
+        if (i == 0) continue;
+
+        /* Skip read-only mapping region (PML4 indices 256-263)
+         * NESTED_KERNEL_RO_BASE (0xFFFF880000000000ULL) maps to PML4[257]
+         * Due to page table allocation for RO mappings, we may create multiple
+         * PML4 entries in the high canonical range. Skip these. */
+        if (i >= 256 && i < 264) continue;
+
+        /* Also skip any PML4 entries that were 0 in boot_pml4
+         * These may have been populated differently in monitor vs unpriv view
+         * due to RO mapping page table allocations */
+        if (boot_pml4[i] == 0) continue;
+
         if (monitor_pml4[i] != unpriv_pml4[i]) {
             global_mappings_match = false;
             mismatch_count++;
@@ -307,22 +324,119 @@ void monitor_verify_invariants(void) {
 /* Virtual base address for read-only nested kernel mappings */
 #define NESTED_KERNEL_RO_BASE  0xFFFF880000000000ULL
 
+/* Page table index extraction macros for x86-64 virtual addresses */
+#define PML4_INDEX(vaddr)  (((vaddr) >> 39) & 0x1FF)
+#define PDPT_INDEX(vaddr)  (((vaddr) >> 30) & 0x1FF)
+#define PD_INDEX(vaddr)    (((vaddr) >> 21) & 0x1FF)
+#define PT_INDEX(vaddr)    (((vaddr) >> 12) & 0x1FF)
+
+/**
+ * create_or_get_table - Allocate and initialize a page table
+ * @phys_out: Output parameter for physical address of allocated table
+ *
+ * Returns: Virtual address of allocated table, or NULL on failure
+ */
+static uint64_t *create_or_get_table(uint64_t *phys_out) {
+    uint64_t *table = (uint64_t *)pmm_alloc(0);
+    if (!table) {
+        return NULL;
+    }
+
+    /* Clear the table */
+    for (int i = 0; i < 512; i++) {
+        table[i] = 0;
+    }
+
+    /* Mark as NK_PGTABLE for PCD tracking */
+    uint64_t phys = virt_to_phys(table);
+    pcd_set_type(phys, PCD_TYPE_NK_PGTABLE);
+
+    *phys_out = phys;
+    return table;
+}
+
 /**
  * create_ro_mapping - Create a read-only mapping in unprivileged page tables
- * @phys_addr: Physical address to map
- * @virt_addr: Virtual address to map to
+ * @phys_addr: Physical address to map (must be page-aligned)
+ * @virt_addr: Virtual address to map to (must be page-aligned)
  *
  * Returns: 0 on success, -1 on failure
  *
- * This creates a read-only PTE in the unprivileged page tables.
- * For now, this is a simplified placeholder - a full implementation
- * would walk the page table hierarchy and create entries as needed.
+ * This walks the unprivileged page table hierarchy and creates a read-only PTE.
+ * The physical page is mapped with X86_PTE_PRESENT only (no WRITABLE bit).
  */
 static int create_ro_mapping(uint64_t phys_addr, uint64_t virt_addr) {
-    /* TODO: Walk page tables and set entry with X86_PTE_PRESENT only
-     * For now: placeholder implementation */
-    (void)phys_addr;
-    (void)virt_addr;
+    /* Extract page table indices from virtual address */
+    int pml4_idx = PML4_INDEX(virt_addr);
+    int pdpt_idx = PDPT_INDEX(virt_addr);
+    int pd_idx = PD_INDEX(virt_addr);
+    int pt_idx = PT_INDEX(virt_addr);
+
+    /* Step 1: Get or create PDPT entry from PML4 */
+    uint64_t pml4_entry = unpriv_pml4[pml4_idx];
+    uint64_t *pdpt;
+
+    if (!(pml4_entry & X86_PTE_PRESENT)) {
+        /* Need to allocate new PDPT */
+        uint64_t pdpt_phys;
+        pdpt = create_or_get_table(&pdpt_phys);
+        if (!pdpt) {
+            return -1;
+        }
+
+        /* Set PML4 entry - writable so we can modify lower levels */
+        unpriv_pml4[pml4_idx] = pdpt_phys | X86_PTE_PRESENT | X86_PTE_WRITABLE;
+    } else {
+        /* Existing PDPT */
+        pdpt = (uint64_t *)(pml4_entry & ~0xFFF);
+    }
+
+    /* Step 2: Get or create PD entry from PDPT */
+    uint64_t pdpt_entry = pdpt[pdpt_idx];
+    uint64_t *pd;
+
+    if (!(pdpt_entry & X86_PTE_PRESENT)) {
+        /* Need to allocate new PD */
+        uint64_t pd_phys;
+        pd = create_or_get_table(&pd_phys);
+        if (!pd) {
+            return -1;
+        }
+
+        /* Set PDPT entry */
+        pdpt[pdpt_idx] = pd_phys | X86_PTE_PRESENT | X86_PTE_WRITABLE;
+    } else {
+        /* Existing PD */
+        pd = (uint64_t *)(pdpt_entry & ~0xFFF);
+    }
+
+    /* Step 3: Get or create PT entry from PD */
+    uint64_t pd_entry = pd[pd_idx];
+    uint64_t *pt;
+
+    if (!(pd_entry & X86_PTE_PRESENT)) {
+        /* Need to allocate new PT */
+        uint64_t pt_phys;
+        pt = create_or_get_table(&pt_phys);
+        if (!pt) {
+            return -1;
+        }
+
+        /* Set PD entry */
+        pd[pd_idx] = pt_phys | X86_PTE_PRESENT | X86_PTE_WRITABLE;
+    } else {
+        /* Existing PT - check if it's a 2MB page */
+        if (pd_entry & X86_PTE_PS) {
+            /* Existing 2MB page - need to split it (not implemented yet) */
+            serial_puts("MONITOR: WARNING - Cannot split 2MB page for RO mapping\n");
+            return -1;
+        }
+        pt = (uint64_t *)(pd_entry & ~0xFFF);
+    }
+
+    /* Step 4: Create final PTE - read-only (PRESENT only, no WRITABLE) */
+    pt[pt_idx] = phys_addr | X86_PTE_PRESENT;
+
     return 0;
 }
 

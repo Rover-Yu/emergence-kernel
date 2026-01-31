@@ -22,9 +22,28 @@ This is a research kernel project aimed at exploring the boundaries of LLM capab
 | Synchronization Primitives | ✅ Complete | Spin locks, RW locks, IRQ-safe locks |
 | Test Framework | ✅ Complete | PMM, spin lock, and nested kernel invariants tests |
 | ACPI Parsing | ⚠️ Partial | Using default APIC IDs for now |
+| **Page Control Data (PCD)** | ✅ Complete | Page type tracking (NK_NORMAL, NK_PGTABLE, OK_NORMAL, etc.) |
 | **Nested Kernel** | ✅ Complete | All 6 invariants enforced on BSP and APs |
 | **Monitor Mode** | ✅ Complete | Privileged/unprivileged page table separation |
 | **CR0.WP Protection** | ✅ Complete | Two-level protection (PTE + CR0.WP) |
+| **Read-Only Mappings** | ✅ Complete | Outer kernel can read nested kernel pages at NESTED_KERNEL_RO_BASE |
+| **NK Protection Tests** | ✅ Complete | Page fault tests verify write protection |
+
+### Recent Developments
+
+**Nested Kernel Isolation (Latest)**
+- Implemented PCD (Page Control Data) system for tracking page types
+- All nested kernel stacks marked with `nk_` prefix (NK_NORMAL type)
+- All outer kernel stacks marked with `ok_` prefix (OK_NORMAL type)
+- Distinguished trampolines: `ok_ap_boot_trampoline` (outer kernel) vs `nk_entry_trampoline` (nested kernel entry)
+- Read-only mappings allow outer kernel to inspect nested kernel state without modification
+- Page fault protection tests verify unauthorized writes trigger clean shutdown
+
+**Key Design Decisions**
+- 4KB page tables for first 2MB region enable fine-grained protection
+- Page table pages (NK_PGTABLE) are read-only in unprivileged view
+- Nested kernel code/data (NK_NORMAL) writable in monitor, read-only in unprivileged view
+- APIC remains accessible from unprivileged mode (per user requirement)
 
 ---
 
@@ -58,15 +77,30 @@ make clean
 
 ```
 Emergence-Kernel/
-├── arch/x86_64/          # x86_64 architecture-specific code (boot, APIC, IDT, timers, drivers, monitor)
-├── kernel/               # Architecture-independent kernel code (SMP, device framework, PMM, multiboot2)
-├── include/              # Public headers (spinlock, atomic, barrier, SMP interfaces)
-├── tests/                # Test suite (boot, SMP, timer, monitor invariants, framework library)
-├── docs/                 # API documentation (atomic, barrier, monitor API)
-├── skills/               # Claude Code skills (architecture, build, tests guidelines)
+├── arch/x86_64/          # Architecture-specific code
+│   ├── boot.S           # BSP 16/32-bit entry, Long Mode transition
+│   ├── ap_trampoline.S  # AP real mode trampoline (ok_ap_boot_trampoline)
+│   ├── monitor/         # Nested kernel monitor
+│   │   └── monitor_call.S  # nk_entry_trampoline (CR3 switching stub)
+│   ├── paging.h         # Page table entry flags
+│   └── ...
+├── kernel/               # Architecture-independent kernel code
+│   ├── monitor/         # Monitor core implementation
+│   │   └── monitor.c    # PCD, RO mappings, invariants enforcement
+│   ├── pcd.c            # Page Control Data system
+│   ├── smp.c            # SMP support with ok_cpu_stacks
+│   └── ...
+├── tests/                # Test suite
+│   ├── boot/            # Basic kernel boot tests
+│   ├── smp/             # SMP boot tests
+│   ├── timer/           # APIC timer tests
+│   ├── monitor/         # Nested kernel invariants and protection tests
+│   ├── nested_kernel_mapping_protection/  # NK protection tests
+│   └── lib/             # Test framework library
+├── include/              # Public headers
 ├── kernel.config         # Default kernel configuration
 ├── .config               # Local configuration override (not committed)
-├── Makefile              # Build system
+├── Makefile              # Build system (run `make help` for targets)
 ├── CLAUDE.md             # Claude Code project guide
 └── README.md             # This file
 ```
