@@ -28,6 +28,7 @@ CFLAGS += -DCONFIG_APIC_TIMER_TEST=$(CONFIG_APIC_TIMER_TEST)
 CFLAGS += -DCONFIG_WRITE_PROTECTION_VERIFY=$(CONFIG_WRITE_PROTECTION_VERIFY)
 CFLAGS += -DCONFIG_CR0_WP_CONTROL=$(CONFIG_CR0_WP_CONTROL)
 CFLAGS += -DCONFIG_INVARIANTS_VERBOSE=$(CONFIG_INVARIANTS_VERBOSE)
+CFLAGS += -DCONFIG_PCD_STATS=$(CONFIG_PCD_STATS)
 LDFLAGS := -nostdlib -m elf_x86_64
 
 # Architecture-specific sources (x86_64)
@@ -43,7 +44,7 @@ TRAMPOLINE_OBJ := $(BUILD_DIR)/ap_trampoline.o
 # Architecture-independent kernel sources
 KERNEL_DIR := kernel
 KERNEL_C_SRCS := $(KERNEL_DIR)/main.c $(KERNEL_DIR)/device.c $(KERNEL_DIR)/smp.c \
-                 $(KERNEL_DIR)/pmm.c $(KERNEL_DIR)/multiboot2.c \
+                 $(KERNEL_DIR)/pmm.c $(KERNEL_DIR)/pcd.c $(KERNEL_DIR)/multiboot2.c \
                  $(KERNEL_DIR)/monitor/monitor.c
 
 # Spinlock test sources (conditionally compiled)
@@ -74,7 +75,7 @@ OBJS := $(ARCH_BOOT_OBJ) $(ARCH_OBJS) $(KERNEL_OBJS) $(TESTS_OBJS) $(TRAMPOLINE_
 endif
 KERNEL_ELF := $(BUILD_DIR)/$(KERNEL).elf
 
-.PHONY: all clean run test test-all test-boot test-apic-timer test-smp
+.PHONY: all clean run test test-all test-boot test-apic-timer test-smp test-pcd test-nested-kernel
 
 all: $(ISO)
 
@@ -166,6 +167,10 @@ test-apic-timer:
 test-smp:
 	@echo "Running SMP Boot Test..."
 	@cd tests && ./smp/smp_boot_test.sh 2
+
+test-pcd:
+	@echo "Running Page Control Data (PCD) Test..."
+	@cd tests && ./monitor/pcd_test.sh
 
 test-nested-kernel:
 	@echo "Running Nested Kernel Invariants Test..."

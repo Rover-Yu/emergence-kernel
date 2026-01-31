@@ -7,6 +7,9 @@
 #include "kernel/list.h"
 #include "include/spinlock.h"
 
+/* Forward declare PCD types to avoid circular dependency */
+#define PCD_TYPE_NK_NORMAL   1  /* Monitor private pages */
+
 /* Page size and shift */
 #define PAGE_SIZE       4096
 #define PAGE_SHIFT      12

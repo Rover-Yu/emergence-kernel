@@ -11,6 +11,10 @@ extern char _kernel_start[];
 extern char _kernel_end[];
 extern char _end[];
 
+/* PCD integration */
+extern bool pcd_is_initialized(void);
+extern void pcd_set_type(uint64_t phys_addr, uint8_t type);
+
 /* External serial functions */
 extern void serial_puts(const char *str);
 extern void serial_putc(char c);
@@ -406,6 +410,15 @@ void *pmm_alloc(uint8_t order) {
     }
 
     spin_unlock_irqrestore(&pmm_state.lock, &flags);
+
+    /* Initialize PCD for allocated pages (if PCD is ready) */
+    if (pcd_is_initialized()) {
+        for (uint64_t i = 0; i < (1ULL << order); i++) {
+            uint64_t page_addr = block->base_addr + (i << PAGE_SHIFT);
+            /* Default: monitor-owned (NK_NORMAL) */
+            pcd_set_type(page_addr, PCD_TYPE_NK_NORMAL);
+        }
+    }
 
     return (void *)block->base_addr;
 }

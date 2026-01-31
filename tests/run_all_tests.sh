@@ -24,6 +24,8 @@ NC='\033[0m' # No Color
 # Format: "filename:display_name[:cpu_arg]"
 TESTS=(
     "boot/boot_test.sh:Basic Kernel Boot"
+    "monitor/pcd_test.sh:Page Control Data (PCD)"
+    "monitor/nested_kernel_invariants_test.sh:Nested Kernel Invariants"
     "timer/apic_timer_test.sh:APIC Timer"
     "smp/smp_boot_test.sh:SMP Boot:2"
 )

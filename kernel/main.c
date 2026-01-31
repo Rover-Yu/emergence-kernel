@@ -75,6 +75,10 @@ void kernel_main(uint32_t multiboot_info_addr) {
     pmm_init(multiboot_info_addr);
     serial_puts("PMM: Initialized\n");
 
+    /* Initialize Page Control Data (PCD) system */
+    extern void pcd_init(void);
+    pcd_init();
+
 #if CONFIG_PMM_TESTS
     /* PMM Tests */
     serial_puts("[ PMM tests ] Running allocation tests...\n");
@@ -175,6 +179,12 @@ void kernel_main(uint32_t multiboot_info_addr) {
 #if CONFIG_WRITE_PROTECTION_VERIFY
             /* Verify all Nested Kernel invariants (including CR0.WP) */
             monitor_verify_invariants();
+#endif
+
+#if CONFIG_PCD_STATS
+            /* Dump PCD statistics for debugging */
+            extern void pcd_dump_stats(void);
+            pcd_dump_stats();
 #endif
         } else {
             serial_puts("KERNEL: Monitor initialization failed\n");

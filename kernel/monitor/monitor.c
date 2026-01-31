@@ -3,6 +3,8 @@
 #include "monitor.h"
 #include "arch/x86_64/paging.h"
 #include "arch/x86_64/serial.h"
+#include "kernel/pcd.h"
+#include "kernel/pmm.h"
 
 /* External functions */
 extern void *pmm_alloc(uint8_t order);
@@ -333,10 +335,24 @@ void monitor_init(void) {
     monitor_pml4_phys = virt_to_phys(monitor_pml4);
     unpriv_pml4_phys = virt_to_phys(unpriv_pml4);
 
+    /* Mark page table pages as NK_PGTABLE for PCD tracking */
+    /* These pages should not be accessible to outer kernel for mapping */
+    pcd_set_type(virt_to_phys(monitor_pml4), PCD_TYPE_NK_PGTABLE);
+    pcd_set_type(virt_to_phys(monitor_pdpt), PCD_TYPE_NK_PGTABLE);
+    pcd_set_type(virt_to_phys(monitor_pd), PCD_TYPE_NK_PGTABLE);
+    pcd_set_type(virt_to_phys(unpriv_pml4), PCD_TYPE_NK_PGTABLE);
+    pcd_set_type(virt_to_phys(unpriv_pdpt), PCD_TYPE_NK_PGTABLE);
+    pcd_set_type(virt_to_phys(unpriv_pd), PCD_TYPE_NK_PGTABLE);
+
     serial_puts("MONITOR: Page tables initialized\n");
 
     /* Enforce Nested Kernel invariants by write-protecting PTPs */
     monitor_protect_state();
+
+    /* Mark I/O regions (APIC at 0xFEE00000) as NK_IO for visibility */
+    /* Note: Per user requirement, APIC stays in outer kernel so this
+     * is for tracking/logging only, not enforcement */
+    pcd_mark_region(0xFEE00000, 0x1000, PCD_TYPE_NK_IO);
 
     /* Note: Verification is only run after switching to unprivileged mode
      * in main.c, not here during monitor_init(). This ensures we verify
@@ -376,6 +392,33 @@ monitor_ret_t monitor_call_handler(monitor_call_t call, uint64_t arg1,
             pmm_free((void *)arg1, (uint8_t)arg2);
             break;
 
+        case MONITOR_CALL_SET_PAGE_TYPE:
+            /* Set PCD type (monitor only) */
+            pcd_set_type(arg1, (uint8_t)arg2);
+            ret.result = 0;
+            break;
+
+        case MONITOR_CALL_GET_PAGE_TYPE:
+            /* Query PCD type */
+            ret.result = pcd_get_type(arg1);
+            break;
+
+        case MONITOR_CALL_MAP_PAGE:
+            /* Map page with validation */
+            ret.result = monitor_map_page(arg1, arg2, arg3);
+            if (ret.result != 0) {
+                ret.error = -1;
+            }
+            break;
+
+        case MONITOR_CALL_UNMAP_PAGE:
+            /* Unmap page */
+            ret.result = monitor_unmap_page(arg1);
+            if (ret.result != 0) {
+                ret.error = -1;
+            }
+            break;
+
         default:
             ret.error = -1;
             break;
@@ -408,9 +451,99 @@ monitor_ret_t monitor_call(monitor_call_t call, uint64_t arg1,
 /* PMM monitor call wrappers */
 void *monitor_pmm_alloc(uint8_t order) {
     monitor_ret_t ret = monitor_call(MONITOR_CALL_ALLOC_PHYS, order, 0, 0);
-    return (void *)ret.result;
+    void *page = (void *)ret.result;
+
+    if (page && pcd_is_initialized()) {
+        /* Change type from NK_NORMAL (default) to OK_NORMAL for outer kernel use */
+        for (uint64_t i = 0; i < (1ULL << order); i++) {
+            uint64_t page_addr = (uint64_t)page + (i << PAGE_SHIFT);
+            pcd_set_type(page_addr, PCD_TYPE_OK_NORMAL);
+        }
+    }
+
+    return page;
 }
 
 void monitor_pmm_free(void *addr, uint8_t order) {
     monitor_call(MONITOR_CALL_FREE_PHYS, (uint64_t)addr, order, 0);
+}
+
+/* PCD management functions (monitor only) */
+void monitor_pcd_set_type(uint64_t phys_addr, uint8_t type) {
+    pcd_set_type(phys_addr, type);
+}
+
+uint8_t monitor_pcd_get_type(uint64_t phys_addr) {
+    return pcd_get_type(phys_addr);
+}
+
+/* ============================================================================
+ * Mapping Functions with PCD Validation
+ * ============================================================================ */
+
+/**
+ * monitor_map_page - Map a physical page with PCD type validation
+ * @phys_addr: Physical address of page to map
+ * @virt_addr: Virtual address to map to
+ * @flags: Page table entry flags
+ *
+ * Returns: 0 on success, -1 on rejection
+ *
+ * This function validates that the page being mapped is of a type
+ * that allows outer kernel access. This prevents the outer kernel
+ * from mapping monitor-private pages or page table pages.
+ */
+int monitor_map_page(uint64_t phys_addr, uint64_t virt_addr, uint64_t flags) {
+    uint8_t type = pcd_get_type(phys_addr);
+
+    /* Validate page type before mapping */
+    switch (type) {
+        case PCD_TYPE_OK_NORMAL:
+            /* OK: Outer kernel can map its own pages */
+            break;
+
+        case PCD_TYPE_NK_PGTABLE:
+            /* REJECT: Outer kernel cannot map page tables */
+            serial_puts("MONITOR: Reject attempt to map PGTABLE page at 0x");
+            serial_put_hex(phys_addr);
+            serial_puts("\n");
+            return -1;
+
+        case PCD_TYPE_NK_NORMAL:
+            /* REJECT: Monitor private pages */
+            serial_puts("MONITOR: Reject attempt to map MONITOR page at 0x");
+            serial_put_hex(phys_addr);
+            serial_puts("\n");
+            return -1;
+
+        case PCD_TYPE_NK_IO:
+            /* TRACKING ONLY: Allow mapping, log for visibility */
+            /* Per user requirement: don't enforce APIC isolation */
+            serial_puts("MONITOR: Note - mapping I/O page at 0x");
+            serial_put_hex(phys_addr);
+            serial_puts(" (allowed)\n");
+            break;
+    }
+
+    /* Create the mapping in unprivileged page tables */
+    /* Note: This is a simplified implementation that updates the
+     * unprivileged view. A full implementation would walk the page
+     * table hierarchy and create entries as needed. */
+
+    /* For now, we just validate the type - actual mapping would
+     * require walking the page table hierarchy */
+    return 0;
+}
+
+/**
+ * monitor_unmap_page - Unmap a virtual page
+ * @virt_addr: Virtual address to unmap
+ *
+ * Returns: 0 on success, -1 on failure
+ */
+int monitor_unmap_page(uint64_t virt_addr) {
+    /* For now, this is a placeholder */
+    /* A full implementation would walk the page tables and
+     * clear the appropriate PTE */
+    return 0;
 }

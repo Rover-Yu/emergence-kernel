@@ -12,9 +12,12 @@ typedef struct {
 
 /* Monitor call types */
 typedef enum {
-    MONITOR_CALL_ALLOC_PHYS,    /* Allocate physical memory */
-    MONITOR_CALL_FREE_PHYS,     /* Free physical memory */
-    /* Future: page table manipulation calls */
+    MONITOR_CALL_ALLOC_PHYS,     /* Allocate physical memory */
+    MONITOR_CALL_FREE_PHYS,      /* Free physical memory */
+    MONITOR_CALL_SET_PAGE_TYPE,  /* Set PCD type (monitor only) */
+    MONITOR_CALL_GET_PAGE_TYPE,  /* Query PCD type */
+    MONITOR_CALL_MAP_PAGE,       /* Map page with validation */
+    MONITOR_CALL_UNMAP_PAGE,     /* Unmap page */
 } monitor_call_t;
 
 /* Monitor page table physical addresses (set by monitor_init) */
@@ -39,5 +42,13 @@ monitor_ret_t monitor_call(monitor_call_t call, uint64_t arg1, uint64_t arg2, ui
 /* PMM monitor calls */
 void *monitor_pmm_alloc(uint8_t order);
 void monitor_pmm_free(void *addr, uint8_t order);
+
+/* PCD management functions (monitor only) */
+void monitor_pcd_set_type(uint64_t phys_addr, uint8_t type);
+uint8_t monitor_pcd_get_type(uint64_t phys_addr);
+
+/* Mapping functions with validation */
+int monitor_map_page(uint64_t phys_addr, uint64_t virt_addr, uint64_t flags);
+int monitor_unmap_page(uint64_t virt_addr);
 
 #endif /* KERNEL_MONITOR_MONITOR_H */
