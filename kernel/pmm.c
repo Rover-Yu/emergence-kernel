@@ -2,7 +2,7 @@
 
 #include <stdint.h>
 #include "kernel/pmm.h"
-#include "kernel/multiboot2.h"
+#include "arch/x86_64/multiboot2.h"
 #include "include/spinlock.h"
 #include "arch/x86_64/serial.h"
 

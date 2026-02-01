@@ -22,10 +22,14 @@ NC='\033[0m' # No Color
 
 # Test list: "script_name:Test Display Name"
 # Format: "filename:display_name[:cpu_arg]"
+#
+# NOTE: nk_protection_test.sh requires CONFIG_NK_PROTECTION_TESTS=1 to be enabled.
+# Build with: make CONFIG_NK_PROTECTION_TESTS=1
 TESTS=(
     "boot/boot_test.sh:Basic Kernel Boot"
     "monitor/pcd_test.sh:Page Control Data (PCD)"
     "monitor/nested_kernel_invariants_test.sh:Nested Kernel Invariants"
+    "monitor/readonly_visibility.sh:Read-Only Visibility"
     "timer/apic_timer_test.sh:APIC Timer"
     "smp/smp_boot_test.sh:SMP Boot:2"
 )

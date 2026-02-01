@@ -26,7 +26,6 @@ CFLAGS += -DCONFIG_PMM_TESTS=$(CONFIG_PMM_TESTS)
 CFLAGS += -DCONFIG_SMP_AP_DEBUG=$(CONFIG_SMP_AP_DEBUG)
 CFLAGS += -DCONFIG_APIC_TIMER_TEST=$(CONFIG_APIC_TIMER_TEST)
 CFLAGS += -DCONFIG_WRITE_PROTECTION_VERIFY=$(CONFIG_WRITE_PROTECTION_VERIFY)
-CFLAGS += -DCONFIG_CR0_WP_CONTROL=$(CONFIG_CR0_WP_CONTROL)
 CFLAGS += -DCONFIG_INVARIANTS_VERBOSE=$(CONFIG_INVARIANTS_VERBOSE)
 CFLAGS += -DCONFIG_PCD_STATS=$(CONFIG_PCD_STATS)
 CFLAGS += -DCONFIG_NK_PROTECTION_TESTS=$(CONFIG_NK_PROTECTION_TESTS)
@@ -36,7 +35,10 @@ LDFLAGS := -nostdlib -m elf_x86_64
 ARCH_DIR := arch/x86_64
 ARCH_BOOT_SRC := $(ARCH_DIR)/boot.S $(ARCH_DIR)/isr.S $(ARCH_DIR)/monitor/monitor_call.S
 ARCH_LINKER := $(ARCH_DIR)/linker.ld
-ARCH_C_SRCS := $(ARCH_DIR)/vga.c $(ARCH_DIR)/serial_driver.c $(ARCH_DIR)/apic.c $(ARCH_DIR)/acpi.c $(ARCH_DIR)/idt.c $(ARCH_DIR)/timer.c $(ARCH_DIR)/rtc.c $(ARCH_DIR)/ipi.c $(ARCH_DIR)/power.c
+ARCH_C_SRCS := $(ARCH_DIR)/main.c $(ARCH_DIR)/smp.c $(ARCH_DIR)/multiboot2.c \
+               $(ARCH_DIR)/vga.c $(ARCH_DIR)/serial_driver.c $(ARCH_DIR)/apic.c \
+               $(ARCH_DIR)/acpi.c $(ARCH_DIR)/idt.c $(ARCH_DIR)/timer.c $(ARCH_DIR)/rtc.c \
+               $(ARCH_DIR)/ipi.c $(ARCH_DIR)/power.c
 
 # AP Trampoline (assembled as part of kernel, uses PIC)
 TRAMPOLINE_SRC := $(ARCH_DIR)/ap_trampoline.S
@@ -44,8 +46,7 @@ TRAMPOLINE_OBJ := $(BUILD_DIR)/ap_trampoline.o
 
 # Architecture-independent kernel sources
 KERNEL_DIR := kernel
-KERNEL_C_SRCS := $(KERNEL_DIR)/main.c $(KERNEL_DIR)/device.c $(KERNEL_DIR)/smp.c \
-                 $(KERNEL_DIR)/pmm.c $(KERNEL_DIR)/pcd.c $(KERNEL_DIR)/multiboot2.c \
+KERNEL_C_SRCS := $(KERNEL_DIR)/device.c $(KERNEL_DIR)/pmm.c $(KERNEL_DIR)/pcd.c \
                  $(KERNEL_DIR)/monitor/monitor.c
 
 # Spinlock test sources (conditionally compiled)
@@ -83,14 +84,16 @@ endif
 OBJS := $(ARCH_BOOT_OBJ) $(ARCH_OBJS) $(KERNEL_OBJS) $(TESTS_OBJS) $(TRAMPOLINE_OBJ)
 KERNEL_ELF := $(BUILD_DIR)/$(KERNEL).elf
 
-.PHONY: all clean run run-debug test test-all test-boot test-apic-timer test-smp test-pcd test-nested-kernel test-nk-protection help
+.PHONY: all clean run run-debug test test-all test-boot test-apic-timer test-smp test-pcd test-nested-kernel test-nk-protection test-readonly-visibility help
+
+all: $(ISO)
 
 help:
 	@echo "Emergence Kernel Make Targets"
 	@echo "=============================="
 	@echo ""
 	@echo "Build targets:"
-	@echo "  all              - Build kernel ISO (default)"
+	@echo "  all              - Build kernel ISO"
 	@echo "  clean            - Remove build artifacts"
 	@echo ""
 	@echo "Run targets:"
@@ -106,6 +109,7 @@ help:
 	@echo "  test-pcd         - Page Control Data test"
 	@echo "  test-nested-kernel     - Nested Kernel invariants test"
 	@echo "  test-nk-protection     - Nested Kernel mappings protection test"
+	@echo "  test-readonly-visibility - Read-only visibility test"
 	@echo ""
 	@echo "Build options (override kernel.config):"
 	@echo "  make CONFIG_SPINLOCK_TESTS=1           - Enable spinlock tests"
@@ -114,11 +118,8 @@ help:
 	@echo "  make CONFIG_APIC_TIMER_TEST=1          - Enable APIC timer test"
 	@echo "  make CONFIG_WRITE_PROTECTION_VERIFY=1  - Verify write protection"
 	@echo "  make CONFIG_INVARIANTS_VERBOSE=1       - Verbose invariants output"
-	@echo "  make CONFIG_CR0_WP_CONTROL=1           - Enable CR0.WP control"
 	@echo "  make CONFIG_PCD_STATS=1                - Show PCD statistics"
 	@echo "  make CONFIG_NK_PROTECTION_TESTS=1      - Enable NK protection tests"
-
-all: $(ISO)
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
@@ -226,3 +227,7 @@ test-nested-kernel:
 test-nk-protection:
 	@echo "Running Nested Kernel Mappings Protection Test..."
 	@cd tests && ./monitor/nk_protection_test.sh
+
+test-readonly-visibility:
+	@echo "Running Read-Only Visibility Test..."
+	@cd tests && ./monitor/readonly_visibility.sh

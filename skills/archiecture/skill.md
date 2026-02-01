@@ -3,11 +3,10 @@ name: architecture
 description: Use when designing and planning new features.
 ---
 
-# Common Feature Requirements
+# SMP support
 
-1. Support SMP - shared critical sections must use lock protection.
-2. Architecture-specific code goes in `arch/${ARCH}/`, headers in `arch/${ARCH}/include/`.
-3. Architecture-independent code goes in `kernel/${SUBSYSTEM}`, headers in `include/` directory.
+1. The parallel shared critical sections must use lock protection.
+2. All requirements should be workable SMP configuration.
 
 # Code Organization
 

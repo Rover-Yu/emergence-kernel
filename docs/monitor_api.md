@@ -222,7 +222,6 @@ From `arch/x86_64/paging.h`:
 |--------|---------|-------------|
 | `CONFIG_WRITE_PROTECTION_VERIFY` | 1 | Always verify invariants on all CPUs |
 | `CONFIG_INVARIANTS_VERBOSE` | 0 | Show detailed verification output |
-| `CONFIG_CR0_WP_CONTROL` | 1 | Enable two-level protection (PTE + CR0.WP) |
 
 ---
 

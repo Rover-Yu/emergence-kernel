@@ -14,6 +14,13 @@ tests/
 │   └── smp_boot_test.sh    # SMP boot test
 ├── timer/                  # Timer integration tests
 │   └── apic_timer_test.sh  # APIC timer test
+├── monitor/                # Monitor/nested kernel tests
+│   ├── pcd_test.sh         # Page Control Data test
+│   ├── nested_kernel_invariants_test.sh  # Invariants verification
+│   ├── nk_protection_test.sh            # Mappings protection test
+│   └── readonly_visibility.sh           # Read-only visibility test
+├── nested_kernel_mapping_protection/    # Kernel-compiled tests
+│   └── nk_protection_test.c             # Protection test (compiled into kernel)
 ├── spinlock/               # Kernel test code
 │   └── spinlock_test.c     # Spin lock test suite (compiled into kernel)
 ├── run_all_tests.sh        # Test suite runner
@@ -49,6 +56,51 @@ Verifies APIC timer functionality. Checks:
 - Timer interrupt firing
 - Mathematician quotes output
 - Debug character output
+
+### Monitor/Nested Kernel Tests
+
+Tests for the monitor architecture and nested kernel isolation features.
+
+#### `monitor/pcd_test.sh` - Page Control Data Test
+Verifies the Page Control Data (PCD) system which tracks page types and ownership.
+Checks:
+- PCD initialization
+- Page type registration
+- Statistics display (if enabled)
+
+#### `monitor/nested_kernel_invariants_test.sh` - Nested Kernel Invariants Test
+Verifies that all 6 nested kernel invariants are enforced on both BSP and APs.
+Checks:
+- Invariant verification on all CPUs
+- All invariants pass
+- Monitor initialization
+
+#### `monitor/nk_protection_test.sh` - Nested Kernel Mappings Protection Test
+**Note: This test requires `CONFIG_NK_PROTECTION_TESTS=1` to be enabled and is NOT included in the default test suite.**
+
+This test intentionally triggers page faults to verify that nested kernel mappings are properly protected.
+Checks:
+- NK protection test initiated
+- Running in unprivileged mode
+- Page table write attempt
+- Page fault triggered
+
+To enable and run:
+```bash
+make CONFIG_NK_PROTECTION_TESTS=1
+make test-nk-protection
+```
+
+**Important:** This test will cause the kernel to trigger intentional page faults and shutdown. This is expected behavior - the test verifies that write protection is working by attempting to write to protected page tables.
+
+#### `monitor/readonly_visibility.sh` - Read-Only Visibility Test
+Verifies that the monitor creates read-only mappings for nested kernel pages so the outer kernel can inspect but not modify them.
+Checks:
+- PCD initialization
+- Monitor initialization
+- Read-only mappings creation
+- Nested Kernel invariants pass
+- All page tables marked NK_PGTABLE
 
 ### Kernel Tests
 
@@ -89,15 +141,40 @@ cd tests && ./smp/smp_boot_test.sh 2
 make test-apic-timer
 # or
 cd tests && ./timer/apic_timer_test.sh
+
+# PCD test
+make test-pcd
+# or
+cd tests && ./monitor/pcd_test.sh
+
+# Nested Kernel invariants test
+make test-nested-kernel
+# or
+cd tests && ./monitor/nested_kernel_invariants_test.sh
+
+# Nested Kernel mappings protection test (requires CONFIG_NK_PROTECTION_TESTS=1)
+make test-nk-protection
+# or
+cd tests && ./monitor/nk_protection_test.sh
+
+# Read-Only visibility test
+make test-readonly-visibility
+# or
+cd tests && ./monitor/readonly_visibility.sh
 ```
 
 ### Build Tests
 
-Kernel tests like `spinlock_test.c` are compiled into the kernel by default.
-To rebuild with tests:
+Kernel tests like `spinlock_test.c` and `nk_protection_test.c` are conditionally compiled into the kernel based on configuration options.
+
+To rebuild with tests enabled:
 
 ```bash
-make clean && make
+# Enable spinlock tests
+make CONFIG_SPINLOCK_TESTS=1
+
+# Enable NK protection tests
+make CONFIG_NK_PROTECTION_TESTS=1
 ```
 
 ## Test Framework
@@ -108,15 +185,19 @@ The test library `lib/test_lib.sh` provides common utilities:
 - `run_qemu_capture()` - Run QEMU and capture serial output
 - `print_result()` - Print test pass/fail with color
 - `print_summary()` - Print test summary with totals
+- `assert_pattern_exists()` - Check if pattern exists in output
+- `assert_pattern_count()` - Check pattern count matches expected
 - `assert_no_exceptions()` - Check for exceptions in output
 - `assert_debug_char_count()` - Verify debug character counts
+- `cleanup()` - Remove temporary files
+- `setup_trap()` - Set up cleanup trap
 
 ## Adding New Tests
 
 1. Create a new directory under `tests/` for the component
 2. Write the test script, sourcing `../lib/test_lib.sh`
 3. Add the test to `run_all_tests.sh` TESTS array
-4. Optionally add a Makefile target
+4. Add a Makefile target in the root Makefile
 
 Example test script structure:
 
@@ -136,7 +217,7 @@ main() {
     local output_file=$(run_qemu_capture 1 5)
 
     # Run your checks...
-    print_result "Test name" "true/false"
+    assert_pattern_exists "pattern" "Test description"
 
     print_summary
 }

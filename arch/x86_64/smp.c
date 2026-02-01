@@ -2,7 +2,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include "kernel/smp.h"
+#include "arch/x86_64/smp.h"
 #include "include/spinlock.h"
 #include "include/atomic.h"
 #include "include/barrier.h"
@@ -267,14 +267,12 @@ void ap_start(void) {
     /* Switch to unprivileged page tables */
     uint64_t unpriv_cr3 = monitor_get_unpriv_cr3();
     if (unpriv_cr3 != 0) {
-#if CONFIG_CR0_WP_CONTROL
         /* Enable write protection enforcement for AP */
         /* Set CR0.WP=1 so outer kernel cannot modify read-only PTEs */
         uint64_t cr0;
         asm volatile ("mov %%cr0, %0" : "=r"(cr0));
         cr0 |= (1 << 16);  /* Set CR0.WP bit */
         asm volatile ("mov %0, %%cr0" : : "r"(cr0) : "memory");
-#endif
 
         asm volatile ("mov %0, %%cr3" : : "r"(unpriv_cr3));
         serial_puts("[AP] CPU");

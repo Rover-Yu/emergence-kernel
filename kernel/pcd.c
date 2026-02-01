@@ -2,7 +2,7 @@
 
 #include "kernel/pcd.h"
 #include "kernel/pmm.h"
-#include "kernel/smp.h"
+#include "arch/x86_64/smp.h"
 #include "arch/x86_64/serial.h"
 
 /* External symbols for kernel region */

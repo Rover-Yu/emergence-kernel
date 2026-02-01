@@ -5,7 +5,7 @@
 #include "arch/x86_64/ipi.h"
 #include "arch/x86_64/apic.h"
 #include "kernel/device.h"
-#include "kernel/smp.h"
+#include "arch/x86_64/smp.h"
 
 /* External functions */
 extern void serial_puts(const char *str);

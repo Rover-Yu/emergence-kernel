@@ -1,8 +1,8 @@
-/* Emergence Kernel - Architecture-independent kernel main */
+/* Emergence Kernel - x86_64 architecture-specific kernel main */
 
 #include <stdint.h>
 #include "kernel/device.h"
-#include "kernel/smp.h"
+#include "arch/x86_64/smp.h"
 #include "kernel/pmm.h"
 #include "arch/x86_64/vga.h"
 #include "arch/x86_64/apic.h"
@@ -163,7 +163,6 @@ void kernel_main(uint32_t multiboot_info_addr) {
         if (unpriv_cr3 != 0) {
             serial_puts("KERNEL: Switching to unprivileged mode\n");
 
-#if CONFIG_CR0_WP_CONTROL
             /* Enable write protection enforcement */
             /* Set CR0.WP=1 so outer kernel cannot modify read-only PTEs */
             uint64_t cr0;
@@ -171,7 +170,6 @@ void kernel_main(uint32_t multiboot_info_addr) {
             cr0 |= (1 << 16);  /* Set CR0.WP bit */
             asm volatile ("mov %0, %%cr0" : : "r"(cr0) : "memory");
             serial_puts("KERNEL: CR0.WP enabled (write protection enforced)\n");
-#endif
 
             asm volatile ("mov %0, %%cr3" : : "r"(unpriv_cr3) : "memory");
             serial_puts("KERNEL: Page table switch complete\n");

@@ -2,7 +2,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include "kernel/smp.h"
+#include "arch/x86_64/smp.h"
 #include "include/spinlock.h"
 #include "include/atomic.h"
 #include "include/barrier.h"

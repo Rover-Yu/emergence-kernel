@@ -32,13 +32,11 @@ nk_entry_trampoline:
     mov monitor_pml4_phys(%rip), %r10
     mov %r10, %cr3
 
-#if CONFIG_CR0_WP_CONTROL
     /* Clear CR0.WP for monitor entry */
     /* This allows monitor to modify write-protected pages */
     mov %cr0, %r11
     btr $16, %r11           /* Clear bit 16 (WP) - Bit Test and Reset */
     mov %r11, %cr0
-#endif
 
     /* Call C monitor handler */
     mov %rdi, %rdi       /* call */
@@ -47,13 +45,11 @@ nk_entry_trampoline:
     mov %rcx, %rcx       /* arg3 */
     call monitor_call_handler
 
-#if CONFIG_CR0_WP_CONTROL
     /* Set CR0.WP for monitor exit */
     /* This enforces write protection for outer kernel */
     mov %cr0, %r11
     bts $16, %r11           /* Set bit 16 (WP) - Bit Test and Set */
     mov %r11, %cr0
-#endif
 
     /* Restore unprivileged CR3 */
     mov %r9, %cr3
