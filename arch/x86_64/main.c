@@ -75,9 +75,28 @@ void kernel_main(uint32_t multiboot_info_addr) {
     pmm_init(multiboot_info_addr);
     serial_puts("PMM: Initialized\n");
 
+    /* Initialize Slab Allocator (for small object allocation) */
+    extern void slab_init(void);
+    slab_init();
+
     /* Initialize Page Control Data (PCD) system */
     extern void pcd_init(void);
     pcd_init();
+
+#if CONFIG_SLAB_TESTS
+    /* Slab Allocator Tests */
+    extern int run_slab_tests(void);
+    serial_puts("[ SLAB tests ] Running slab allocator tests...\n");
+    int slab_failures = run_slab_tests();
+    if (slab_failures == 0) {
+        serial_puts("[ SLAB tests ] All slab allocator tests PASSED\n");
+    } else {
+        serial_puts("[ SLAB tests ] Some slab allocator tests FAILED\n");
+        serial_puts("[ SLAB tests ] Failures: ");
+        serial_put_hex(slab_failures);
+        serial_puts("\n");
+    }
+#endif /* CONFIG_SLAB_TESTS */
 
 #if CONFIG_PMM_TESTS
     /* PMM Tests */

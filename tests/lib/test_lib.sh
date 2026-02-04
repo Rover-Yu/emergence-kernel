@@ -22,6 +22,9 @@ SERIAL_OUTPUT=""
 # Kernel ISO path (must be set by calling script)
 KERNEL_ISO="${KERNEL_ISO:-}"
 
+# KVM enabled flag (set to 0 to disable KVM)
+KVM_ENABLED="${KVM_ENABLED:-1}"
+
 #
 # check_prerequisites - Verify ISO and QEMU exist
 #
@@ -70,13 +73,21 @@ run_qemu_capture() {
     local iso_path="${4:-$KERNEL_ISO}"
 
     # Create temp file for serial output
-    SERIAL_OUTPUT="/tmp/emergence_test_$$"
+    # Use current directory instead of /tmp which may be read-only
+    SERIAL_OUTPUT="./emergence_test_$$"
+
+    # Build QEMU command
+    local qemu_cmd="timeout ${timeout} qemu-system-x86_64"
+
+    # Add KVM flag if enabled
+    if [ "$KVM_ENABLED" = "1" ]; then
+        qemu_cmd="$qemu_cmd -enable-kvm"
+    fi
 
     # Run QEMU with serial output to file, timeout after specified seconds
-    # Redirect both stdout and stderr to /dev/null to suppress QEMU monitor output
+    # Use -serial stdio and redirect to file instead of -serial file:
     # Include shutdown device for clean VM exit (8-bit I/O for exit code 0)
-    timeout ${timeout} qemu-system-x86_64 \
-        -enable-kvm \
+    $qemu_cmd \
         -M pc \
         -m 128M \
         -nographic \
@@ -85,7 +96,7 @@ run_qemu_capture() {
         -cdrom "${iso_path}" \
         ${extra_flags} \
         -device isa-debug-exit,iobase=0xB004,iosize=1 \
-        -serial file:"${SERIAL_OUTPUT}" >/dev/null 2>&1 || true
+        -serial stdio >"${SERIAL_OUTPUT}" 2>&1 || true
 
     # Check if output was captured
     if [ ! -f "$SERIAL_OUTPUT" ]; then
