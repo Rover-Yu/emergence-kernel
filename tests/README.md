@@ -14,13 +14,15 @@ tests/
 │   └── smp_boot_test.sh    # SMP boot test
 ├── timer/                  # Timer integration tests
 │   └── apic_timer_test.sh  # APIC timer test
-├── monitor/                # Monitor/nested kernel tests
-│   ├── pcd_test.sh         # Page Control Data test
-│   ├── nested_kernel_invariants_test.sh  # Invariants verification
-│   ├── nk_protection_test.sh            # Mappings protection test
-│   └── readonly_visibility.sh           # Read-only visibility test
-├── nested_kernel_mapping_protection/    # Kernel-compiled tests
-│   └── nk_protection_test.c             # Protection test (compiled into kernel)
+├── pcd/                    # Page Control Data test
+│   └── pcd_test.sh         # PCD integration test
+├── nested_kernel_invariants/  # Nested Kernel invariants test
+│   └── nested_kernel_invariants_test.sh  # Invariants verification
+├── readonly_visibility/    # Read-only visibility test
+│   └── readonly_visibility_test.sh  # Read-only mappings test
+├── nk_protection/          # Nested Kernel protection test
+│   ├── nk_protection_test.c    # Protection test (compiled into kernel)
+│   └── nk_protection_test.sh   # Protection integration test
 ├── spinlock/               # Kernel test code
 │   └── spinlock_test.c     # Spin lock test suite (compiled into kernel)
 ├── run_all_tests.sh        # Test suite runner
@@ -61,21 +63,21 @@ Verifies APIC timer functionality. Checks:
 
 Tests for the monitor architecture and nested kernel isolation features.
 
-#### `monitor/pcd_test.sh` - Page Control Data Test
+#### `pcd/pcd_test.sh` - Page Control Data Test
 Verifies the Page Control Data (PCD) system which tracks page types and ownership.
 Checks:
 - PCD initialization
 - Page type registration
 - Statistics display (if enabled)
 
-#### `monitor/nested_kernel_invariants_test.sh` - Nested Kernel Invariants Test
+#### `nested_kernel_invariants/nested_kernel_invariants_test.sh` - Nested Kernel Invariants Test
 Verifies that all 6 nested kernel invariants are enforced on both BSP and APs.
 Checks:
 - Invariant verification on all CPUs
 - All invariants pass
 - Monitor initialization
 
-#### `monitor/nk_protection_test.sh` - Nested Kernel Mappings Protection Test
+#### `nk_protection/nk_protection_test.sh` - Nested Kernel Mappings Protection Test
 **Note: This test requires `CONFIG_NK_PROTECTION_TESTS=1` to be enabled and is NOT included in the default test suite.**
 
 This test intentionally triggers page faults to verify that nested kernel mappings are properly protected.
@@ -93,7 +95,7 @@ make test-nk-protection
 
 **Important:** This test will cause the kernel to trigger intentional page faults and shutdown. This is expected behavior - the test verifies that write protection is working by attempting to write to protected page tables.
 
-#### `monitor/readonly_visibility.sh` - Read-Only Visibility Test
+#### `readonly_visibility/readonly_visibility_test.sh` - Read-Only Visibility Test
 Verifies that the monitor creates read-only mappings for nested kernel pages so the outer kernel can inspect but not modify them.
 Checks:
 - PCD initialization
@@ -145,22 +147,22 @@ cd tests && ./timer/apic_timer_test.sh
 # PCD test
 make test-pcd
 # or
-cd tests && ./monitor/pcd_test.sh
+cd tests && ./pcd/pcd_test.sh
 
 # Nested Kernel invariants test
 make test-nested-kernel
 # or
-cd tests && ./monitor/nested_kernel_invariants_test.sh
+cd tests && ./nested_kernel_invariants/nested_kernel_invariants_test.sh
 
 # Nested Kernel mappings protection test (requires CONFIG_NK_PROTECTION_TESTS=1)
 make test-nk-protection
 # or
-cd tests && ./monitor/nk_protection_test.sh
+cd tests && ./nk_protection/nk_protection_test.sh
 
 # Read-Only visibility test
 make test-readonly-visibility
 # or
-cd tests && ./monitor/readonly_visibility.sh
+cd tests && ./readonly_visibility/readonly_visibility_test.sh
 ```
 
 ### Build Tests

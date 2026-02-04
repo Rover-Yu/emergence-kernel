@@ -25,11 +25,12 @@ NC='\033[0m' # No Color
 #
 # NOTE: nk_protection_test.sh requires CONFIG_NK_PROTECTION_TESTS=1 to be enabled.
 # Build with: make CONFIG_NK_PROTECTION_TESTS=1
+# This test is NOT included in the default test suite.
 TESTS=(
     "boot/boot_test.sh:Basic Kernel Boot"
-    "monitor/pcd_test.sh:Page Control Data (PCD)"
-    "monitor/nested_kernel_invariants_test.sh:Nested Kernel Invariants"
-    "monitor/readonly_visibility.sh:Read-Only Visibility"
+    "pcd/pcd_test.sh:Page Control Data (PCD)"
+    "nested_kernel_invariants/nested_kernel_invariants_test.sh:Nested Kernel Invariants"
+    "readonly_visibility/readonly_visibility_test.sh:Read-Only Visibility"
     "timer/apic_timer_test.sh:APIC Timer"
     "smp/smp_boot_test.sh:SMP Boot:2"
 )

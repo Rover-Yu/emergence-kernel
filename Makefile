@@ -214,20 +214,20 @@ test-apic-timer:
 
 test-smp:
 	@echo "Running SMP Boot Test..."
-	@cd tests && ./smp/smp_boot_test.sh 2
+	@cd tests && ./smp/smp_boot_test.sh 4
 
 test-pcd:
 	@echo "Running Page Control Data (PCD) Test..."
-	@cd tests && ./monitor/pcd_test.sh
+	@cd tests && ./pcd/pcd_test.sh
 
 test-nested-kernel:
 	@echo "Running Nested Kernel Invariants Test..."
-	@cd tests && ./monitor/nested_kernel_invariants_test.sh
+	@cd tests && ./nested_kernel_invariants/nested_kernel_invariants_test.sh
 
 test-nk-protection:
 	@echo "Running Nested Kernel Mappings Protection Test..."
-	@cd tests && ./monitor/nk_protection_test.sh
+	@cd tests && ./nk_protection/nk_protection_test.sh
 
 test-readonly-visibility:
 	@echo "Running Read-Only Visibility Test..."
-	@cd tests && ./monitor/readonly_visibility.sh
+	@cd tests && ./readonly_visibility/readonly_visibility_test.sh
