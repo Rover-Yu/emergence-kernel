@@ -162,6 +162,61 @@ void *ptr = (void *)ret.result;
 
 ---
 
+## Monitor Call Internals
+
+### The Trampoline Mechanism
+
+The `monitor_call()` function uses a trampoline (`nk_entry_trampoline`) to safely switch from unprivileged to privileged mode. This trampoline is a critical security component that ensures controlled privilege transitions.
+
+**How it works:**
+
+1. **Entry (Unprivileged Mode):**
+   - Outer kernel calls `monitor_call(call, arg1, arg2, arg3)`
+   - Arguments are placed in registers (rdi, rsi, rdx, rcx)
+   - Function determines it's in unprivileged mode
+
+2. **Trampoline Execution:**
+   - Assembly stub `nk_entry_trampoline` is invoked
+   - All registers are saved
+   - Current RSP is saved to `saved_rsp` (identity-mapped location)
+   - Current CR3 (unprivileged) is saved to r8
+   - CR3 is switched to `monitor_pml4_phys` (privileged)
+   - RSP is switched to `nk_boot_stack_top` (monitor-only stack)
+   - `monitor_call_handler()` is called with original arguments
+   - CR3 is restored to unprivileged value (r8)
+   - RSP is restored from `saved_rsp`
+   - All registers are restored
+   - Function returns to outer kernel
+
+3. **Security Benefits:**
+   - Outer kernel never directly manipulates CR3
+   - Privileged operations only go through the handler
+   - Monitor stack is isolated from unprivileged access
+   - Full state restoration prevents privilege leakage
+
+**Memory Layout:**
+```
+Trampoline code:  Identity-mapped in BOTH page tables
+saved_rsp:        Identity-mapped in BOTH page tables
+Monitor stack:    Only mapped in monitor page tables
+```
+
+**Implementation Files:**
+- Assembly: `arch/x86_64/monitor/monitor_call.S`
+- C wrapper: `kernel/monitor/monitor.c`
+- Documentation: `docs/monitor_trampoline.md`
+
+**Testing:**
+Enable with `CONFIG_MONITOR_TRAMPOLINE_TEST=1` to run trampoline tests that verify:
+- Correct privilege mode transitions
+- State preservation across calls
+- Multiple call handling
+- Proper return to unprivileged mode
+
+For detailed trampoline architecture, see `docs/monitor_trampoline.md`.
+
+---
+
 ### PMM Wrapper Functions
 
 #### `monitor_pmm_alloc(uint8_t order)`
