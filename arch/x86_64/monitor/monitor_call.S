@@ -68,6 +68,10 @@ nk_entry_trampoline:
     pop %rbp
     pop %rbx
 
+    /* Debug: Print before ret */
+    mov $'R', %rdi
+    call debug_putc
+
     /* Return to caller */
     ret
 
@@ -86,3 +90,48 @@ saved_rsp:
 .global monitor_pml4_phys
 .global monitor_call_handler
 .global nk_boot_stack_top
+.global serial_puts
+
+/* Serial port base address */
+#define SERIAL_PORT 0x3F8
+
+/* Debug: Write character to serial port */
+debug_putc:
+    push %rax
+    push %rdx
+    mov %rdi, %rdx
+    mov %rdx, %rax
+    outb %al, $SERIAL_PORT
+    pop %rdx
+    pop %rax
+    ret
+
+/* Debug: Print string when returning from handler */
+debug_print_returning:
+    /* Save registers */
+    push %rax
+    push %rdi
+    push %rcx
+    push %r11
+
+    /* Print message character by character */
+    lea return_msg(%rip), %r11
+1:
+    movb (%r11), %dil
+    testb %dil, %dil
+    jz 2f
+    movq %r11, %rdi
+    call debug_putc
+    inc %r11
+    jmp 1b
+2:
+    /* Restore registers */
+    pop %r11
+    pop %rcx
+    pop %rdi
+    pop %rax
+    ret
+
+.section .rodata
+return_msg:
+    .asciz "T"
