@@ -29,6 +29,7 @@ CFLAGS += -DCONFIG_WRITE_PROTECTION_VERIFY=$(CONFIG_WRITE_PROTECTION_VERIFY)
 CFLAGS += -DCONFIG_INVARIANTS_VERBOSE=$(CONFIG_INVARIANTS_VERBOSE)
 CFLAGS += -DCONFIG_PCD_STATS=$(CONFIG_PCD_STATS)
 CFLAGS += -DCONFIG_NK_PROTECTION_TESTS=$(CONFIG_NK_PROTECTION_TESTS)
+CFLAGS += -DCONFIG_MONITOR_TRAMPOLINE_TEST=$(CONFIG_MONITOR_TRAMPOLINE_TEST)
 LDFLAGS := -nostdlib -m elf_x86_64
 
 # Architecture-specific sources (x86_64)
@@ -57,6 +58,10 @@ SPINLOCK_TEST_OBJ := $(BUILD_DIR)/kernel_spinlock_test.o
 NK_PROTECTION_TEST_SRC := tests/nested_kernel_mapping_protection/nk_protection_test.c
 NK_PROTECTION_TEST_OBJ := $(BUILD_DIR)/nk_protection_test.o
 
+# Monitor trampoline test sources (conditionally compiled)
+MONITOR_TRAMPOLINE_TEST_SRC := tests/monitor_trampoline/monitor_trampoline_test.c
+MONITOR_TRAMPOLINE_TEST_OBJ := $(BUILD_DIR)/monitor_trampoline_test.o
+
 # Test sources (reference only, not compiled into kernel)
 # These test files are kept for documentation purposes
 TESTS_DIR := tests
@@ -79,6 +84,9 @@ TESTS_OBJS += $(SPINLOCK_TEST_OBJ)
 endif
 ifeq ($(CONFIG_NK_PROTECTION_TESTS),1)
 TESTS_OBJS += $(NK_PROTECTION_TEST_OBJ)
+endif
+ifeq ($(CONFIG_MONITOR_TRAMPOLINE_TEST),1)
+TESTS_OBJS += $(MONITOR_TRAMPOLINE_TEST_OBJ)
 endif
 
 OBJS := $(ARCH_BOOT_OBJ) $(ARCH_OBJS) $(KERNEL_OBJS) $(TESTS_OBJS) $(TRAMPOLINE_OBJ)
@@ -112,14 +120,15 @@ help:
 	@echo "  test-readonly-visibility - Read-only visibility test"
 	@echo ""
 	@echo "Build options (override kernel.config):"
-	@echo "  make CONFIG_SPINLOCK_TESTS=1           - Enable spinlock tests"
-	@echo "  make CONFIG_PMM_TESTS=1                - Enable PMM tests"
-	@echo "  make CONFIG_SMP_AP_DEBUG=1             - Enable AP debug marks"
-	@echo "  make CONFIG_APIC_TIMER_TEST=1          - Enable APIC timer test"
-	@echo "  make CONFIG_WRITE_PROTECTION_VERIFY=1  - Verify write protection"
-	@echo "  make CONFIG_INVARIANTS_VERBOSE=1       - Verbose invariants output"
-	@echo "  make CONFIG_PCD_STATS=1                - Show PCD statistics"
-	@echo "  make CONFIG_NK_PROTECTION_TESTS=1      - Enable NK protection tests"
+	@echo "  make CONFIG_SPINLOCK_TESTS=1              - Enable spinlock tests"
+	@echo "  make CONFIG_PMM_TESTS=1                   - Enable PMM tests"
+	@echo "  make CONFIG_SMP_AP_DEBUG=1                - Enable AP debug marks"
+	@echo "  make CONFIG_APIC_TIMER_TEST=1             - Enable APIC timer test"
+	@echo "  make CONFIG_WRITE_PROTECTION_VERIFY=1     - Verify write protection"
+	@echo "  make CONFIG_INVARIANTS_VERBOSE=1          - Verbose invariants output"
+	@echo "  make CONFIG_PCD_STATS=1                   - Show PCD statistics"
+	@echo "  make CONFIG_NK_PROTECTION_TESTS=1         - Enable NK protection tests"
+	@echo "  make CONFIG_MONITOR_TRAMPOLINE_TEST=1     - Enable monitor trampoline test"
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
@@ -161,6 +170,12 @@ endif
 # Compile nested kernel mappings protection test (from tests/nested_kernel_mapping_protection/) - only if enabled
 ifeq ($(CONFIG_NK_PROTECTION_TESTS),1)
 $(NK_PROTECTION_TEST_OBJ): $(NK_PROTECTION_TEST_SRC) | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+endif
+
+# Compile monitor trampoline test (from tests/monitor_trampoline/) - only if enabled
+ifeq ($(CONFIG_MONITOR_TRAMPOLINE_TEST),1)
+$(MONITOR_TRAMPOLINE_TEST_OBJ): $(MONITOR_TRAMPOLINE_TEST_SRC) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 endif
 

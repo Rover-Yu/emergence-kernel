@@ -79,48 +79,6 @@ void kernel_main(uint32_t multiboot_info_addr) {
     extern void pcd_init(void);
     pcd_init();
 
-#if CONFIG_PMM_TESTS
-    /* PMM Tests */
-    serial_puts("[ PMM tests ] Running allocation tests...\n");
-
-    /* Test 1: Single page allocation */
-    void *page1 = pmm_alloc(0);
-    void *page2 = pmm_alloc(0);
-    serial_puts("[ PMM tests ] Allocated page1 at 0x");
-    serial_put_hex((uint64_t)page1);
-    serial_puts(", page2 at 0x");
-    serial_put_hex((uint64_t)page2);
-    serial_puts("\n");
-
-    /* Test 2: Multi-page allocation (order 3 = 8 pages = 32KB) */
-    void *block = pmm_alloc(3);
-    serial_puts("[ PMM tests ] Allocated 32KB block at 0x");
-    serial_put_hex((uint64_t)block);
-    serial_puts("\n");
-
-    /* Test 3: Free and coalesce */
-    pmm_free(page1, 0);
-    pmm_free(page2, 0);
-    serial_puts("[ PMM tests ] Freed pages (buddy coalescing)\n");
-
-    /* Test 4: Statistics */
-    uint64_t free = pmm_get_free_pages();
-    uint64_t total = pmm_get_total_pages();
-    serial_puts("[ PMM tests ] Free: ");
-    serial_put_hex(free);
-    serial_puts(" / Total: ");
-    serial_put_hex(total);
-    serial_puts("\n");
-
-    /* Test 5: Allocate adjacent pages to verify they were coalesced */
-    void *page3 = pmm_alloc(1);  /* Request 2 pages */
-    serial_puts("[ PMM tests ] Allocated 2-page block at 0x");
-    serial_put_hex((uint64_t)page3);
-    serial_puts(" (should be same as page1 if coalesced)\n");
-
-    serial_puts("[ PMM tests ] Tests complete\n");
-#endif /* CONFIG_PMM_TESTS */
-
     /* BSP specific initialization - must complete BEFORE starting APs */
     /* Get CPU ID first to determine if we're BSP or AP */
     cpu_id = smp_get_cpu_index();
@@ -184,6 +142,70 @@ void kernel_main(uint32_t multiboot_info_addr) {
             extern void pcd_dump_stats(void);
             pcd_dump_stats();
 #endif
+
+#if CONFIG_PMM_TESTS
+            /* PMM Tests - now running after monitor initialization
+             * Uses monitor_pmm_alloc() for proper PCD enforcement */
+            serial_puts("[ PMM tests ] Running allocation tests (via monitor)...\n");
+
+            extern void *monitor_pmm_alloc(uint8_t order);
+            extern void monitor_pmm_free(void *addr, uint8_t order);
+
+            /* DEBUG: Before first allocation */
+            serial_puts("[ PMM tests ] About to call monitor_pmm_alloc(0)...\n");
+
+            /* Test 1: Single page allocation */
+            void *page1 = monitor_pmm_alloc(0);
+
+            serial_puts("[ PMM tests ] First alloc returned, page1 = 0x");
+            extern void serial_put_hex(uint64_t value);
+            serial_put_hex((uint64_t)page1);
+            serial_puts("\n");
+
+            void *page2 = monitor_pmm_alloc(0);
+            serial_puts("[ PMM tests ] Allocated page1 at 0x");
+            serial_put_hex((uint64_t)page1);
+            serial_puts(", page2 at 0x");
+            serial_put_hex((uint64_t)page2);
+            serial_puts("\n");
+
+            /* Test 2: Multi-page allocation (order 3 = 8 pages = 32KB) */
+            void *block = monitor_pmm_alloc(3);
+            serial_puts("[ PMM tests ] Allocated 32KB block at 0x");
+            serial_put_hex((uint64_t)block);
+            serial_puts("\n");
+
+            /* Test 3: Free and coalesce */
+            monitor_pmm_free(page1, 0);
+            monitor_pmm_free(page2, 0);
+            serial_puts("[ PMM tests ] Freed pages (buddy coalescing)\n");
+
+            /* Test 4: Statistics */
+            extern uint64_t pmm_get_free_pages(void);
+            extern uint64_t pmm_get_total_pages(void);
+            uint64_t free = pmm_get_free_pages();
+            uint64_t total = pmm_get_total_pages();
+            serial_puts("[ PMM tests ] Free: ");
+            serial_put_hex(free);
+            serial_puts(" / Total: ");
+            serial_put_hex(total);
+            serial_puts("\n");
+
+            /* Test 5: Allocate adjacent pages to verify they were coalesced */
+            void *page3 = monitor_pmm_alloc(1);  /* Request 2 pages */
+            serial_puts("[ PMM tests ] Allocated 2-page block at 0x");
+            serial_put_hex((uint64_t)page3);
+            serial_puts(" (should be same as page1 if coalesced)\n");
+
+            serial_puts("[ PMM tests ] Tests complete\n");
+#endif /* CONFIG_PMM_TESTS */
+
+#if CONFIG_MONITOR_TRAMPOLINE_TEST
+            /* Test monitor trampoline CR3 switching */
+            serial_puts("KERNEL: Testing monitor trampoline...\n");
+            extern void test_monitor_call_from_unprivileged(void);
+            test_monitor_call_from_unprivileged();
+#endif /* CONFIG_MONITOR_TRAMPOLINE_TEST */
         } else {
             serial_puts("KERNEL: Monitor initialization failed\n");
         }
