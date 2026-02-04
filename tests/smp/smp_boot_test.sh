@@ -52,13 +52,22 @@ parse_boot_logs() {
     # Test 5: Check SMP AP startup initiated
     assert_pattern_exists "SMP: Starting APs" "AP startup initiated"
 
-    # Test 6: Check final SMP completion message
+    # Test 6: Check final SMP completion message AND verify APs actually booted
     if echo "$boot_log" | grep -q "SMP: All APs startup complete"; then
         local complete_msg=$(echo "$boot_log" | grep "SMP: All APs startup complete" | head -1)
-        local complete_count=$(echo "$complete_msg" | grep -oE '[0-9]+/[0-9]+' | head -1)
-        print_result "SMP startup completion" "true" "$complete_count APs ready"
+        # Extract "X/Y" format and get X (actual APs ready)
+        local actual_count=$(echo "$complete_msg" | grep -oE '[0-9]+/[0-9]+' | cut -d'/' -f1)
+        local expected_count=$(echo "$complete_msg" | grep -oE '[0-9]+/[0-9]+' | cut -d'/' -f2)
+
+        if [ "$actual_count" -gt 0 ]; then
+            print_result "SMP startup completion" "true" "$actual_count/$expected_count APs ready"
+        else
+            print_result "SMP startup completion" "false" "0 APs booted (expected > 0)"
+            return 1
+        fi
     else
         print_result "SMP startup completion" "false" "Completion message not found"
+        return 1
     fi
 
     # Test 7: No exceptions during boot

@@ -1,4 +1,4 @@
-/* JAKernel Linker Script for x86_64 */
+/* Emergence Kernel Linker Script for x86_64 */
 
 ENTRY(_start)
 
@@ -55,24 +55,27 @@ SECTIONS
      * This ensures:
      * 1. The multiboot header is at the start of the first LOAD segment
      * 2. The trampoline is loaded at the correct physical address
+     *
+     * NOTE: The section name pattern changed from .ap_trampoline to
+     * .ok_ap_boot_trampoline to match the actual assembly section names.
      */
     /* Real mode and protected mode code */
     .ap_trampoline 0x7000 : AT(0x7000) {
-        *(.ap_trampoline)
+        *(.ok_ap_boot_trampoline)
     } :trampoline
 
     /* GDT64 at offset 0x0F00 (physical 0x7F00) */
     .ap_trampoline_gdt64 0x7F00 : AT(0x7F00) {
-        *(.ap_trampoline_gdt64)
+        *(.ok_ap_boot_trampoline_gdt64)
     } :trampoline
 
     /* 64-bit stub at 0x8000 */
     .ap_trampoline_stub 0x8000 : AT(0x8000) {
-        *(.ap_trampoline_stub)
+        *(.ok_ap_boot_trampoline_stub)
     } :trampoline
 
     /* GOT - at fixed offset 0x2000 from trampoline base (0x7000 + 0x2000 = 0x9000) */
     .ap_trampoline_got 0x9000 : AT(0x9000) {
-        *(.ap_trampoline_got)
+        *(.ok_ap_boot_trampoline_got)
     } :trampoline
 }
