@@ -585,8 +585,25 @@ void monitor_init(void) {
     uint64_t boot_pdpt_entry0 = boot_pdpt[0];
     unpriv_pdpt[0] = (boot_pdpt_entry0 & 0xFFF) | unpriv_pd_phys;
 
+    /* CRITICAL: Also update monitor page table hierarchy to use monitor tables
+     * This is required for monitor_call() to access kernel data structures
+     * via 4KB pages instead of the original 2MB page mapping */
+    /* Update monitor_pml4[0] to point to monitor_pdpt instead of boot_pdpt */
+    uint64_t monitor_pdpt_phys = virt_to_phys(monitor_pdpt);
+    monitor_pml4[0] = (boot_pml4_entry0 & 0xFFF) | monitor_pdpt_phys;
+
+    /* Update monitor_pdpt[0] to point to monitor_pd instead of boot_pd */
+    uint64_t monitor_pd_phys = virt_to_phys(monitor_pd);
+    monitor_pdpt[0] = (boot_pdpt_entry0 & 0xFFF) | monitor_pd_phys;
+
     /* Debug: Verify the hierarchy update worked */
     serial_puts("MONITOR: After hierarchy update:\n");
+    serial_puts("  monitor_pml4[0] = 0x");
+    serial_put_hex(monitor_pml4[0]);
+    serial_puts(" (should be monitor_pdpt)\n");
+    serial_puts("  monitor_pdpt[0] = 0x");
+    serial_put_hex(monitor_pdpt[0]);
+    serial_puts(" (should be monitor_pd)\n");
     serial_puts("  unpriv_pml4[0] = 0x");
     serial_put_hex(unpriv_pml4[0]);
     serial_puts(" (should be unpriv_pdpt)\n");
@@ -719,10 +736,29 @@ monitor_ret_t monitor_call_handler(monitor_call_t call, uint64_t arg1,
                                      uint64_t arg2, uint64_t arg3) {
     monitor_ret_t ret = {0, 0};
 
+    /* Debug: Verify we're in privileged mode */
+    extern uint64_t monitor_pml4_phys;
+    uint64_t current_cr3;
+    asm volatile ("mov %%cr3, %0" : "=r"(current_cr3));
+    serial_puts("MONITOR_HANDLER: CR3 = 0x");
+    serial_put_hex(current_cr3);
+    serial_puts(", expected = 0x");
+    serial_put_hex(monitor_pml4_phys);
+    if (current_cr3 != monitor_pml4_phys) {
+        serial_puts(" - ERROR: Not in privileged mode!\n");
+        ret.error = -1;
+        return ret;
+    }
+    serial_puts(" - OK\n");
+
     switch (call) {
         case MONITOR_CALL_ALLOC_PHYS:
+            serial_puts("MONITOR_HANDLER: Calling pmm_alloc...\n");
             /* Allocate physical pages */
             ret.result = (uint64_t)pmm_alloc((uint8_t)arg1);
+            serial_puts("MONITOR_HANDLER: pmm_alloc returned 0x");
+            serial_put_hex(ret.result);
+            serial_puts("\n");
             if (!ret.result) {
                 ret.error = -1;
             }
