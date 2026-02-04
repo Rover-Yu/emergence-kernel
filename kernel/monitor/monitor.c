@@ -12,6 +12,9 @@ extern void *pmm_alloc(uint8_t order);
 extern void pmm_free(void *addr, uint8_t order);
 extern int smp_get_cpu_index(void);
 
+/* Internal PCD function (monitor-only access) */
+extern void _pcd_set_type_internal(uint64_t phys_addr, uint8_t type);
+
 /* Page table physical addresses */
 uint64_t monitor_pml4_phys = 0;
 uint64_t unpriv_pml4_phys = 0;
@@ -349,7 +352,7 @@ static uint64_t *create_or_get_table(uint64_t *phys_out) {
 
     /* Mark as NK_PGTABLE for PCD tracking */
     uint64_t phys = virt_to_phys(table);
-    pcd_set_type(phys, PCD_TYPE_NK_PGTABLE);
+    _pcd_set_type_internal(phys, PCD_TYPE_NK_PGTABLE);
 
     *phys_out = phys;
     return table;
@@ -663,19 +666,19 @@ void monitor_init(void) {
     /* These pages should not be accessible to outer kernel for mapping */
 
     /* Mark boot page tables as NK_PGTABLE */
-    pcd_set_type(virt_to_phys(boot_pml4), PCD_TYPE_NK_PGTABLE);
-    pcd_set_type(virt_to_phys(boot_pdpt), PCD_TYPE_NK_PGTABLE);
-    pcd_set_type(virt_to_phys(boot_pd), PCD_TYPE_NK_PGTABLE);
-    pcd_set_type(virt_to_phys(boot_pd_apic), PCD_TYPE_NK_PGTABLE);
-    pcd_set_type(virt_to_phys(boot_pt_apic), PCD_TYPE_NK_PGTABLE);
+    _pcd_set_type_internal(virt_to_phys(boot_pml4), PCD_TYPE_NK_PGTABLE);
+    _pcd_set_type_internal(virt_to_phys(boot_pdpt), PCD_TYPE_NK_PGTABLE);
+    _pcd_set_type_internal(virt_to_phys(boot_pd), PCD_TYPE_NK_PGTABLE);
+    _pcd_set_type_internal(virt_to_phys(boot_pd_apic), PCD_TYPE_NK_PGTABLE);
+    _pcd_set_type_internal(virt_to_phys(boot_pt_apic), PCD_TYPE_NK_PGTABLE);
 
     /* Mark monitor page tables as NK_PGTABLE */
-    pcd_set_type(virt_to_phys(monitor_pml4), PCD_TYPE_NK_PGTABLE);
-    pcd_set_type(virt_to_phys(monitor_pdpt), PCD_TYPE_NK_PGTABLE);
-    pcd_set_type(virt_to_phys(monitor_pd), PCD_TYPE_NK_PGTABLE);
-    pcd_set_type(virt_to_phys(unpriv_pml4), PCD_TYPE_NK_PGTABLE);
-    pcd_set_type(virt_to_phys(unpriv_pdpt), PCD_TYPE_NK_PGTABLE);
-    pcd_set_type(virt_to_phys(unpriv_pd), PCD_TYPE_NK_PGTABLE);
+    _pcd_set_type_internal(virt_to_phys(monitor_pml4), PCD_TYPE_NK_PGTABLE);
+    _pcd_set_type_internal(virt_to_phys(monitor_pdpt), PCD_TYPE_NK_PGTABLE);
+    _pcd_set_type_internal(virt_to_phys(monitor_pd), PCD_TYPE_NK_PGTABLE);
+    _pcd_set_type_internal(virt_to_phys(unpriv_pml4), PCD_TYPE_NK_PGTABLE);
+    _pcd_set_type_internal(virt_to_phys(unpriv_pdpt), PCD_TYPE_NK_PGTABLE);
+    _pcd_set_type_internal(virt_to_phys(unpriv_pd), PCD_TYPE_NK_PGTABLE);
 
     serial_puts("MONITOR: Page tables initialized\n");
 
@@ -718,11 +721,13 @@ monitor_ret_t monitor_call_handler(monitor_call_t call, uint64_t arg1,
 
     switch (call) {
         case MONITOR_CALL_ALLOC_PHYS:
-            /* Direct PMM access (already in privileged mode) */
+            /* Allocate physical pages */
             ret.result = (uint64_t)pmm_alloc((uint8_t)arg1);
             if (!ret.result) {
                 ret.error = -1;
             }
+            /* TEMPORARILY DISABLED: PCD type setting to debug crash */
+            /* TODO: Re-enable once crash is fixed */
             break;
 
         case MONITOR_CALL_FREE_PHYS:
@@ -731,8 +736,13 @@ monitor_ret_t monitor_call_handler(monitor_call_t call, uint64_t arg1,
             break;
 
         case MONITOR_CALL_SET_PAGE_TYPE:
-            /* Set PCD type (monitor only) */
-            pcd_set_type(arg1, (uint8_t)arg2);
+            /* Set PCD type (monitor only) - enforce privilege check */
+            if (!monitor_is_privileged()) {
+                serial_puts("MONITOR: ERROR - PCD set type rejected (not privileged)\n");
+                ret.error = -1;
+                break;
+            }
+            _pcd_set_type_internal(arg1, (uint8_t)arg2);
             ret.result = 0;
             break;
 
@@ -763,7 +773,7 @@ monitor_ret_t monitor_call_handler(monitor_call_t call, uint64_t arg1,
             if (ret.result) {
                 uint64_t addr = ret.result;
                 for (uint64_t i = 0; i < (1ULL << arg1); i++) {
-                    pcd_set_type(addr + (i << PAGE_SHIFT), PCD_TYPE_NK_PGTABLE);
+                    _pcd_set_type_internal(addr + (i << PAGE_SHIFT), PCD_TYPE_NK_PGTABLE);
                 }
             } else {
                 ret.error = -1;
@@ -785,13 +795,13 @@ extern monitor_ret_t nk_entry_trampoline(monitor_call_t call, uint64_t arg1,
 /* Public monitor call wrapper (for unprivileged code) */
 monitor_ret_t monitor_call(monitor_call_t call, uint64_t arg1,
                             uint64_t arg2, uint64_t arg3) {
+    /* If monitor not initialized yet, call directly */
     if (monitor_pml4_phys == 0) {
-        /* Monitor not initialized yet, call directly */
         return monitor_call_handler(call, arg1, arg2, arg3);
     }
 
+    /* Already privileged? Call directly */
     if (monitor_is_privileged()) {
-        /* Already privileged, call directly */
         return monitor_call_handler(call, arg1, arg2, arg3);
     }
 
@@ -801,18 +811,9 @@ monitor_ret_t monitor_call(monitor_call_t call, uint64_t arg1,
 
 /* PMM monitor call wrappers */
 void *monitor_pmm_alloc(uint8_t order) {
-    monitor_ret_t ret = monitor_call(MONITOR_CALL_ALLOC_PHYS, order, 0, 0);
-    void *page = (void *)ret.result;
-
-    if (page && pcd_is_initialized()) {
-        /* Change type from NK_NORMAL (default) to OK_NORMAL for outer kernel use */
-        for (uint64_t i = 0; i < (1ULL << order); i++) {
-            uint64_t page_addr = (uint64_t)page + (i << PAGE_SHIFT);
-            pcd_set_type(page_addr, PCD_TYPE_OK_NORMAL);
-        }
-    }
-
-    return page;
+    /* Pass PCD type as arg2: OK_NORMAL for outer kernel use */
+    monitor_ret_t ret = monitor_call(MONITOR_CALL_ALLOC_PHYS, order, PCD_TYPE_OK_NORMAL, 0);
+    return (void *)ret.result;
 }
 
 void monitor_pmm_free(void *addr, uint8_t order) {
@@ -821,7 +822,8 @@ void monitor_pmm_free(void *addr, uint8_t order) {
 
 /* PCD management functions (monitor only) */
 void monitor_pcd_set_type(uint64_t phys_addr, uint8_t type) {
-    pcd_set_type(phys_addr, type);
+    /* Route through monitor_call for privilege enforcement */
+    monitor_call(MONITOR_CALL_SET_PAGE_TYPE, phys_addr, type, 0);
 }
 
 uint8_t monitor_pcd_get_type(uint64_t phys_addr) {

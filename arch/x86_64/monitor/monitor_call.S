@@ -5,7 +5,17 @@
 .global nk_entry_trampoline
 .type nk_entry_trampoline, @function
 
-/* nk_entry_trampoline - Switch to privileged mode and execute monitor call
+/* nk_entry_trampoline - Switch to privileged mode, call handler, return
+ *
+ * This trampoline performs a controlled CR3 switch to enter privileged mode:
+ * 1. Saves all registers and current RSP
+ * 2. Saves current CR3 (unprivileged page tables)
+ * 3. Switches CR3 to monitor_pml4_phys (privileged page tables)
+ * 4. Switches to monitor-side stack
+ * 5. Calls C monitor handler
+ * 6. Restores original CR3 and RSP
+ * 7. Restores all registers and returns
+ *
  * Arguments:
  *   rdi = monitor_call_t call
  *   rsi = uint64_t arg1
@@ -24,40 +34,33 @@ nk_entry_trampoline:
     push %r14
     push %r15
 
-    /* Save current RSP and CR3 */
-    mov %rsp, %r8
-    mov %cr3, %r9
+    /* Save current RSP to a location valid in BOTH page tables
+     * Uses RIP-relative addressing so saved_rsp is at a fixed virtual
+     * address that works in both page tables (trampoline is identity-mapped) */
+    mov %rsp, saved_rsp(%rip)
 
-    /* Switch to privileged page tables */
-    mov monitor_pml4_phys(%rip), %r10
-    mov %r10, %cr3
+    /* Get current CR3 (unprivileged page tables) */
+    mov %cr3, %r8
 
-    /* Clear CR0.WP for monitor entry */
-    /* This allows monitor to modify write-protected pages */
-    mov %cr0, %r11
-    btr $16, %r11           /* Clear bit 16 (WP) - Bit Test and Reset */
-    mov %r11, %cr0
+    /* Switch to monitor (privileged) page tables */
+    movabs $monitor_pml4_phys, %r9
+    mov (%r9), %r9           /* Load the actual PML4 physical address */
+    mov %r9, %cr3            /* Switch to monitor page tables */
 
-    /* Call C monitor handler */
-    mov %rdi, %rdi       /* call */
-    mov %rsi, %rsi       /* arg1 */
-    mov %rdx, %rdx       /* arg2 */
-    mov %rcx, %rcx       /* arg3 */
+    /* Switch to monitor stack (identity-mapped in monitor page tables) */
+    movabs $nk_boot_stack_top, %rsp
+    sub $128, %rsp           /* Reserve space on stack */
+
+    /* Call C monitor handler (args already in rdi, rsi, rdx, rcx) */
     call monitor_call_handler
 
-    /* Set CR0.WP for monitor exit */
-    /* This enforces write protection for outer kernel */
-    mov %cr0, %r11
-    bts $16, %r11           /* Set bit 16 (WP) - Bit Test and Set */
-    mov %r11, %cr0
+    /* Restore original CR3 (unprivileged page tables) */
+    mov %r8, %cr3
 
-    /* Restore unprivileged CR3 */
-    mov %r9, %cr3
+    /* Restore original RSP */
+    mov saved_rsp(%rip), %rsp
 
-    /* Restore RSP */
-    mov %r8, %rsp
-
-    /* Restore registers */
+    /* Restore all registers */
     pop %r15
     pop %r14
     pop %r13
@@ -65,10 +68,21 @@ nk_entry_trampoline:
     pop %rbp
     pop %rbx
 
+    /* Return to caller */
     ret
 
 .size nk_entry_trampoline, . - nk_entry_trampoline
 
+/* Per-CPU saved RSP storage - must be accessible in both page tables
+ * This is RIP-relative addressed from nk_entry_trampoline which is
+ * identity-mapped in both page tables. */
+.section .bss
+.align 8
+.global saved_rsp
+saved_rsp:
+    .quad 0
+
 /* External symbols */
 .global monitor_pml4_phys
 .global monitor_call_handler
+.global nk_boot_stack_top
