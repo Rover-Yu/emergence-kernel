@@ -21,3 +21,6 @@ tags
 
 # Local configuration overrides
 .config
+
+# Git worktrees for isolated development
+.worktrees/
