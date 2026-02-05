@@ -14,6 +14,9 @@ tests/
 │   └── smp_boot_test.sh    # SMP boot test
 ├── timer/                  # Timer integration tests
 │   └── apic_timer_test.sh  # APIC timer test
+├── slab/                   # Slab allocator integration tests
+│   ├── slab_test.c         # Slab allocator test suite (compiled into kernel)
+│   └── slab_test.sh        # Slab allocator integration test
 ├── pcd/                    # Page Control Data test
 │   └── pcd_test.sh         # PCD integration test
 ├── nested_kernel_invariants/  # Nested Kernel invariants test
@@ -58,6 +61,24 @@ Verifies APIC timer functionality. Checks:
 - Timer interrupt firing
 - Mathematician quotes output
 - Debug character output
+
+#### `slab/slab_test.sh` - Slab Allocator Test
+Verifies slab allocator functionality for small object allocation. Checks:
+- Slab initialization with 8 power-of-two caches (32B - 4KB)
+- Single allocation and free
+- Multiple allocations (16 objects from 128B cache)
+- Free reuse verification
+- All cache sizes (32, 64, 128, 256, 512, 1024, 2048, 4096 bytes)
+- Size rounding (requests round to next power-of-two)
+
+**Note:** Requires `CONFIG_SLAB_TESTS=1` to enable the kernel-compiled test suite.
+
+Kernel tests (`slab_test.c`) verify:
+- Single alloc/free operations
+- Multiple sequential allocations
+- Freed objects are reused
+- All 8 cache sizes work correctly
+- Size rounding behavior (e.g., 50B -> 64B, 1000B -> 1024B)
 
 ### Monitor/Nested Kernel Tests
 
@@ -144,6 +165,11 @@ make test-apic-timer
 # or
 cd tests && ./timer/apic_timer_test.sh
 
+# Slab allocator test (2 CPUs)
+make test-slab
+# or
+cd tests && ./slab/slab_test.sh
+
 # PCD test
 make test-pcd
 # or
@@ -167,13 +193,16 @@ cd tests && ./readonly_visibility/readonly_visibility_test.sh
 
 ### Build Tests
 
-Kernel tests like `spinlock_test.c` and `nk_protection_test.c` are conditionally compiled into the kernel based on configuration options.
+Kernel tests like `spinlock_test.c`, `slab_test.c`, and `nk_protection_test.c` are conditionally compiled into the kernel based on configuration options.
 
 To rebuild with tests enabled:
 
 ```bash
 # Enable spinlock tests
 make CONFIG_SPINLOCK_TESTS=1
+
+# Enable slab tests
+make CONFIG_SLAB_TESTS=1
 
 # Enable NK protection tests
 make CONFIG_NK_PROTECTION_TESTS=1
