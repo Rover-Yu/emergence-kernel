@@ -10,6 +10,7 @@ Emergence Kernel is an educational x86_64 operating system kernel written in C a
 - Symmetric Multi-Processing (SMP) with AP startup via trampoline
 - Device driver framework with probe/init/remove pattern
 - Local APIC, I/O APIC, interrupt handling, and timers
+- Slab allocator for small object allocation (32B - 4KB)
 - VGA and serial console output
 
 ## Build Commands
@@ -46,8 +47,8 @@ gdb -x .gdbinit
 
 ### Directory Structure
 - `arch/x86_64/` - Architecture-specific code (boot, APIC, IDT, timers, drivers)
-- `kernel/` - Architecture-independent kernel (device framework, SMP, memory management)
-- `tests/` - Test suite organized by component (boot, SMP, timer, spinlock)
+- `kernel/` - Architecture-independent kernel (device framework, SMP, memory management, slab allocator)
+- `tests/` - Test suite organized by component (boot, SMP, timer, spinlock, slab)
 - `include/` - Currently empty; headers are co-located with sources
 
 ### Build System
@@ -94,12 +95,23 @@ gdb -x .gdbinit
 - Local APIC (per-CPU) and I/O APIC (interrupt routing)
 - IPI (Inter-Processor Interrupt) support for CPU communication
 
+**Slab Allocator (`kernel/slab.c`, `kernel/slab.h`)**
+- Linux-inspired slab allocator for efficient small object allocation
+- 8 power-of-two caches: 32B, 64B, 128B, 256B, 512B, 1KB, 2KB, 4KB
+- Three-list slab management (full/partial/free) for O(1) allocation
+- Interrupt-safe via `spin_lock_irqsave()`/`spin_unlock_irqrestore()`
+- Foundation for future `kmalloc()`/`kfree()` implementation
+- API: `slab_alloc()`, `slab_free()`, `slab_alloc_size()`, `slab_free_size()`
+
 ### Memory Layout
 - Boot stacks: 16 KiB BSP stack, 16 KiB AP stack area
 - AP trampoline loaded at physical 0x7000 during boot
 - Page tables identity-map first 2MB
+- Slab allocator: Each slab is one page (4KB), objects packed after metadata header
 
 ### Current State (as of recent commits)
+- Slab allocator implemented with 8 power-of-two caches (32B - 4KB)
+- Slab allocator tests: single alloc/free, multiple allocations, reuse verification, all cache sizes, size rounding
 - AP startup via trampoline is implemented but being debugged
 - ACPI parsing temporarily disabled; uses default APIC IDs
 - IPI handler EOI fix verified, test not yet implemented
@@ -116,6 +128,7 @@ tests/
 ├── boot/                   # Boot integration tests
 ├── smp/                    # SMP integration tests
 ├── timer/                  # Timer integration tests
+├── slab/                   # Slab allocator integration tests
 └── spinlock/               # Kernel test code (compiled into kernel)
 ```
 
@@ -133,6 +146,7 @@ make test-all
 make test-boot          # Basic kernel boot test (1 CPU)
 make test-smp           # SMP boot test (2 CPUs)
 make test-apic-timer    # APIC timer test (1 CPU)
+make test-slab          # Slab allocator test (2 CPUs)
 ```
 
 ### Test Framework

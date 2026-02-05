@@ -23,6 +23,7 @@ GRUB_MKRESCUE := grub-mkrescue
 CFLAGS := -ffreestanding -O2 -Wall -g -nostdlib -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2 -I.
 CFLAGS += -DCONFIG_SPINLOCK_TESTS=$(CONFIG_SPINLOCK_TESTS)
 CFLAGS += -DCONFIG_PMM_TESTS=$(CONFIG_PMM_TESTS)
+CFLAGS += -DCONFIG_SLAB_TESTS=$(CONFIG_SLAB_TESTS)
 CFLAGS += -DCONFIG_SMP_AP_DEBUG=$(CONFIG_SMP_AP_DEBUG)
 CFLAGS += -DCONFIG_APIC_TIMER_TEST=$(CONFIG_APIC_TIMER_TEST)
 CFLAGS += -DCONFIG_WRITE_PROTECTION_VERIFY=$(CONFIG_WRITE_PROTECTION_VERIFY)
@@ -47,11 +48,16 @@ TRAMPOLINE_OBJ := $(BUILD_DIR)/ap_trampoline.o
 # Architecture-independent kernel sources
 KERNEL_DIR := kernel
 KERNEL_C_SRCS := $(KERNEL_DIR)/device.c $(KERNEL_DIR)/pmm.c $(KERNEL_DIR)/pcd.c \
+                 $(KERNEL_DIR)/slab.c \
                  $(KERNEL_DIR)/monitor/monitor.c
 
 # Spinlock test sources (conditionally compiled)
 SPINLOCK_TEST_SRC := tests/spinlock/spinlock_test.c
 SPINLOCK_TEST_OBJ := $(BUILD_DIR)/kernel_spinlock_test.o
+
+# Slab allocator test sources (conditionally compiled)
+SLAB_TEST_SRC := tests/slab/slab_test.c
+SLAB_TEST_OBJ := $(BUILD_DIR)/kernel_slab_test.o
 
 # Nested kernel mappings protection test sources (conditionally compiled)
 NK_PROTECTION_TEST_SRC := tests/nested_kernel_mapping_protection/nk_protection_test.c
@@ -77,6 +83,9 @@ TESTS_OBJS := $(patsubst $(TESTS_DIR)/%.c,$(BUILD_DIR)/test_%.o,$(TESTS_C_SRCS))
 ifeq ($(CONFIG_SPINLOCK_TESTS),1)
 TESTS_OBJS += $(SPINLOCK_TEST_OBJ)
 endif
+ifeq ($(CONFIG_SLAB_TESTS),1)
+TESTS_OBJS += $(SLAB_TEST_OBJ)
+endif
 ifeq ($(CONFIG_NK_PROTECTION_TESTS),1)
 TESTS_OBJS += $(NK_PROTECTION_TEST_OBJ)
 endif
@@ -84,7 +93,7 @@ endif
 OBJS := $(ARCH_BOOT_OBJ) $(ARCH_OBJS) $(KERNEL_OBJS) $(TESTS_OBJS) $(TRAMPOLINE_OBJ)
 KERNEL_ELF := $(BUILD_DIR)/$(KERNEL).elf
 
-.PHONY: all clean run run-debug test test-all test-boot test-apic-timer test-smp test-pcd test-nested-kernel test-nk-protection test-readonly-visibility help
+.PHONY: all clean run run-debug test test-all test-boot test-apic-timer test-smp test-pcd test-slab test-nested-kernel test-nk-protection test-readonly-visibility help
 
 all: $(ISO)
 
@@ -107,6 +116,7 @@ help:
 	@echo "  test-apic-timer  - APIC timer interrupt test"
 	@echo "  test-smp         - SMP boot test (2 CPUs)"
 	@echo "  test-pcd         - Page Control Data test"
+	@echo "  test-slab        - Slab allocator test"
 	@echo "  test-nested-kernel     - Nested Kernel invariants test"
 	@echo "  test-nk-protection     - Nested Kernel mappings protection test"
 	@echo "  test-readonly-visibility - Read-only visibility test"
@@ -155,6 +165,12 @@ $(BUILD_DIR)/kernel_monitor/%.o: $(KERNEL_DIR)/monitor/%.c | $(BUILD_DIR)
 # Compile spinlock test (from tests/spinlock/) - only if enabled
 ifeq ($(CONFIG_SPINLOCK_TESTS),1)
 $(SPINLOCK_TEST_OBJ): $(SPINLOCK_TEST_SRC) | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+endif
+
+# Compile slab allocator test (from tests/slab/) - only if enabled
+ifeq ($(CONFIG_SLAB_TESTS),1)
+$(SLAB_TEST_OBJ): $(SLAB_TEST_SRC) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 endif
 
@@ -219,6 +235,10 @@ test-smp:
 test-pcd:
 	@echo "Running Page Control Data (PCD) Test..."
 	@cd tests && ./pcd/pcd_test.sh
+
+test-slab:
+	@echo "Running Slab Allocator Test..."
+	@cd tests && ./slab/slab_test.sh
 
 test-nested-kernel:
 	@echo "Running Nested Kernel Invariants Test..."

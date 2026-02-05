@@ -29,6 +29,7 @@ NC='\033[0m' # No Color
 TESTS=(
     "boot/boot_test.sh:Basic Kernel Boot"
     "pcd/pcd_test.sh:Page Control Data (PCD)"
+    "slab/slab_test.sh:Slab Allocator"
     "nested_kernel_invariants/nested_kernel_invariants_test.sh:Nested Kernel Invariants"
     "readonly_visibility/readonly_visibility_test.sh:Read-Only Visibility"
     "timer/apic_timer_test.sh:APIC Timer"
