@@ -39,8 +39,11 @@ nk_entry_trampoline:
      * address that works in both page tables (trampoline is identity-mapped) */
     mov %rsp, saved_rsp(%rip)
 
-    /* Get current CR3 (unprivileged page tables) */
-    mov %cr3, %r8
+    /* CRITICAL: Save current CR3 (unprivileged page tables) to memory
+     * We cannot use a register because the C handler may modify it!
+     * Per System V AMD64 ABI, r8-r11 are volatile and can be clobbered. */
+    mov %cr3, %rax
+    mov %rax, saved_cr3(%rip)
 
     /* Switch to monitor (privileged) page tables */
     movabs $monitor_pml4_phys, %r9
@@ -54,8 +57,9 @@ nk_entry_trampoline:
     /* Call C monitor handler (args already in rdi, rsi, rdx, rcx) */
     call monitor_call_handler
 
-    /* Restore original CR3 (unprivileged page tables) */
-    mov %r8, %cr3
+    /* Restore original CR3 (unprivileged page tables) from memory */
+    mov saved_cr3(%rip), %rax
+    mov %rax, %cr3
 
     /* Restore original RSP */
     mov saved_rsp(%rip), %rsp
@@ -68,10 +72,6 @@ nk_entry_trampoline:
     pop %rbp
     pop %rbx
 
-    /* Debug: Print before ret */
-    mov $'R', %rdi
-    call debug_putc
-
     /* Return to caller */
     ret
 
@@ -79,59 +79,25 @@ nk_entry_trampoline:
 
 /* Per-CPU saved RSP storage - must be accessible in both page tables
  * This is RIP-relative addressed from nk_entry_trampoline which is
- * identity-mapped in both page tables. */
+ * identity-mapped in both page tables.
+ *
+ * NOTE: Currently uses a single global slot. For SMP support, each CPU
+ * needs its own saved_rsp slot (e.g., via per-CPU data area). */
 .section .bss
 .align 8
 .global saved_rsp
 saved_rsp:
     .quad 0
 
+/* Saved CR3 value - must also be accessible in both page tables
+ * We save CR3 to memory because volatile registers (r8-r11) can be
+ * modified by the C handler, and we need the original CR3 value after
+ * the handler returns. */
+.global saved_cr3
+saved_cr3:
+    .quad 0
+
 /* External symbols */
 .global monitor_pml4_phys
 .global monitor_call_handler
 .global nk_boot_stack_top
-.global serial_puts
-
-/* Serial port base address */
-#define SERIAL_PORT 0x3F8
-
-/* Debug: Write character to serial port */
-debug_putc:
-    push %rax
-    push %rdx
-    mov %rdi, %rdx
-    mov %rdx, %rax
-    outb %al, $SERIAL_PORT
-    pop %rdx
-    pop %rax
-    ret
-
-/* Debug: Print string when returning from handler */
-debug_print_returning:
-    /* Save registers */
-    push %rax
-    push %rdi
-    push %rcx
-    push %r11
-
-    /* Print message character by character */
-    lea return_msg(%rip), %r11
-1:
-    movb (%r11), %dil
-    testb %dil, %dil
-    jz 2f
-    movq %r11, %rdi
-    call debug_putc
-    inc %r11
-    jmp 1b
-2:
-    /* Restore registers */
-    pop %r11
-    pop %rcx
-    pop %rdi
-    pop %rax
-    ret
-
-.section .rodata
-return_msg:
-    .asciz "T"
