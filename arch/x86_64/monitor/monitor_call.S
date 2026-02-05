@@ -97,7 +97,17 @@ saved_rsp:
 saved_cr3:
     .quad 0
 
+/* Saved return value from monitor_call_handler (RAX=high, RDX=low)
+ * Must be saved before CR3 restoration since we use RAX for CR3 */
+.global saved_ret_high
+saved_ret_high:
+    .quad 0
+.global saved_ret_low
+saved_ret_low:
+    .quad 0
+
 /* External symbols */
 .global monitor_pml4_phys
+.global unpriv_pml4_phys
 .global monitor_call_handler
 .global nk_boot_stack_top

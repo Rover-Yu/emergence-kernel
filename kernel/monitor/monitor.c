@@ -556,14 +556,32 @@ void monitor_init(void) {
     uint64_t stack_end = ((uint64_t)nk_boot_stack_top) & ~0xFFF;
 
     serial_puts("MONITOR: Verifying stack pages are writable in unprivileged view\n");
+    serial_puts("MONITOR: nk_boot_stack_bottom = 0x");
+    serial_put_hex((uint64_t)nk_boot_stack_bottom);
+    serial_puts(", stack_top = 0x");
+    serial_put_hex((uint64_t)nk_boot_stack_top);
+    serial_puts("\n");
+    serial_puts("MONITOR: Checking pages from 0x");
+    serial_put_hex(stack_start);
+    serial_puts(" to 0x");
+    serial_put_hex(stack_end);
+    serial_puts("\n");
     for (uint64_t addr = stack_start; addr <= stack_end; addr += 0x1000) {
         int pte_index = addr >> 12;
         uint64_t pte = unpriv_pt_0_2mb[pte_index];
+        serial_puts("MONITOR: Checking page 0x");
+        serial_put_hex(addr);
+        serial_puts(" (pte_index ");
+        serial_put_hex(pte_index);
+        serial_puts("), PTE = 0x");
+        serial_put_hex(pte);
+        serial_puts("\n");
         if (!(pte & X86_PTE_WRITABLE)) {
             serial_puts("MONITOR: ERROR - Stack page at 0x");
             serial_put_hex(addr);
             serial_puts(" is read-only! Fixing...\n");
-            unpriv_pt_0_2mb[pte_index] = addr | X86_PTE_PRESENT | X86_PTE_WRITABLE;
+            uint64_t phys_addr = virt_to_phys((void*)addr);
+            unpriv_pt_0_2mb[pte_index] = phys_addr | X86_PTE_PRESENT | X86_PTE_WRITABLE;
         }
     }
 
@@ -620,12 +638,43 @@ void monitor_init(void) {
     serial_puts("): 0x");
     serial_put_hex(unpriv_pt_0_2mb[kernel_code_pde]);
     serial_puts("\n");
-    /* Kernel stack at 0x110000 */
-    uint64_t kernel_stack_pde = (0x110000 >> 12);
-    serial_puts("  Kernel stack at 0x110000 (PTE ");
-    serial_put_hex(kernel_stack_pde);
+    /* saved_rsp and saved_cr3 (from monitor_call.S .bss) */
+    extern uint64_t saved_rsp, saved_cr3, saved_ret_high, saved_ret_low;
+    uint64_t saved_rsp_addr = (uint64_t)&saved_rsp;
+    uint64_t saved_cr3_addr = (uint64_t)&saved_cr3;
+    uint64_t saved_ret_high_addr = (uint64_t)&saved_ret_high;
+    uint64_t saved_ret_low_addr = (uint64_t)&saved_ret_low;
+    uint64_t saved_rsp_pte = saved_rsp_addr >> 12;
+    uint64_t saved_cr3_pte = saved_cr3_addr >> 12;
+    uint64_t saved_ret_high_pte = saved_ret_high_addr >> 12;
+    uint64_t saved_ret_low_pte = saved_ret_low_addr >> 12;
+    serial_puts("  saved_rsp at 0x");
+    serial_put_hex(saved_rsp_addr);
+    serial_puts(" (PTE ");
+    serial_put_hex(saved_rsp_pte);
     serial_puts("): 0x");
-    serial_put_hex(unpriv_pt_0_2mb[kernel_stack_pde]);
+    serial_put_hex(unpriv_pt_0_2mb[saved_rsp_pte]);
+    serial_puts("\n");
+    serial_puts("  saved_cr3 at 0x");
+    serial_put_hex(saved_cr3_addr);
+    serial_puts(" (PTE ");
+    serial_put_hex(saved_cr3_pte);
+    serial_puts("): 0x");
+    serial_put_hex(unpriv_pt_0_2mb[saved_cr3_pte]);
+    serial_puts("\n");
+    serial_puts("  saved_ret_high at 0x");
+    serial_put_hex(saved_ret_high_addr);
+    serial_puts(" (PTE ");
+    serial_put_hex(saved_ret_high_pte);
+    serial_puts("): 0x");
+    serial_put_hex(unpriv_pt_0_2mb[saved_ret_high_pte]);
+    serial_puts("\n");
+    serial_puts("  saved_ret_low at 0x");
+    serial_put_hex(saved_ret_low_addr);
+    serial_puts(" (PTE ");
+    serial_put_hex(saved_ret_low_pte);
+    serial_puts("): 0x");
+    serial_put_hex(unpriv_pt_0_2mb[saved_ret_low_pte]);
     serial_puts("\n");
 
     /* Debug: Verify boot_pml4 page table entry */
@@ -827,6 +876,49 @@ monitor_ret_t monitor_call_handler(monitor_call_t call, uint64_t arg1,
 /* External assembly stub for monitor calls (CR3 switching) */
 extern monitor_ret_t nk_entry_trampoline(monitor_call_t call, uint64_t arg1,
                                         uint64_t arg2, uint64_t arg3);
+
+/* Trampoline debug functions */
+void trampoline_debug_handler_returned(void) {
+    serial_puts("TRAMPOLINE: Handler returned successfully\n");
+}
+
+void trampoline_debug_retval_saved(void) {
+    serial_puts("TRAMPOLINE: Return value saved\n");
+}
+
+void trampoline_debug_rsp_restored(void) {
+    serial_puts("TRAMPOLINE: RSP restored\n");
+}
+
+void trampoline_debug_print_cr3(uint64_t cr3_value) {
+    serial_puts("TRAMPOLINE: About to restore CR3 to 0x");
+    serial_put_hex(cr3_value);
+    serial_puts("\n");
+}
+
+void trampoline_debug_print_hex(uint64_t value, uint64_t tag) {
+    serial_puts("TRAMPOLINE: [0x");
+    serial_put_hex(tag);
+    serial_puts("] = 0x");
+    serial_put_hex(value);
+    serial_puts("\n");
+}
+
+void trampoline_debug_cr3_restored(void) {
+    serial_puts("TRAMPOLINE: CR3 restored, about to pop registers\n");
+}
+
+void trampoline_debug_regs_restored(void) {
+    serial_puts("TRAMPOLINE: Registers restored, about to return\n");
+}
+
+void trampoline_debug_print_return(uint64_t ret_addr, uint64_t rsp) {
+    serial_puts("TRAMPOLINE: About to ret to 0x");
+    serial_put_hex(ret_addr);
+    serial_puts(", RSP = 0x");
+    serial_put_hex(rsp);
+    serial_puts("\n");
+}
 
 /* Public monitor call wrapper (for unprivileged code) */
 monitor_ret_t monitor_call(monitor_call_t call, uint64_t arg1,

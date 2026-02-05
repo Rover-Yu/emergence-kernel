@@ -51,8 +51,8 @@ typedef struct {
 /* Initialization */
 void pcd_init(void);
 
-/* Type management */
-void pcd_set_type(uint64_t phys_addr, uint8_t type);
+/* Type management - read-only access for outer kernel */
+/* Note: pcd_set_type() is monitor-only and not exposed to outer kernel */
 uint8_t pcd_get_type(uint64_t phys_addr);
 
 /* Region marking */

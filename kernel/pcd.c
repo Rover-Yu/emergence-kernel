@@ -130,6 +130,23 @@ void pcd_init(void) {
         pcd_state.pages[i].refcount = 0;
     }
 
+    /* Mark PCD array pages themselves as NK_NORMAL (read-only for outer kernel)
+     * This prevents the outer kernel from directly modifying PCD entries via
+     * memory writes, enforcing hardware-level protection for the TCB boundary.
+     * The monitor can still write to these pages via its privileged page tables. */
+    uint64_t pcd_array_phys = (uint64_t)pcd_state.pages;
+    uint64_t pcd_array_bytes = total_pages * sizeof(pcd_t);
+    uint64_t pcd_array_pages = (pcd_array_bytes + PAGE_SIZE - 1) >> PAGE_SHIFT;
+
+    for (uint64_t i = 0; i < pcd_array_pages; i++) {
+        uint64_t page_phys = pcd_array_phys + (i << PAGE_SHIFT);
+        /* Direct write to internal PCD - monitor is initializing */
+        uint64_t index = pcd_get_index(page_phys);
+        if (index < total_pages) {
+            pcd_state.pages[index].type = PCD_TYPE_NK_NORMAL;
+        }
+    }
+
     pcd_state.initialized = true;
     spin_unlock_irqrestore(&pcd_state.lock, &flags);
 
@@ -171,14 +188,18 @@ void pcd_init(void) {
 }
 
 /**
- * pcd_set_type - Set page type for a physical page
+ * _pcd_set_type_internal - Set page type for a physical page (monitor only)
  * @phys_addr: Physical address of page
  * @type: New page type (PCD_TYPE_*)
  *
- * Sets the type of a single physical page. Only the monitor should
- * call this function - the outer kernel cannot change page types.
+ * Sets the type of a single physical page. This is an internal function
+ * that should only be called from the monitor via monitor_pcd_set_type().
+ * The outer kernel cannot directly access this function.
+ *
+ * NOTE: This is exported for monitor use but should NOT be called directly
+ * by outer kernel code. Use monitor_pcd_set_type() instead.
  */
-void pcd_set_type(uint64_t phys_addr, uint8_t type) {
+void _pcd_set_type_internal(uint64_t phys_addr, uint8_t type) {
     irq_flags_t flags;
 
     if (!pcd_state.initialized) {

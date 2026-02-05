@@ -131,6 +131,12 @@ void kernel_main(uint32_t multiboot_info_addr) {
 
             asm volatile ("mov %0, %%cr3" : : "r"(unpriv_cr3) : "memory");
             serial_puts("KERNEL: Page table switch complete\n");
+            /* Verify CR3 switch */
+            uint64_t actual_cr3;
+            asm volatile ("mov %%cr3, %0" : "=r"(actual_cr3));
+            serial_puts("KERNEL: Actual CR3 after switch: 0x");
+            serial_put_hex(actual_cr3);
+            serial_puts("\n");
 
 #if CONFIG_WRITE_PROTECTION_VERIFY
             /* Verify all Nested Kernel invariants (including CR0.WP) */
