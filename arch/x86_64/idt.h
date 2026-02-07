@@ -26,7 +26,8 @@ typedef struct {
 #define IDT_ENTRIES 256
 
 /* IDT Gate Types */
-#define IDT_GATE_INTERRUPT  0x8E   /* Interrupt gate (present, DPL=0) */
+#define IDT_GATE_INTERRUPT  0x8E   /* Interrupt gate (present, DPL=0) - kernel only */
+#define IDT_GATE_INTERRUPT_USER 0xEE   /* Interrupt gate (present, DPL=3) - user-accessible */
 
 /* Common interrupt vectors */
 #define IRQ_BASE           32      /* First user IRQ vector */

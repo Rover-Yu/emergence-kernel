@@ -256,9 +256,12 @@ nmi_isr_handler:
 
 .global breakpoint_isr_handler
 breakpoint_isr_handler:
+    /* Very simple breakpoint handler - just halt
+     * The 'X' was already printed by ISR_HANDLER macro */
     cli
+1:
     hlt
-    jmp breakpoint_isr_handler
+    jmp 1b
 
 .global overflow_isr_handler
 overflow_isr_handler:

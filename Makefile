@@ -45,12 +45,12 @@ LDFLAGS := -nostdlib -m elf_x86_64
 
 # Architecture-specific sources (x86_64)
 ARCH_DIR := arch/x86_64
-ARCH_BOOT_SRC := $(ARCH_DIR)/boot.S $(ARCH_DIR)/isr.S $(ARCH_DIR)/monitor/monitor_call.S
+ARCH_BOOT_SRC := $(ARCH_DIR)/boot.S $(ARCH_DIR)/isr.S $(ARCH_DIR)/monitor/monitor_call.S $(ARCH_DIR)/userprog.S $(ARCH_DIR)/syscall_entry.S
 ARCH_LINKER := $(ARCH_DIR)/linker.ld
 ARCH_C_SRCS := $(ARCH_DIR)/main.c $(ARCH_DIR)/smp.c $(ARCH_DIR)/multiboot2.c \
                $(ARCH_DIR)/vga.c $(ARCH_DIR)/serial_driver.c $(ARCH_DIR)/apic.c \
                $(ARCH_DIR)/acpi.c $(ARCH_DIR)/idt.c $(ARCH_DIR)/timer.c $(ARCH_DIR)/rtc.c \
-               $(ARCH_DIR)/ipi.c $(ARCH_DIR)/power.c
+               $(ARCH_DIR)/ipi.c $(ARCH_DIR)/power.c $(ARCH_DIR)/syscall.c
 
 # AP Trampoline (assembled as part of kernel, uses PIC)
 TRAMPOLINE_SRC := $(ARCH_DIR)/ap_trampoline.S
@@ -121,7 +121,9 @@ C_SRCS := $(ARCH_C_SRCS) $(KERNEL_C_SRCS)
 # Objects
 ARCH_BOOT_OBJ := $(patsubst $(ARCH_DIR)/%.S,$(BUILD_DIR)/boot_%.o,$(ARCH_DIR)/boot.S) \
                 $(patsubst $(ARCH_DIR)/%.S,$(BUILD_DIR)/isr_%.o,$(ARCH_DIR)/isr.S) \
-                $(BUILD_DIR)/boot_monitor_monitor_call.o
+                $(BUILD_DIR)/boot_monitor_monitor_call.o \
+                $(BUILD_DIR)/boot_syscall_entry.o \
+                $(BUILD_DIR)/boot_userprog.o
 ARCH_OBJS := $(patsubst $(ARCH_DIR)/%.c,$(BUILD_DIR)/arch_%.o,$(ARCH_C_SRCS))
 KERNEL_OBJS := $(patsubst $(KERNEL_DIR)/%.c,$(BUILD_DIR)/kernel_%.o,$(KERNEL_C_SRCS))
 
@@ -231,6 +233,16 @@ $(BUILD_DIR)/isr_%.o: $(ARCH_DIR)/isr.S | $(BUILD_DIR)
 # Compile monitor assembly files
 $(BUILD_DIR)/boot_monitor_%.o: $(ARCH_DIR)/monitor/%.S | $(BUILD_DIR)
 	@mkdir -p $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+
+# Compile syscall_entry assembly
+$(BUILD_DIR)/boot_syscall_entry.o: $(ARCH_DIR)/syscall_entry.S | $(BUILD_DIR)
+	$$(CC) $$(CFLAGS) -c $$< -o $$@
+
+# Compile userprog assembly
+# Compile userprog assembly
+$(BUILD_DIR)/boot_userprog.o: $(ARCH_DIR)/userprog.S | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Compile architecture-specific C files
@@ -351,7 +363,7 @@ $(ISO): $(KERNEL_ELF) always-rebuild-cmdline | $(ISO_DIR)
 	echo '    multiboot2 /boot/$(KERNEL).elf $(KERNEL_CMDLINE)' >> $(ISO_DIR)/boot/grub/grub.cfg
 	echo '    boot' >> $(ISO_DIR)/boot/grub/grub.cfg
 	echo '}' >> $(ISO_DIR)/boot/grub/grub.cfg
-	$(GRUB_MKRESCUE) -o $@ $(ISO_DIR)
+	env TMPDIR=$(PWD)/.tmp $(GRUB_MKRESCUE) -o $@ $(ISO_DIR)
 
 run: $(ISO)
 	qemu-system-x86_64 -enable-kvm -M pc -m 128M -nographic -cdrom $(ISO) -smp 4 -device isa-debug-exit,iobase=0xB004,iosize=1 || exit 0

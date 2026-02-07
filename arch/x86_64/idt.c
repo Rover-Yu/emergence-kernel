@@ -128,25 +128,30 @@ void idt_init(void) {
     /* Use kernel code segment (selector 0x08) */
     uint16_t kernel_cs = 0x08;
 
-    idt_set_gate(0, (uint64_t)divide_error_isr, kernel_cs, IDT_GATE_INTERRUPT);
-    idt_set_gate(1, (uint64_t)debug_isr, kernel_cs, IDT_GATE_INTERRUPT);
-    idt_set_gate(2, (uint64_t)nmi_isr, kernel_cs, IDT_GATE_INTERRUPT);
-    idt_set_gate(3, (uint64_t)breakpoint_isr, kernel_cs, IDT_GATE_INTERRUPT);
-    idt_set_gate(4, (uint64_t)overflow_isr, kernel_cs, IDT_GATE_INTERRUPT);
-    idt_set_gate(5, (uint64_t)bound_isr, kernel_cs, IDT_GATE_INTERRUPT);
-    idt_set_gate(6, (uint64_t)invalid_op_isr, kernel_cs, IDT_GATE_INTERRUPT);
-    idt_set_gate(7, (uint64_t)device_not_available_isr, kernel_cs, IDT_GATE_INTERRUPT);
-    idt_set_gate(8, (uint64_t)double_fault_isr, kernel_cs, IDT_GATE_INTERRUPT);
-    idt_set_gate(10, (uint64_t)invalid_tss_isr, kernel_cs, IDT_GATE_INTERRUPT);
-    idt_set_gate(11, (uint64_t)segment_not_present_isr, kernel_cs, IDT_GATE_INTERRUPT);
-    idt_set_gate(12, (uint64_t)stack_isr, kernel_cs, IDT_GATE_INTERRUPT);
-    idt_set_gate(13, (uint64_t)general_protection_isr, kernel_cs, IDT_GATE_INTERRUPT);
-    idt_set_gate(14, (uint64_t)page_fault_isr, kernel_cs, IDT_GATE_INTERRUPT);
-    idt_set_gate(15, 0, kernel_cs, IDT_GATE_INTERRUPT);  /* Reserved */
-    idt_set_gate(16, (uint64_t)x87_fpu_isr, kernel_cs, IDT_GATE_INTERRUPT);
-    idt_set_gate(17, (uint64_t)alignment_isr, kernel_cs, IDT_GATE_INTERRUPT);
-    idt_set_gate(18, (uint64_t)machine_check_isr, kernel_cs, IDT_GATE_INTERRUPT);
-    idt_set_gate(19, (uint64_t)simd_isr, kernel_cs, IDT_GATE_INTERRUPT);
+    /* IMPORTANT: Exception handlers MUST be user-accessible (DPL=3)
+     * Otherwise, when an exception occurs in ring 3, the CPU will #GP trying
+     * to call the handler, leading to double fault and triple fault.
+     * Use IDT_GATE_INTERRUPT_USER (0xEE) for all exception handlers. */
+
+    idt_set_gate(0, (uint64_t)divide_error_isr, kernel_cs, IDT_GATE_INTERRUPT_USER);
+    idt_set_gate(1, (uint64_t)debug_isr, kernel_cs, IDT_GATE_INTERRUPT_USER);
+    idt_set_gate(2, (uint64_t)nmi_isr, kernel_cs, IDT_GATE_INTERRUPT_USER);
+    idt_set_gate(3, (uint64_t)breakpoint_isr, kernel_cs, IDT_GATE_INTERRUPT_USER);
+    idt_set_gate(4, (uint64_t)overflow_isr, kernel_cs, IDT_GATE_INTERRUPT_USER);
+    idt_set_gate(5, (uint64_t)bound_isr, kernel_cs, IDT_GATE_INTERRUPT_USER);
+    idt_set_gate(6, (uint64_t)invalid_op_isr, kernel_cs, IDT_GATE_INTERRUPT_USER);
+    idt_set_gate(7, (uint64_t)device_not_available_isr, kernel_cs, IDT_GATE_INTERRUPT_USER);
+    idt_set_gate(8, (uint64_t)double_fault_isr, kernel_cs, IDT_GATE_INTERRUPT_USER);
+    idt_set_gate(10, (uint64_t)invalid_tss_isr, kernel_cs, IDT_GATE_INTERRUPT_USER);
+    idt_set_gate(11, (uint64_t)segment_not_present_isr, kernel_cs, IDT_GATE_INTERRUPT_USER);
+    idt_set_gate(12, (uint64_t)stack_isr, kernel_cs, IDT_GATE_INTERRUPT_USER);
+    idt_set_gate(13, (uint64_t)general_protection_isr, kernel_cs, IDT_GATE_INTERRUPT_USER);
+    idt_set_gate(14, (uint64_t)page_fault_isr, kernel_cs, IDT_GATE_INTERRUPT_USER);
+    idt_set_gate(15, 0, kernel_cs, IDT_GATE_INTERRUPT_USER);  /* Reserved */
+    idt_set_gate(16, (uint64_t)x87_fpu_isr, kernel_cs, IDT_GATE_INTERRUPT_USER);
+    idt_set_gate(17, (uint64_t)alignment_isr, kernel_cs, IDT_GATE_INTERRUPT_USER);
+    idt_set_gate(18, (uint64_t)machine_check_isr, kernel_cs, IDT_GATE_INTERRUPT_USER);
+    idt_set_gate(19, (uint64_t)simd_isr, kernel_cs, IDT_GATE_INTERRUPT_USER);
 
     /* Set up interrupt handlers (32+) */
     idt_set_gate(TIMER_VECTOR, (uint64_t)timer_isr, kernel_cs, IDT_GATE_INTERRUPT);

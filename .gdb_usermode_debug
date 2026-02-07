@@ -1,0 +1,24 @@
+# GDB script for debugging ring 3 transition
+target remote :1234
+symbol-file build/emergence.elf
+set architecture i386:x86-64
+break enter_user_mode
+continue
+# Hit enter_user_mode breakpoint
+echo === Entered enter_user_mode ===
+info registers cs ds ss rsp rip rflags cr0 cr3 cr4
+x/10gx 0x108000
+disassemble enter_user_mode,+30
+# Set breakpoint just before iretq
+break *enter_user_mode+266
+continue
+# Hit breakpoint before iretq
+echo === About to execute iretq ===
+info registers
+stepi 1
+echo === After iretq ===
+info registers cs ds ss rsp rip rflags
+stepi 1
+echo === Second step ===
+info registers
+quit

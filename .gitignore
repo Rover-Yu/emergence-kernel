@@ -21,3 +21,10 @@ tags
 
 # Local configuration overrides
 .config
+
+# Git worktrees (isolated development workspaces)
+.worktrees/
+
+# Temporary build files and logs
+.tmp/
+*.log
