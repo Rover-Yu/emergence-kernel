@@ -13,6 +13,7 @@
 #include "arch/x86_64/serial.h"
 #include "arch/x86_64/io.h"
 #include "arch/x86_64/power.h"
+#include "arch/x86_64/include/syscall.h"
 
 /* External driver initialization functions */
 extern int serial_driver_init(void);
@@ -24,7 +25,7 @@ extern uint64_t monitor_pml4_phys;
 extern void monitor_verify_invariants(void);
 
 /* Architecture-independent halt function */
-static void kernel_halt(void) {
+void kernel_halt(void) {
     while (1) {
         asm volatile ("hlt");
     }
@@ -156,8 +157,29 @@ void kernel_main(uint32_t multiboot_info_addr) {
 
         /* Initialize nested kernel monitor */
         serial_puts("KERNEL: Initializing monitor...\n");
+#if 0  /* TEMPORARILY DISABLED: Test if monitor interferes with ring 3 transition */
         monitor_init();
+#else
+        serial_puts("KERNEL: MONITOR DISABLED for ring 3 test\n");
+#endif
 
+        /* Pre-allocate user stack BEFORE switching page tables
+         * PMM is only accessible with boot page tables */
+#if CONFIG_USERMODE_TEST
+        extern void *prealloc_user_stack(void);
+        void *stack = prealloc_user_stack();
+        if (stack) {
+            serial_puts("KERNEL: User stack pre-allocated at 0x");
+            extern void serial_put_hex(uint64_t);
+            serial_put_hex((uint64_t)stack);
+            serial_puts("\n");
+        }
+#endif
+
+        /* TEMPORARY: Skip CR3 switch to test ring 3 with boot page tables (full access)
+         * This tests whether the triple fault is caused by nested kernel page tables
+         * or by something else (GDT, TSS, syscall mechanism, etc.) */
+#if 0
         /* Switch to unprivileged page tables */
         uint64_t unpriv_cr3 = monitor_get_unpriv_cr3();
         if (unpriv_cr3 != 0) {
@@ -171,8 +193,19 @@ void kernel_main(uint32_t multiboot_info_addr) {
             asm volatile ("mov %0, %%cr0" : : "r"(cr0) : "memory");
             serial_puts("KERNEL: CR0.WP enabled (write protection enforced)\n");
 
+            /* Switch to unprivileged page tables
+             * The monitor has set up these tables with proper U/S bits
+             * User code pages are marked as user-accessible (U/S=1) */
             asm volatile ("mov %0, %%cr3" : : "r"(unpriv_cr3) : "memory");
             serial_puts("KERNEL: Page table switch complete\n");
+
+            /* Debug: Verify user program page is accessible after CR3 switch */
+            extern void user_program_start(void);
+            uint64_t user_prog_addr = (uint64_t)user_program_start;
+            serial_puts("KERNEL: Verifying user program at 0x");
+            extern void serial_put_hex(uint64_t);
+            serial_put_hex(user_prog_addr);
+            serial_puts("\n");
 
 #if CONFIG_WRITE_PROTECTION_VERIFY
             /* Verify all Nested Kernel invariants (including CR0.WP) */
@@ -187,6 +220,11 @@ void kernel_main(uint32_t multiboot_info_addr) {
         } else {
             serial_puts("KERNEL: Monitor initialization failed\n");
         }
+#else
+        /* SKIPPING CR3 switch for ring 3 test with boot page tables (full access) */
+        serial_puts("KERNEL: TEMPORARY - Skipping CR3 switch, using boot page tables for ring 3 test\n");
+        serial_puts("KERNEL: This tests if ring 3 transition works with full page table access\n");
+#endif
 
         /* Enable interrupts */
         enable_interrupts();
@@ -247,6 +285,33 @@ void kernel_main(uint32_t multiboot_info_addr) {
         extern int run_nk_protection_tests(void);
         run_nk_protection_tests();  /* Never returns */
         serial_puts("KERNEL: NK protection tests returned unexpectedly\n");
+#endif
+
+#if CONFIG_USERMODE_TEST
+        /* Run user mode syscall test */
+        serial_puts("KERNEL: Starting user mode syscall test...\n");
+
+        /* Initialize syscall support */
+        syscall_init();
+
+        /* TEST 1: Verify SYSCALL works from ring 0 (kernel mode) */
+        serial_puts("[TEST] SYSCALL from ring 0 (should halt)...\n");
+        __asm__ volatile (
+            "mov $2, %rax\n"
+            "mov $0, %rdi\n"
+            "syscall\n"
+        );
+        /* If we reach here, syscall failed */
+        serial_puts("[TEST] ERROR: Syscall returned unexpectedly\n");
+        kernel_halt();
+
+        /* TEST 2: Try ring 3 transition */
+        serial_puts("[TEST] Ring 3 transition test...\n");
+        enter_user_mode();
+
+        /* Should never reach here */
+        serial_puts("KERNEL: ERROR: Returned from user mode!\n");
+        kernel_halt();
 #endif
 
         /* BSP waits with interrupts enabled for timer interrupts to fire

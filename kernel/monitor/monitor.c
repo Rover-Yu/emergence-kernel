@@ -12,6 +12,9 @@ extern void *pmm_alloc(uint8_t order);
 extern void pmm_free(void *addr, uint8_t order);
 extern int smp_get_cpu_index(void);
 
+/* External GDT from boot.S */
+extern void gdt64(void);
+
 /* Page table physical addresses */
 uint64_t monitor_pml4_phys = 0;
 uint64_t unpriv_pml4_phys = 0;
@@ -23,7 +26,8 @@ static uint64_t *monitor_pd;
 
 static uint64_t *unpriv_pml4;
 static uint64_t *unpriv_pdpt;
-static uint64_t *unpriv_pd;
+static uint64_t *unpriv_pd;         /* Local pointer for monitor operations */
+uint64_t *g_unpriv_pd_ptr;        /* Exported for user mode syscall support */
 
 /* 4KB page tables for first 2MB region (for fine-grained protection) */
 static uint64_t *monitor_pt_0_2mb;    /* Page table for first 2MB, monitor view */
@@ -69,7 +73,7 @@ static void monitor_protect_state(void) {
         virt_to_phys(monitor_pd),
         virt_to_phys(unpriv_pml4),
         virt_to_phys(unpriv_pdpt),
-        virt_to_phys(unpriv_pd)
+        virt_to_phys(g_unpriv_pd_ptr)
     };
 
     /* Protect monitor page tables (monitor PD entries) */
@@ -88,7 +92,7 @@ static void monitor_protect_state(void) {
 
     /* Clear Writable bit in unpriv_pd entry for monitor region (make it read-only)
      * This implements Invariant 1: protected data is read-only for outer kernel */
-    uint64_t *unpriv_pd_entry = &unpriv_pd[pd_index];
+    uint64_t *unpriv_pd_entry = &g_unpriv_pd_ptr[pd_index];
     uint64_t original_entry = *unpriv_pd_entry;
 
     *unpriv_pd_entry = original_entry & ~X86_PTE_WRITABLE;
@@ -136,11 +140,11 @@ void monitor_verify_invariants(void) {
 #endif
 
     /* Get physical address of unpriv_pd to find PD entry */
-    uint64_t unpriv_pd_phys = virt_to_phys(unpriv_pd);
+    uint64_t unpriv_pd_phys = virt_to_phys(g_unpriv_pd_ptr);
     int pd_index = monitor_find_pd_entry(unpriv_pd_phys);
 
     /* Check the PD entry in both views */
-    uint64_t unpriv_entry = unpriv_pd[pd_index];
+    uint64_t unpriv_entry = g_unpriv_pd_ptr[pd_index];
     uint64_t monitor_entry = monitor_pd[pd_index];
 
     /* Variables for invariant checks */
@@ -498,6 +502,9 @@ void monitor_init(void) {
         return;
     }
 
+    /* Set exported pointer for user mode access */
+    g_unpriv_pd_ptr = unpriv_pd;
+
     /* Allocate 4KB page tables for first 2MB region */
     /* 2MB / 4KB = 512 entries needed, one page table has 512 entries = 4KB */
     monitor_pt_0_2mb = (uint64_t *)pmm_alloc(0);
@@ -519,13 +526,19 @@ void monitor_init(void) {
         unpriv_pd[i] = boot_pd[i];
     }
 
+    /* CRITICAL: Make user stack region (0x200000-0x3FFFFF) user-accessible
+     * This is where PMM allocates memory from, including user stacks
+     * unpriv_pd[1] maps the 2MB region at 0x200000 */
+    unpriv_pd[1] |= X86_PTE_USER;
+    serial_puts("MONITOR: User stack region (0x200000-0x3FFFFF) is now user-accessible\n");
+
     /* Set up 4KB page tables for first 2MB region */
     /* Each 4KB page: PRESENT + WRITABLE for monitor */
     for (int i = 0; i < 512; i++) {
         uint64_t phys_addr = (uint64_t)i * 4096;
         /* Monitor view: writable */
         monitor_pt_0_2mb[i] = phys_addr | X86_PTE_PRESENT | X86_PTE_WRITABLE;
-        /* Unprivileged view: read-only for page table pages, writable for others */
+        /* Unprivileged view: read-only for page table pages, writable+user for others */
         if (phys_addr == virt_to_phys(boot_pml4) ||
             phys_addr == virt_to_phys(boot_pdpt) ||
             phys_addr == virt_to_phys(boot_pd) ||
@@ -537,11 +550,26 @@ void monitor_init(void) {
             phys_addr == virt_to_phys(unpriv_pml4) ||
             phys_addr == virt_to_phys(unpriv_pdpt) ||
             phys_addr == virt_to_phys(unpriv_pd)) {
-            /* Page table pages: read-only */
+            /* Page table pages: read-only, supervisor-only */
             unpriv_pt_0_2mb[i] = phys_addr | X86_PTE_PRESENT;
+            /* Debug: Print first few page table pages */
+            if (i < 5) {
+                serial_puts("MONITOR: Page table page at 0x");
+                serial_put_hex(phys_addr);
+                serial_puts(" marked supervisor-only\n");
+            }
         } else {
-            /* Other pages: writable (includes kernel stack, even if NK_NORMAL) */
-            unpriv_pt_0_2mb[i] = phys_addr | X86_PTE_PRESENT | X86_PTE_WRITABLE;
+            /* Other pages: writable + user-accessible (for user mode syscall test) */
+            /* This includes kernel code, kernel stack, and other kernel data */
+            unpriv_pt_0_2mb[i] = phys_addr | X86_PTE_PRESENT | X86_PTE_WRITABLE | X86_PTE_USER;
+            /* Debug: Print if this is the kernel code page */
+            if (phys_addr == 0x100000) {
+                serial_puts("MONITOR: Kernel code page at 0x");
+                serial_put_hex(phys_addr);
+                serial_puts(" marked user-accessible (PTE = 0x");
+                serial_put_hex(unpriv_pt_0_2mb[i]);
+                serial_puts(")\n");
+            }
         }
     }
 
@@ -568,7 +596,7 @@ void monitor_init(void) {
     /* Monitor view */
     monitor_pd[0] = (uint64_t)virt_to_phys(monitor_pt_0_2mb) | X86_PTE_PRESENT | X86_PTE_WRITABLE;
     /* Unprivileged view - make PD[0] writable so individual 4KB page protections work */
-    unpriv_pd[0] = (uint64_t)virt_to_phys(unpriv_pt_0_2mb) | X86_PTE_PRESENT | X86_PTE_WRITABLE;
+    g_unpriv_pd_ptr[0] = (uint64_t)virt_to_phys(unpriv_pt_0_2mb) | X86_PTE_PRESENT | X86_PTE_WRITABLE;
 
     /* CRITICAL: Update unprivileged page table hierarchy to use unpriv tables
      * This ensures the CPU actually uses the protected page tables */
@@ -653,10 +681,10 @@ void monitor_init(void) {
     serial_put_hex(boot_pd[1]);
     serial_puts("\n  monitor_pd[0] = 0x");
     serial_put_hex(monitor_pd[0]);
-    serial_puts("\n  unpriv_pd[0] = 0x");
-    serial_put_hex(unpriv_pd[0]);
-    serial_puts("\n  unpriv_pd[1] = 0x");
-    serial_put_hex(unpriv_pd[1]);
+    serial_puts("\n  g_unpriv_pd_ptr[0] = 0x");
+    serial_put_hex(g_unpriv_pd_ptr[0]);
+    serial_puts("\n  g_unpriv_pd_ptr[1] = 0x");
+    serial_put_hex(g_unpriv_pd_ptr[1]);
     serial_puts("\n  Using 4KB pages for first 2MB\n");
 
     /* Mark page table pages as NK_PGTABLE for PCD tracking */
@@ -678,6 +706,37 @@ void monitor_init(void) {
     pcd_set_type(virt_to_phys(unpriv_pd), PCD_TYPE_NK_PGTABLE);
 
     serial_puts("MONITOR: Page tables initialized\n");
+
+    /* Debug: Verify GDT is accessible */
+    serial_puts("MONITOR: GDT at 0x");
+    serial_put_hex((uint64_t)gdt64);
+    serial_puts(" (size ");
+    serial_put_hex(sizeof(gdt64));
+    serial_puts(" bytes)\n");
+    /* Check if GDT is in first 2MB region */
+    if ((uint64_t)gdt64 < 0x200000) {
+        uint64_t gdt_page = (uint64_t)gdt64 & ~0xFFF;
+        int gdt_pte_index = gdt_page >> 12;
+        serial_puts("MONITOR: GDT page at 0x");
+        serial_put_hex(gdt_page);
+        serial_puts(", PTE = 0x");
+        serial_put_hex(unpriv_pt_0_2mb[gdt_pte_index]);
+        serial_puts("\n");
+    }
+
+    /* Debug: Verify TSS is accessible */
+    extern void tss_desc(void);
+    extern void tss(void);
+    serial_puts("MONITOR: TSS structure at 0x");
+    serial_put_hex((uint64_t)tss);
+    serial_puts("\n");
+    if ((uint64_t)tss < 0x200000) {
+        uint64_t tss_page = (uint64_t)tss & ~0xFFF;
+        int tss_pte_index = tss_page >> 12;
+        serial_puts("MONITOR: TSS page PTE = 0x");
+        serial_put_hex(unpriv_pt_0_2mb[tss_pte_index]);
+        serial_puts("\n");
+    }
 
     /* Enforce Nested Kernel invariants by write-protecting PTPs */
     monitor_protect_state();

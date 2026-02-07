@@ -1,5 +1,8 @@
 /* Emergence Kernel - Multiboot2 header and entry point */
 
+/* GDT segment selectors */
+#define GDT_TSS         0x28   /* Index 5 */
+
 /* Multiboot2 Header */
 .section .multiboot
 .align 8
@@ -103,16 +106,37 @@ unpriv_pml4:  .skip 4096
 unpriv_pdpt:  .skip 4096
 unpriv_pd:    .skip 4096
 
-/* GDT for 64-bit mode */
+/* GDT with 6 entries: null, kernel CS, kernel DS, user CS, user DS, TSS */
 .section .rodata
 .align 16
+.global gdt64
 gdt64:
     .quad 0                                        /* Null descriptor */
-    .quad 0x00209A0000000000                       /* 64-bit code segment (exec/read, 64-bit) */
-    .quad 0x0000920000000000                       /* 64-bit data segment (read/write) */
+    .quad 0x00209A0000000000                       /* Kernel code (DPL=0) */
+    .quad 0x0000920000000000                       /* Kernel data (DPL=0) */
+    .quad 0x00CFFA000000FFFF                       /* User code (DPL=3, long, flat 4GB) - FIXED: was 0x9A (DPL=0) */
+    .quad 0x00CFF2000000FFFF                       /* User data (DPL=3, flat 4GB) - FIXED: was 0x92 (DPL=0) */
+
+/* TSS descriptor (filled in at runtime) */
+.global tss_desc
+tss_desc:
+    .quad 0
+    .quad 0
+
+/* GDT pointer MUST be placed AFTER TSS descriptor to include it in the limit
+ * The GDT has 6 entries: null, kernel CS, kernel DS, user CS, user DS, TSS (2 quads)
+ * Total size: 5 * 8 + 2 * 8 = 56 bytes, limit = 55 */
+.global gdt64_ptr
 gdt64_ptr:
-    .word gdt64_ptr - gdt64 - 1
-    .quad gdt64
+    .word 55  /* GDT limit = 56 bytes - 1 (hardcoded due to symbol offset issues) */
+    .quad gdt64                    /* GDT base */
+
+/* TSS structure with IST stacks */
+.align 16
+.global tss
+tss:
+    .skip 104                    /* Reserved + RSP0-2 + reserved + IST1-7 + reserved */
+    .word 0                       /* I/O map base = 0 (no I/O bitmap) */
 
 /* Entry point - 32-bit bootstrap code */
 .section .text
@@ -254,7 +278,7 @@ boot_is_bsp:
 
 1:
     movl %edx, %eax
-    orl $0x183, %eax           /* Present | Writable | PS (2MB page) */
+    orl $0x187, %eax           /* Present | Writable | User (U/S=1) | PS (2MB page) */
     movl %eax, (%esi)          /* Store low 32 bits of PD entry */
     movl $0, 4(%esi)           /* Store high 32 bits (reserved/zero) */
     addl $8, %esi              /* Next PD entry (8 bytes per entry) */
@@ -362,6 +386,60 @@ long_mode_start:
     /* Patch idt_ptr_placeholder with actual idt_ptr address */
     movabs $idt_ptr, %rax           /* Load actual idt_ptr address */
     mov %rax, idt_ptr_placeholder   /* Patch the placeholder */
+
+    /* Set up TSS for privilege level transitions
+     * TSS descriptor format (64-bit):
+     * Bytes 0-1: Limit [15:0] = 0x67 (103 bytes, minimum for 64-bit TSS)
+     * Bytes 2-3: Base [15:0]
+     * Byte 4: Base [23:16]
+     * Byte 5: Access byte = 0x89 (present=1, DPL=0, type=0x9 for 64-bit TSS)
+     * Byte 6: Flags = 0x80 (granularity=1, limit high=0)
+     * Byte 7: Base [31:24]
+     * Bytes 8-11: Base [63:32]
+     * Bytes 12-15: Reserved = 0
+     */
+    lea tss(%rip), %rdx                  /* RDX = TSS base address */
+    mov %rdx, %r8                        /* Save base for later */
+
+    /* Set up the first quadword (bytes 0-7) */
+    mov $0x0069, %ax                     /* Limit [15:0] = 105 (TSS is 106 bytes) */
+    mov %ax, tss_desc+0                  /* Bytes 0-1 */
+    mov %rdx, %rcx                       /* Copy base */
+    shr $16, %rcx                        /* Shift to get base [15:0] */
+    mov %cx, tss_desc+2                  /* Bytes 2-3: base [15:0] */
+    mov %rdx, %rcx                       /* Copy base again */
+    shr $24, %rcx                        /* Shift to get base [23:0] */
+    mov %cl, tss_desc+4                  /* Byte 4: base [23:16] */
+    mov $0x89, %al                       /* Access byte: present=1, DPL=0, type=0x9 */
+    mov %al, tss_desc+5                  /* Byte 5 */
+    mov $0x80, %al                       /* Flags: granularity=1 */
+    mov %al, tss_desc+6                  /* Byte 6 */
+    mov %rdx, %rcx                       /* Copy base again */
+    shr $32, %rcx                        /* Shift to get base [31:0] */
+    shr $24, %rcx                        /* Shift to get base [31:24] */
+    mov %cl, tss_desc+7                  /* Byte 7: base [31:24] */
+
+    /* Set up the second quadword (bytes 8-15) */
+    mov %r8, %rdx                        /* Restore base */
+    shr $32, %rdx                        /* Get base [63:32] */
+    mov %edx, tss_desc+8                 /* Bytes 8-11: base [63:32] */
+    movq $0, tss_desc+12                 /* Bytes 12-15: reserved */
+
+    /* Load TSS selector */
+    mov $GDT_TSS, %ax
+    ltr %ax
+
+    /* Store kernel stack pointer in TSS.RSP0 for ring 3 -> ring 0 transitions
+     * IMPORTANT: RSP0 should point to the TOP of the stack (highest address)
+     * The stack grows downward, so we want RSP0 to be at nk_boot_stack_top
+     * But nk_boot_stack_top might be at the wrong location, so calculate it:
+     * Stack bottom = nk_boot_stack_bottom
+     * Stack size = 16KB = 0x4000
+     * Stack top = Stack bottom + 0x4000 = 0x10D010 + 0x4000 = 0x111010 */
+    mov $nk_boot_stack_bottom, %rax
+    add $16384, %rax                    /* Add 16KB to get stack top */
+    and $~0xF, %rax                    /* Ensure 16-byte alignment */
+    mov %rax, tss+4                      /* TSS.RSP0 offset */
 
     /* Call kernel main */
     /* Note: bsp_init_done will be set by kernel code when ready */

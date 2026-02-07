@@ -1,0 +1,6 @@
+target remote :1234
+set architecture i386:x86-64
+break *0x1034C0
+continue
+info reg
+x/10i $pc

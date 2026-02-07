@@ -1,0 +1,40 @@
+# GDB script for debugging ring 3 transition
+
+# Connect to QEMU's remote debugger
+target remote :1234
+
+# Load kernel symbols
+symbol-file build/emergence.elf
+
+# Set architecture
+set architecture i386:x86-64
+
+# Break at enter_user_mode to examine state before transition
+break enter_user_mode
+
+# Break at user program entry
+break user_program_start
+
+# Break at syscall handler
+break syscall_handler
+
+# Continue to first breakpoint
+continue
+
+# When enter_user_mode is hit, examine GDT
+# Commands to run manually:
+# info gidt - examine GDT
+# print/x $cs - current CS register
+# print/x $ds - current DS register
+# print/x $ss - current SS register
+# print/x $rflags - current RFLAGS
+# print/x $rsp - current RSP
+# print/x $rip - current RIP
+# print/x $cr0 - current CR0
+# print/x $cr3 - current CR3
+# x/10gx 0x107000 - examine GDT at expected address
+
+# Step to iretq instruction
+# disassemble - see the iretq instruction
+# si - step instruction
+# si - execute iretq (will switch to ring 3 or fault)

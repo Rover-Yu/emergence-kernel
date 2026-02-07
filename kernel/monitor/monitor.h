@@ -25,6 +25,9 @@ typedef enum {
 extern uint64_t monitor_pml4_phys;    /* Full privileged view */
 extern uint64_t unpriv_pml4_phys;     /* Restricted unprivileged view */
 
+/* Page table pointers (for user mode support) */
+extern uint64_t *g_unpriv_pd_ptr;    /* Unprivileged page directory (runtime pointer) */
+
 /* Monitor initialization */
 void monitor_init(void);
 
