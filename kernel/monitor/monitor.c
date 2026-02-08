@@ -394,8 +394,13 @@ static int create_ro_mapping(uint64_t phys_addr, uint64_t virt_addr) {
         /* Set PML4 entry - writable so we can modify lower levels */
         unpriv_pml4[pml4_idx] = pdpt_phys | X86_PTE_PRESENT | X86_PTE_WRITABLE;
     } else {
-        /* Existing PDPT */
-        pdpt = (uint64_t *)(pml4_entry & ~0xFFF);
+        /* Existing PDPT - validate address before use */
+        uint64_t pdpt_addr = pml4_entry & ~0xFFF;
+        if (pdpt_addr == 0 || pdpt_addr < 0x100000) {
+            serial_puts("MONITOR: Invalid PDPT address\n");
+            return -1;
+        }
+        pdpt = (uint64_t *)pdpt_addr;
     }
 
     /* Step 2: Get or create PD entry from PDPT */
@@ -413,8 +418,13 @@ static int create_ro_mapping(uint64_t phys_addr, uint64_t virt_addr) {
         /* Set PDPT entry */
         pdpt[pdpt_idx] = pd_phys | X86_PTE_PRESENT | X86_PTE_WRITABLE;
     } else {
-        /* Existing PD */
-        pd = (uint64_t *)(pdpt_entry & ~0xFFF);
+        /* Existing PD - validate address before use */
+        uint64_t pd_addr = pdpt_entry & ~0xFFF;
+        if (pd_addr == 0 || pd_addr < 0x100000) {
+            serial_puts("MONITOR: Invalid PD address\n");
+            return -1;
+        }
+        pd = (uint64_t *)pd_addr;
     }
 
     /* Step 3: Get or create PT entry from PD */
@@ -438,11 +448,19 @@ static int create_ro_mapping(uint64_t phys_addr, uint64_t virt_addr) {
             serial_puts("MONITOR: WARNING - Cannot split 2MB page for RO mapping\n");
             return -1;
         }
-        pt = (uint64_t *)(pd_entry & ~0xFFF);
+        /* Validate PT address before use */
+        uint64_t pt_addr = pd_entry & ~0xFFF;
+        if (pt_addr == 0 || pt_addr < 0x100000) {
+            serial_puts("MONITOR: Invalid PT address\n");
+            return -1;
+        }
+        pt = (uint64_t *)pt_addr;
     }
 
     /* Step 4: Create final PTE - read-only (PRESENT only, no WRITABLE) */
     pt[pt_idx] = phys_addr | X86_PTE_PRESENT;
+    /* Invalidate TLB for this page after PTE update */
+    asm volatile ("invlpg (%0)" : : "r"(pt_idx << 12) : "memory");
 
     return 0;
 }

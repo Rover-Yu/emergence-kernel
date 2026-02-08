@@ -205,7 +205,12 @@ void smp_start_all_aps(void) {
          * - Simultaneously accessing shared trampoline code/data
          * - Racing during CPU index assignment */
         int timeout = SMP_AP_INIT_TIMEOUT;
-        while (cpu_info[i].state != CPU_READY && timeout > 0) {
+        while (timeout > 0) {
+            /* Use acquire memory barrier to see latest state from other CPU */
+            smp_mb();
+            if (cpu_info[i].state == CPU_READY) {
+                break;
+            }
             asm volatile ("pause");  /* Reduce power consumption during busy-wait */
             timeout--;
         }
@@ -257,8 +262,9 @@ void ap_start(void) {
         while (1) { asm volatile ("hlt"); }
     }
 
-    /* Set current CPU index */
+    /* Set current CPU index with memory barrier to ensure visibility */
     current_cpu_index = my_index;
+    smp_mb();  /* Ensure write is visible before continuing */
 
     /* Set up stack */
     cpu_info[my_index].stack_top = &ok_cpu_stacks[my_index][CPU_STACK_SIZE];
@@ -286,6 +292,8 @@ void ap_start(void) {
     }
 
     cpu_info[my_index].state = CPU_ONLINE;
+    /* Release memory barrier to ensure state is visible before marking ready */
+    smp_mb();
 
     /* Mark CPU as ready FIRST - BSP is waiting for this */
     smp_mark_cpu_ready(my_index);

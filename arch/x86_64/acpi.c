@@ -5,6 +5,9 @@
 #include "arch/x86_64/acpi.h"
 #include "arch/x86_64/io.h"
 
+/* External serial output functions */
+extern void serial_puts(const char *str);
+
 /* EBDA (Extended BIOS Data Area) base address */
 #define EBDA_BASE 0x9FFFF000  /* Typical EBDA location */
 
@@ -79,12 +82,22 @@ madt_header_t *acpi_find_madt(void) {
     /* Get RSDT address */
     uint32_t rsdt_address = rsdp->rsdt_address;
 
+    /* Validate RSDT address before dereferencing */
+    if (rsdt_address == 0 || rsdt_address < 0x100000) {
+        serial_puts("ACPI: Invalid RSDT address\n");
+        return NULL;
+    }
+
     /* RSDT is an SDT containing pointers to other tables
      * Format: [signature:4][length:4][entry1:4][entry2:4]... */
     uint32_t *rsdt = (uint32_t *)(uintptr_t)rsdt_address;
 
-    /* Length is at offset 4 (second DWORD) */
+    /* Validate RSDT length before accessing */
     uint32_t rsdt_length = rsdt[1];
+    if (rsdt_length < 8 || rsdt_length > 4096) {
+        serial_puts("ACPI: Invalid RSDT length\n");
+        return NULL;
+    }
 
     /* Entries start at offset 8 (after signature and length)
      * Each entry is a 32-bit physical address to an SDT */
