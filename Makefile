@@ -192,7 +192,7 @@ OBJS := $(ARCH_BOOT_OBJ) $(ARCH_OBJS) $(KERNEL_OBJS) $(MINILIBC_OBJS) $(TESTS_OB
 KERNEL_ELF := $(BUILD_DIR)/$(KERNEL).elf
 KERNEL_BIN := $(BUILD_DIR)/$(KERNEL).bin
 
-.PHONY: all clean run run-debug test test-all test-boot test-apic-timer test-smp test-pcd test-slab test-nested-kernel test-nk-fault-injection test-readonly-visibility test-usermode help
+.PHONY: all clean run run-debug test test-all test-boot test-apic-timer test-smp test-pcd test-slab test-nested-kernel test-nk-fault-injection test-readonly-visibility test-usermode test-multiboot help
 
 all: $(ISO)
 
@@ -484,3 +484,8 @@ test-usermode:
 	@echo "Running User Mode Syscall Test..."
 	@$(MAKE) all
 	@python3 tests/usermode/usermode_test.py --kvm
+
+test-multiboot:
+	@$(MAKE) all
+	@echo "Running Multiboot2 Header Test..."
+	@python3 tests/multiboot/multiboot_header_test.py
