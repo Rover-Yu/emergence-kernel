@@ -12,6 +12,7 @@ Emergence Kernel is a research-oriented x86_64 operating system kernel written i
 - Local APIC, I/O APIC, interrupt handling, and timers
 - Slab allocator for small object allocation (32B - 4KB)
 - VGA and serial console output
+- **Minilibc** - Minimal C library for kernel string/memory operations
 
 ## Build Commands
 
@@ -51,8 +52,9 @@ gdb -x .gdbinit
 ### Directory Structure
 - `arch/x86_64/` - Architecture-specific code (boot, APIC, IDT, timers, drivers)
 - `kernel/` - Architecture-independent kernel (device framework, SMP, memory management, slab allocator)
-- `tests/` - Test suite organized by component (boot, SMP, timer, spinlock, slab)
-- `include/` - Currently empty; headers are co-located with sources
+- `lib/minilibc/` - Minimal C library for kernel string/memory operations
+- `include/` - Public API headers (string.h for minilibc)
+- `tests/` - Test suite organized by component (boot, SMP, timer, spinlock, slab, minilibc)
 
 ### Build System
 - Uses a single Makefile with explicit dependency tracking
@@ -133,6 +135,14 @@ OBJS := $(ARCH_OBJS) $(TESTS_OBJS)
 - Foundation for future `kmalloc()`/`kfree()` implementation
 - API: `slab_alloc()`, `slab_free()`, `slab_alloc_size()`, `slab_free_size()`
 
+**Minilibc (`lib/minilibc/string.c`, `include/string.h`)**
+- Minimal C library for kernel-space string and memory operations
+- Stack-only allocation for kernel safety (no heap dependencies)
+- Implemented functions: `strlen`, `strcpy`, `strcmp`, `strncmp`, `memset`, `memcpy`
+- Comprehensive test coverage: 37 kernel tests covering edge cases
+- Python integration test with QEMU framework
+- Configuration: `CONFIG_MINILIBC_TESTS` in kernel.config (default: 1)
+
 ### Memory Layout
 - Boot stacks: 16 KiB BSP stack, 16 KiB AP stack area
 - AP trampoline loaded at physical 0x7000 during boot
@@ -143,8 +153,9 @@ OBJS := $(ARCH_OBJS) $(TESTS_OBJS)
 - **Unified test framework** with runtime selection via kernel command line
 - **APIC timer test** implemented and integrated (runs after APs are ready)
 - **Kernel command line support** with embedded fallback for QEMU environments
+- **Minilibc** - Minimal string library with 6 functions and 37 comprehensive tests
 - Slab allocator with 8 power-of-two caches (32B - 4KB)
-- Tests available: PMM, SLAB, APIC Timer, Spinlock (conditional), NK Protection (manual)
+- Tests available: PMM, SLAB, Minilibc, APIC Timer, Spinlock (conditional), NK Protection (manual)
 - AP startup via trampoline fully functional (3/3 APs boot successfully)
 - ACPI parsing temporarily disabled; uses default APIC IDs
 - Fail-fast test behavior: system shutdown on first test failure
@@ -162,6 +173,7 @@ tests/
 ├── smp/                    # SMP integration tests
 ├── timer/                  # Timer integration tests
 ├── slab/                   # Slab allocator integration tests
+├── minilibc/               # Minilibc integration tests
 └── spinlock/               # Kernel test code (compiled into kernel)
 ```
 
@@ -180,6 +192,7 @@ make test-boot          # Basic kernel boot test (1 CPU)
 make test-smp           # SMP boot test (2 CPUs)
 make test-apic-timer    # APIC timer test (1 CPU)
 make test-slab          # Slab allocator test (2 CPUs)
+make test-minilibc      # Minilibc string/memory functions test
 ```
 
 ### Test Framework
@@ -201,6 +214,7 @@ The project uses a dual-layer test framework:
 **Available kernel tests:**
 - `pmm` - Physical memory manager allocation tests
 - `slab` - Slab allocator small object allocation tests
+- `minilibc` - String/memory functions tests (strlen, strcpy, strcmp, strncmp, memset, memcpy)
 - `timer` - APIC timer interrupt-driven tests (runs after APs are ready)
 - `spinlock` - Spinlock synchronization tests (when CONFIG_SPINLOCK_TESTS=1)
 - `nk_protection` - Nested kernel mappings protection tests (manual only)
