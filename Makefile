@@ -236,6 +236,9 @@ $(BUILD_DIR):
 $(ISO_DIR):
 	mkdir -p $(ISO_DIR)/boot/grub
 
+.tmp:
+	mkdir -p .tmp
+
 # Compile architecture-specific boot assembly
 $(BUILD_DIR)/boot_%.o: $(ARCH_DIR)/boot.S | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -370,7 +373,7 @@ always-rebuild-cmdline:
 	@echo "#include <stddef.h>" >> $(CMDLINE_SOURCE)
 	@echo "const char embedded_cmdline[] = \"$(KERNEL_CMDLINE)\";" >> $(CMDLINE_SOURCE)
 
-$(ISO): $(KERNEL_ELF) always-rebuild-cmdline | $(ISO_DIR)
+$(ISO): $(KERNEL_ELF) always-rebuild-cmdline | $(ISO_DIR) .tmp
 	cp $(KERNEL_ELF) $(ISO_DIR)/boot/$(KERNEL).elf
 	echo 'set timeout=0' > $(ISO_DIR)/boot/grub/grub.cfg
 	echo 'set default=0' >> $(ISO_DIR)/boot/grub/grub.cfg
