@@ -336,79 +336,47 @@ clean:
 	rm -f ./emergence_test_* 2>/dev/null || true
 	rm -f /tmp/emergence_* 2>/dev/null || true
 
-# Test targets
+# Test targets (Python 3 only)
 test: test-all
 
 test-all:
 	@$(MAKE) all
 	@echo "Running Emergence Kernel test suite..."
-	@if [ -f "tests/run_all_tests.py" ]; then \
-		python3 tests/run_all_tests.py; \
-	else \
-		cd tests && ./run_all_tests.sh; \
-	fi
+	@python3 tests/run_all_tests.py
 
 test-boot:
 	@$(MAKE) all
 	@echo "Running Basic Kernel Boot Test..."
-	@if [ -f "tests/boot/boot_test.py" ]; then \
-		python3 tests/boot/boot_test.py; \
-	else \
-		cd tests && ./boot/boot_test.sh; \
-	fi
+	@python3 tests/boot/boot_test.py
 
 test-apic-timer:
 	@$(MAKE) all
 	@echo "Running APIC Timer Test..."
-	@if [ -f "tests/timer/apic_timer_test.py" ]; then \
-		python3 tests/timer/apic_timer_test.py; \
-	else \
-		cd tests && ./timer/apic_timer_test.sh; \
-	fi
+	@python3 tests/timer/apic_timer_test.py
 
 test-smp:
 	@$(MAKE) all
 	@echo "Running SMP Boot Test..."
-	@if [ -f "tests/smp/smp_boot_test.py" ]; then \
-		python3 tests/smp/smp_boot_test.py --cpus 4; \
-	else \
-		cd tests && ./smp/smp_boot_test.sh 4; \
-	fi
+	@python3 tests/smp/smp_boot_test.py --cpus 4
 
 test-pcd:
 	@$(MAKE) all
 	@echo "Running Page Control Data (PCD) Test..."
-	@if [ -f "tests/pcd/pcd_test.py" ]; then \
-		python3 tests/pcd/pcd_test.py; \
-	else \
-		cd tests && ./pcd/pcd_test.sh; \
-	fi
+	@python3 tests/pcd/pcd_test.py
 
 test-slab:
 	@$(MAKE) all
 	@echo "Running Slab Allocator Test..."
-	@if [ -f "tests/slab/slab_test.py" ]; then \
-		python3 tests/slab/slab_test.py; \
-	else \
-		cd tests && ./slab/slab_test.sh; \
-	fi
+	@python3 tests/slab/slab_test.py
 
 test-nested-kernel:
 	@echo "Running Nested Kernel Invariants Test..."
-	@if [ -f "tests/nested_kernel_invariants/nested_kernel_invariants_test.py" ]; then \
-		python3 tests/nested_kernel_invariants/nested_kernel_invariants_test.py; \
-	else \
-		cd tests && ./nested_kernel_invariants/nested_kernel_invariants_test.sh; \
-	fi
+	@python3 tests/nested_kernel_invariants/nested_kernel_invariants_test.py
 
 test-nk-protection:
 	@echo "Running Nested Kernel Mappings Protection Test..."
-	@cd tests && ./nk_protection/nk_protection_test.sh
+	@python3 tests/nk_protection/nk_protection_test.py
 
 test-readonly-visibility:
 	@echo "Running Read-Only Visibility Test..."
-	@if [ -f "tests/readonly_visibility/readonly_visibility_test.py" ]; then \
-		python3 tests/readonly_visibility/readonly_visibility_test.py; \
-	else \
-		cd tests && ./readonly_visibility/readonly_visibility_test.sh; \
-	fi
+	@python3 tests/readonly_visibility/readonly_visibility_test.py
