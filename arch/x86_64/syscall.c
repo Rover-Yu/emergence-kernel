@@ -52,7 +52,7 @@ void inline_user_program(void) {
         "mov %1, %%rsi\n"        /* buf */
         "mov $0, %%rdx\n"        /* count = 0 */
         "syscall\n"
-        "mov $1, %0\n"           /* Mark success */
+        "movl $1, %0\n"          /* Mark success */
         : "=m"(syscall_worked)
         : "r"(msg)
         : "rax", "rdi", "rsi", "rdx", "rcx", "r11", "memory"

@@ -144,7 +144,7 @@ static int test_strcpy_single_char(void) {
 
 static int test_strcopy_with_spaces(void) {
     char dest[20];
-    char *result = strcpy(dest, "hello world");
+    strcpy(dest, "hello world");
 
     if (strcmp(dest, "hello world") != 0) {
         serial_puts("[MINILIBC test] strcpy(spaces) FAILED: copy mismatch\n");

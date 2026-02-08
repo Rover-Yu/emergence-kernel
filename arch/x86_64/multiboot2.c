@@ -191,7 +191,6 @@ void multiboot2_parse(uint32_t mbi_addr) {
     multiboot_tag_t *tag;
     uint64_t total_size;
     int found_memory = 0;
-    int found_cmdline = 0;
 
     serial_puts("PMM: Parsing multiboot2 info at 0x");
     put_hex(mbi_addr);
@@ -314,8 +313,7 @@ use_default_cmdline:
         serial_puts("'\n");
     }
 
-fallback:
-    /* Fallback: If no memory info found, use default QEMU memory map */
+/* Fallback: If no memory info found, use default QEMU memory map */
     if (!found_memory) {
         serial_puts("PMM: No memory info found, using default map for QEMU\n");
         /* QEMU default: 128MB starting at 0 */

@@ -37,7 +37,7 @@ static int test_syscall_ring0(void) {
         "mov $0, %%rsi\n"      /* buf = NULL */
         "mov $0, %%rdx\n"      /* count = 0 */
         "syscall\n"
-        "mov $1, %0\n"         /* Mark that syscall returned */
+        "movl $1, %0\n"        /* Mark that syscall returned */
         : "=m"(syscall_worked)
         :
         : "rax", "rdi", "rsi", "rdx", "rcx", "r11", "memory"
@@ -53,7 +53,7 @@ static int test_syscall_ring0(void) {
 }
 
 /* Test: Ring 3 transition */
-static int test_ring3_transition(void) {
+static int __attribute__((unused)) test_ring3_transition(void) {
     void *user_stack;
     uint64_t user_rsp;
 
