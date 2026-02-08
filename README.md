@@ -8,42 +8,18 @@ This is a research kernel project aimed at exploring the boundaries of LLM capab
 
 ---
 
-## Current Status
+## Recent Developments
 
-| Feature | Status | Notes |
-|---------|--------|-------|
-| BSP Boot | ✅ Complete | Single-core boot working with banner |
-| AP Boot | ✅ Complete | Multi-core boot with state management |
-| Interrupt Handling | ✅ Complete | IDT and exception handlers working |
-| APIC Init | ✅ Complete | Local APIC and I/O APIC |
-| APIC Timer | ✅ Complete | High-frequency timer interrupts with math quotes |
-| Device Framework | ✅ Complete | probe/init/remove pattern |
-| Physical Memory Manager | ✅ Complete | Buddy system allocator with Multiboot2 |
-| Synchronization Primitives | ✅ Complete | Spin locks, RW locks, IRQ-safe locks |
-| Test Framework | ✅ Complete | PMM, spin lock, and nested kernel invariants tests |
-| ACPI Parsing | ⚠️ Partial | Using default APIC IDs for now |
-| **Page Control Data (PCD)** | ✅ Complete | Page type tracking (NK_NORMAL, NK_PGTABLE, OK_NORMAL, etc.) |
-| **Nested Kernel** | ✅ Complete | All 6 invariants enforced on BSP and APs |
-| **Monitor Mode** | ✅ Complete | Privileged/unprivileged page table separation |
-| **CR0.WP Protection** | ✅ Complete | Two-level protection (PTE + CR0.WP) |
-| **Read-Only Mappings** | ✅ Complete | Outer kernel can read nested kernel pages at NESTED_KERNEL_RO_BASE |
-| **NK Protection Tests** | ✅ Complete | Page fault tests verify write protection |
+**Nested Kernel Isolation**
+- PCD (Page Control Data) system tracks page types for fine-grained protection
+- Separation of privileged monitor mode and unprivileged kernel mode
+- Read-only mappings allow outer kernel to inspect nested kernel state safely
+- Page fault tests verify write protection invariants
 
-### Recent Developments
-
-**Nested Kernel Isolation (Latest)**
-- Implemented PCD (Page Control Data) system for tracking page types
-- All nested kernel stacks marked with `nk_` prefix (NK_NORMAL type)
-- All outer kernel stacks marked with `ok_` prefix (OK_NORMAL type)
-- Distinguished trampolines: `ok_ap_boot_trampoline` (outer kernel) vs `nk_entry_trampoline` (nested kernel entry)
-- Read-only mappings allow outer kernel to inspect nested kernel state without modification
-- Page fault protection tests verify unauthorized writes trigger clean shutdown
-
-**Key Design Decisions**
-- 4KB page tables for first 2MB region enable fine-grained protection
-- Page table pages (NK_PGTABLE) are read-only in unprivileged view
-- Nested kernel code/data (NK_NORMAL) writable in monitor, read-only in unprivileged view
-- APIC remains accessible from unprivileged mode (per user requirement)
+**Test Framework**
+- Unified test suite with runtime selection via kernel command line
+- Tests for PMM, slab allocator, APIC timer, and nested kernel invariants
+- Python-based integration tests with QEMU automation
 
 ---
 
@@ -67,10 +43,16 @@ Emergence Kernel is pursuing several ambitious goals to explore novel kernel arc
 ## Building and Running
 
 ### Requirements
-- GCC (with freestanding support)
-- GNU binutils (as, ld)
-- GRUB tools (grub-mkrescue)
-- QEMU system emulator
+
+**Build Tools:**
+- GCC (with freestanding support) - C compiler
+- GNU binutils (as, ld) - Assembler and linker
+- GNU Make - Build system
+- GRUB tools (grub-mkrescue) - ISO image creation
+- Python 3.8+ - Test framework
+
+**Runtime:**
+- QEMU system emulator (x86_64) - For running and testing
 
 ### Quick Start
 
@@ -88,38 +70,39 @@ make run
 make clean
 ```
 
+### Testing
+
+```bash
+# Run all tests
+make test
+
+# Run individual tests
+make test-boot          # Basic kernel boot test (1 CPU)
+make test-smp           # SMP boot test (2 CPUs)
+make test-apic-timer    # APIC timer test (1 CPU)
+make test-slab          # Slab allocator test (2 CPUs)
+
+# Run specific test via kernel command line
+make run KERNEL_CMDLINE='test=timer'     # Run timer test
+make run KERNEL_CMDLINE='test=all'       # Run all tests
+```
+
+See [tests/README.md](tests/README.md) for detailed testing documentation.
+
 ---
 
 ## Project Structure
 
 ```
 Emergence-Kernel/
-├── arch/x86_64/          # Architecture-specific code
-│   ├── boot.S           # BSP 16/32-bit entry, Long Mode transition
-│   ├── ap_trampoline.S  # AP real mode trampoline (ok_ap_boot_trampoline)
-│   ├── monitor/         # Nested kernel monitor
-│   │   └── monitor_call.S  # nk_entry_trampoline (CR3 switching stub)
-│   ├── paging.h         # Page table entry flags
-│   └── ...
-├── kernel/               # Architecture-independent kernel code
-│   ├── monitor/         # Monitor core implementation
-│   │   └── monitor.c    # PCD, RO mappings, invariants enforcement
-│   ├── pcd.c            # Page Control Data system
-│   ├── smp.c            # SMP support with ok_cpu_stacks
-│   └── ...
-├── tests/                # Test suite
-│   ├── boot/            # Basic kernel boot tests
-│   ├── smp/             # SMP boot tests
-│   ├── timer/           # APIC timer tests
-│   ├── monitor/         # Nested kernel invariants and protection tests
-│   ├── nested_kernel_mapping_protection/  # NK protection tests
-│   └── lib/             # Test framework library
+├── arch/x86_64/          # Architecture-specific code (boot, APIC, paging)
+├── kernel/               # Core kernel (SMP, devices, monitor, PCD)
+├── tests/                # Integration tests and test framework
+├── docs/                 # Documentation (ROADMAP.md, design docs)
 ├── include/              # Public headers
-├── kernel.config         # Default kernel configuration
-├── .config               # Local configuration override (not committed)
-├── Makefile              # Build system (run `make help` for targets)
-├── CLAUDE.md             # Claude Code project guide
-└── README.md             # This file
+├── Makefile              # Build system
+├── kernel.config         # Default configuration
+└── CLAUDE.md             # Project guide for Claude Code
 ```
 
 ---

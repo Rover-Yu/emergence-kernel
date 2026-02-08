@@ -4,7 +4,7 @@ This document outlines the planned development milestones and future direction o
 
 ## Project Vision
 
-Emergence Kernel aims to become an educational operating system kernel that combines traditional kernel design with modern programmable capabilities and innovative storage approaches. The roadmap focuses on building a solid foundation while introducing novel concepts in kernel programmability, file system design, and AI integration.
+Emergence Kernel aims to become a research-oriented operating system kernel that combines traditional kernel design with modern programmable capabilities and innovative storage approaches. The roadmap focuses on building a solid foundation while introducing novel concepts in kernel programmability, file system design, and AI integration.
 
 ## Project Goals
 
@@ -32,7 +32,7 @@ Integrate Lua as the kernel's scripting and extension language.
 - Safe sandboxing environment for kernel extensions
 - Documentation for Lua kernel programming
 
-**Rationale:** A programmable kernel enables rapid prototyping, runtime customization, and educational exploration of kernel concepts without recompilation.
+**Rationale:** A programmable kernel enables rapid prototyping, runtime customization, and experimental exploration of kernel concepts without recompilation.
 
 ### Goal 3: Graph-Based Virtual File System
 
