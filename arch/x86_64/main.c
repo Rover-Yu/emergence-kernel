@@ -13,6 +13,7 @@
 #include "arch/x86_64/serial.h"
 #include "arch/x86_64/io.h"
 #include "arch/x86_64/power.h"
+#include "arch/x86_64/multiboot2.h"
 
 /* External driver initialization functions */
 extern int serial_driver_init(void);
@@ -34,6 +35,11 @@ static void kernel_halt(void) {
 void kernel_main(uint32_t multiboot_info_addr) {
     uint8_t color = VGA_COLOR(VGA_COLOR_BLACK, VGA_COLOR_WHITE);
     int cpu_id;
+
+    /* DEBUG: Print received multiboot info address */
+    serial_puts("MAIN: mbi_addr=0x");
+    serial_put_hex(multiboot_info_addr);
+    serial_puts("\n");
 
     /* Initialize VGA directly (only BSP should do this) */
     vga_init();
@@ -74,6 +80,9 @@ void kernel_main(uint32_t multiboot_info_addr) {
     /* Initialize Physical Memory Manager (must be early, before any dynamic allocation) */
     pmm_init(multiboot_info_addr);
     serial_puts("PMM: Initialized\n");
+
+    /* Parse and display kernel command line */
+    multiboot_get_cmdline();
 
     /* Initialize Slab Allocator (for small object allocation) */
     extern void slab_init(void);

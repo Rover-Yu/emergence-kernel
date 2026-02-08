@@ -5,6 +5,10 @@ ISO := emergence.iso
 BUILD_DIR := build
 ISO_DIR := isodir
 
+# Kernel command line (passed via GRUB multiboot2)
+# Default: Gauss quote - "Mathematics is the queen of sciences"
+KERNEL_CMDLINE ?= quote="Mathematics is the queen of sciences" --author=Gauss
+
 # ========================================================================
 # Configuration
 # ========================================================================
@@ -199,7 +203,7 @@ $(ISO): $(KERNEL_ELF) | $(ISO_DIR)
 	echo 'set timeout=0' > $(ISO_DIR)/boot/grub/grub.cfg
 	echo 'set default=0' >> $(ISO_DIR)/boot/grub/grub.cfg
 	echo 'menuentry "Emergence Kernel" {' >> $(ISO_DIR)/boot/grub/grub.cfg
-	echo '    multiboot2 /boot/$(KERNEL).elf' >> $(ISO_DIR)/boot/grub/grub.cfg
+	echo '    multiboot2 /boot/$(KERNEL).elf $(KERNEL_CMDLINE)' >> $(ISO_DIR)/boot/grub/grub.cfg
 	echo '    boot' >> $(ISO_DIR)/boot/grub/grub.cfg
 	echo '}' >> $(ISO_DIR)/boot/grub/grub.cfg
 	$(GRUB_MKRESCUE) -o $@ $(ISO_DIR)
@@ -217,26 +221,32 @@ clean:
 test: test-all
 
 test-all:
+	@$(MAKE) all
 	@echo "Running Emergence Kernel test suite..."
 	@cd tests && ./run_all_tests.sh
 
 test-boot:
+	@$(MAKE) all
 	@echo "Running Basic Kernel Boot Test..."
 	@cd tests && ./boot/boot_test.sh
 
 test-apic-timer:
+	@$(MAKE) all
 	@echo "Running APIC Timer Test..."
 	@cd tests && ./timer/apic_timer_test.sh
 
 test-smp:
+	@$(MAKE) all
 	@echo "Running SMP Boot Test..."
 	@cd tests && ./smp/smp_boot_test.sh 4
 
 test-pcd:
+	@$(MAKE) all
 	@echo "Running Page Control Data (PCD) Test..."
 	@cd tests && ./pcd/pcd_test.sh
 
 test-slab:
+	@$(MAKE) all
 	@echo "Running Slab Allocator Test..."
 	@cd tests && ./slab/slab_test.sh
 

@@ -1,6 +1,7 @@
 /* Emergence Kernel - Multiboot2 parser */
 
 #include <stdint.h>
+#include <stddef.h>
 #include "arch/x86_64/multiboot2.h"
 #include "kernel/pmm.h"
 #include "arch/x86_64/serial.h"
@@ -8,6 +9,9 @@
 /* External function for serial output */
 extern void serial_puts(const char *str);
 extern void serial_putc(char c);
+
+/* Global kernel command line (max 1024 bytes) */
+static char kernel_cmdline[1024];
 
 /* Helper: Convert number to hex string and print */
 static void put_hex(uint64_t value) {
@@ -35,6 +39,95 @@ static void put_hex(uint64_t value) {
     while (i <= 15) {
         serial_putc(buf[i++]);
     }
+}
+
+/* Parse multiboot2 command line tag */
+static void parse_cmdline(multiboot_tag_cmdline_t *tag) {
+    const char *src = tag->cmdline;
+    size_t i = 0;
+
+    /* Copy cmdline string to global buffer, truncate to 1023 bytes */
+    while (i < sizeof(kernel_cmdline) - 1 && src[i] != '\0') {
+        kernel_cmdline[i] = src[i];
+        i++;
+    }
+
+    /* Ensure null-termination */
+    kernel_cmdline[i] = '\0';
+    serial_puts("CMDLINE: Parsed from multiboot: ");
+    serial_puts(kernel_cmdline);
+    serial_puts("\n");
+}
+
+/* Simple key-value parser for cmdline */
+/* Format: key1=value1 key2=value2 or key1="quoted value" */
+static const char *cmdline_get_value(const char *key) {
+    static char value_buf[256];
+    const char *p = kernel_cmdline;
+    size_t key_len = 0;
+
+    /* Get key length */
+    const char *key_end = key;
+    while (*key_end != '\0') {
+        key_len++;
+        key_end++;
+    }
+
+    /* Search for key=value pattern */
+    while (*p != '\0') {
+        /* Skip leading whitespace */
+        while (*p == ' ') p++;
+
+        /* Check if this token starts with our key */
+        if (p[0] == '-' && p[1] == '-') {
+            p += 2; /* Skip '--' */
+        }
+
+        /* Compare key */
+        size_t i = 0;
+        int match = 1;
+        while (i < key_len && p[i] != '\0' && p[i] != '=' && p[i] != ' ') {
+            if (p[i] != key[i]) {
+                match = 0;
+                break;
+            }
+            i++;
+        }
+
+        /* Check for match followed by '=' */
+        if (match && p[i] == '=') {
+            /* Found it! Copy value */
+            p += i + 1; /* Skip key and '=' */
+
+            /* Check if value is quoted */
+            int in_quotes = 0;
+            if (*p == '"') {
+                in_quotes = 1;
+                p++; /* Skip opening quote */
+            }
+
+            size_t v = 0;
+            while (*p != '\0' && v < sizeof(value_buf) - 1) {
+                if (in_quotes) {
+                    if (*p == '"') {
+                        p++; /* Skip closing quote */
+                        break;
+                    }
+                    value_buf[v++] = *p++;
+                } else {
+                    if (*p == ' ') break;
+                    value_buf[v++] = *p++;
+                }
+            }
+            value_buf[v] = '\0';
+            return value_buf;
+        }
+
+        /* Skip to next token */
+        while (*p != '\0' && *p != ' ') p++;
+    }
+
+    return NULL;
 }
 
 /* Parse multiboot2 memory map tag */
@@ -100,7 +193,22 @@ void multiboot2_parse(uint32_t mbi_addr) {
     put_hex(mbi_addr);
     serial_puts("\n");
 
+    /* Check if multiboot info is valid */
+    if (mbi_addr == 0) {
+        serial_puts("PMM: No multiboot info provided\n");
+        goto use_default_cmdline;
+    }
+
     total_size = mbi->total_size;
+
+    /* If total_size is 0 or too small, boot loader didn't provide info */
+    if (total_size < sizeof(multiboot_info_t)) {
+        serial_puts("PMM: Invalid multiboot info (size=");
+        put_hex(total_size);
+        serial_puts("), using defaults\n");
+        goto use_default_cmdline;
+    }
+
     serial_puts("PMM: Total size: ");
     put_hex(total_size);
     serial_puts(" bytes\n");
@@ -120,6 +228,11 @@ void multiboot2_parse(uint32_t mbi_addr) {
         }
 
         switch (tag->type) {
+            case MULTIBOOT_TAG_CMDLINE:
+                serial_puts("CMDLINE: Found cmdline tag in multiboot info\n");
+                parse_cmdline((multiboot_tag_cmdline_t *)tag);
+                break;
+
             case MULTIBOOT_TAG_MMAP:
                 serial_puts("PMM: Found memory map tag\n");
                 parse_memory_map((multiboot_tag_mmap_t *)tag);
@@ -161,6 +274,22 @@ void multiboot2_parse(uint32_t mbi_addr) {
         }
     }
 
+use_default_cmdline:
+    /* Set default cmdline if multiboot info was invalid */
+    if (kernel_cmdline[0] == '\0') {
+        const char *default_cmdline = "quote=\"Mathematics is the queen of sciences\" --author=Gauss";
+        size_t i = 0;
+        while (i < sizeof(kernel_cmdline) - 1 && default_cmdline[i] != '\0') {
+            kernel_cmdline[i] = default_cmdline[i];
+            i++;
+        }
+        kernel_cmdline[i] = '\0';
+        serial_puts("CMDLINE: Using default: ");
+        serial_puts(kernel_cmdline);
+        serial_puts("\n");
+    }
+
+fallback:
     /* Fallback: If no memory info found, use default QEMU memory map */
     if (!found_memory) {
         serial_puts("PMM: No memory info found, using default map for QEMU\n");
@@ -171,4 +300,36 @@ void multiboot2_parse(uint32_t mbi_addr) {
     }
 
     serial_puts("PMM: Multiboot2 parsing complete\n");
+}
+
+/* Accessor function to get kernel command line */
+const char *multiboot_get_cmdline(void) {
+    serial_puts("CMDLINE: Parsing kernel command line...\n");
+
+    if (kernel_cmdline[0] != '\0') {
+        serial_puts("CMDLINE: Raw: '");
+        serial_puts(kernel_cmdline);
+        serial_puts("'\n");
+
+        /* Parse and display known keys */
+        const char *quote = cmdline_get_value("quote");
+        if (quote != NULL) {
+            serial_puts("CMDLINE: quote=\"");
+            serial_puts(quote);
+            serial_puts("\"\n");
+        }
+
+        const char *author = cmdline_get_value("author");
+        if (author != NULL) {
+            serial_puts("CMDLINE: author=");
+            serial_puts(author);
+            serial_puts("\n");
+        }
+
+        serial_puts("CMDLINE: Parsing complete\n");
+    } else {
+        serial_puts("CMDLINE: No command line specified\n");
+    }
+
+    return kernel_cmdline;
 }

@@ -67,6 +67,13 @@ typedef struct multiboot_tag_basic_meminfo {
     uint32_t mem_upper;
 } multiboot_tag_basic_meminfo_t;
 
+/* Command line tag structure */
+typedef struct multiboot_tag_cmdline {
+    uint32_t type;
+    uint32_t size;
+    char cmdline[];
+} multiboot_tag_cmdline_t;
+
 /* Multiboot2 header structure (for parsing the info structure) */
 typedef struct multiboot_info {
     uint32_t total_size;
@@ -75,5 +82,6 @@ typedef struct multiboot_info {
 
 /* Function prototypes */
 void multiboot2_parse(uint32_t mbi_addr);
+const char *multiboot_get_cmdline(void);
 
 #endif /* _KERNEL_MULTIBOOT2_H */

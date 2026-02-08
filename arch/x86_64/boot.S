@@ -14,10 +14,19 @@ multiboot_header_start:
     /* checksum */
     .long -(0xe85250d6 + 0 + (multiboot_header_end - multiboot_header_start))
 
-    /* End tag type */
-    .short 0
-    .short 0
-    .long 8
+    /* Information request tag - request cmdline and memory map */
+    .short 1                     /* type: information request */
+    .short 0                     /* flags */
+    .long 16                     /* size */
+
+    /* Requested tags: cmdline (1) and mmap (6) */
+    .long 1                      /* MULTIBOOT_TAG_CMDLINE */
+    .long 6                      /* MULTIBOOT_TAG_MMAP */
+
+    /* End tag */
+    .short 0                     /* type: end tag */
+    .short 0                     /* flags */
+    .long 8                      /* size */
 multiboot_header_end:
 
 /* External symbols from C code
@@ -152,7 +161,7 @@ boot_is_bsp:
     /* Set up temporary stack */
     mov $nk_boot_stack_top, %esp
 
-    /* Save Multiboot info pointer (passed in ebx) */
+    /* Save Multiboot info pointer (passed in ebx) to %esi */
     mov %ebx, %esi
 
     /* ============================================================
