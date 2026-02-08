@@ -148,15 +148,16 @@ def print_stats(grouped, period_name, top_n=10):
     # Sort by period key
     sorted_periods = sorted(grouped.items(), reverse=True)[:top_n]
 
-    print(f"\n{'='*80}")
+    print(f"\n{'='*90}")
     print(f"Top {len(sorted_periods)} {period_name} (most recent first)")
-    print(f"{'='*80}")
-    print(f"{'Period':<15} {'Commits':<10} {'Files':<10} {'+Lines':<12} {'-Lines':<12} {'Authors':<10}")
-    print(f"{'-'*80}")
+    print(f"{'='*90}")
+    print(f"{'Period':<15} {'Commits':<10} {'Files':<10} {'+Lines':<12} {'-Lines':<12} {'Net':<12} {'Authors':<10}")
+    print(f"{'-'*90}")
 
     for period, stats in sorted_periods:
+        net = stats['additions'] - stats['deletions']
         print(f"{period:<15} {stats['commits']:<10} {stats['files']:<10} "
-              f"{stats['additions']:<12} {stats['deletions']:<12} {len(stats['authors']):<10}")
+              f"{stats['additions']:<12} {stats['deletions']:<12} {net:<+12} {len(stats['authors']):<10}")
 
 
 def print_summary(commits):
