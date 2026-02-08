@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Nested Kernel Mappings Protection Test
+Nested Kernel Fault Injection Test
 
 This is a destructive test that verifies page fault protection
 by attempting to write to boot PML4 and expecting a page fault.
@@ -21,10 +21,11 @@ from output import TerminalOutput
 def parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description="Nested Kernel Mappings Protection Test",
+        description="Nested Kernel Fault Injection Test",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-This is a DESTRUCTIVE test that verifies page fault protection.
+This is a DESTRUCTIVE test that verifies page fault protection
+via fault injection.
 
 The test attempts to write to boot PML4 and expects a page fault
 to be triggered, demonstrating that the nested kernel protection
@@ -56,7 +57,7 @@ Examples:
 
 
 def run_custom_checks(assertions, output):
-    """Run custom assertions for nk_protection test.
+    """Run custom assertions for nk_fault_injection test.
 
     Args:
         assertions: Assertions object
@@ -69,9 +70,9 @@ def run_custom_checks(assertions, output):
 
     # Test 1: NK protection test initiated
     if assertions.assert_pattern_exists(r"NESTED KERNEL PROTECTION TESTS"):
-        output.print_success("NK protection test initiated")
+        output.print_success("NK fault injection test initiated")
     else:
-        output.print_failure("NK protection test initiated")
+        output.print_failure("NK fault injection test initiated")
         all_passed = False
 
     # Test 2: Running in unprivileged mode
@@ -107,14 +108,14 @@ def main():
     output = TerminalOutput()
 
     # Print test header
-    output.print_header("Nested Kernel Mappings Protection Test", width=40)
+    output.print_header("Nested Kernel Fault Injection Test", width=40)
     print(f"CPU Count: 1")
     print(f"Timeout: {args.timeout} seconds")
     print()
 
     # Create framework
     config = TestConfig(
-        test_name="nk_protection",
+        test_name="nk_fault_injection",
         cpu_count=1,
         qemu_timeout=args.timeout,
         verbose=args.verbose,
@@ -133,7 +134,7 @@ def main():
     print()
 
     if framework.run_test_with_assertions(
-        "nk_protection",
+        "nk_fault_injection",
         lambda a: run_custom_checks(a, output),
         cpu_count=1
     ):

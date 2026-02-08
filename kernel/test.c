@@ -65,7 +65,7 @@ static size_t simple_strlen(const char *s) {
 extern int run_pmm_tests(void);
 extern int run_slab_tests(void);
 extern int run_spinlock_tests(void);
-extern int run_nk_protection_tests(void);
+extern int run_nk_fault_injection_tests(void);
 extern int run_apic_timer_tests(void);
 extern int run_boot_tests(void);
 extern int run_smp_tests(void);
@@ -113,9 +113,9 @@ const test_case_t test_registry[] = {
 #endif
 #if CONFIG_NK_PROTECTION_TESTS
     {
-        .name = "nk_protection",
-        .description = "Nested kernel mappings protection tests (destructive)",
-        .run_func = run_nk_protection_tests,
+        .name = "nk_fault_injection",
+        .description = "Nested kernel fault injection tests (destructive)",
+        .run_func = run_nk_fault_injection_tests,
         .enabled = 1,
         .auto_run = 0  /* Manual only (destructive test) */
     },

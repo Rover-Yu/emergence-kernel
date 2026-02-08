@@ -1,4 +1,4 @@
-/* nk_protection_test.c - Nested Kernel Mappings Protection Tests */
+/* nk_fault_injection_test.c - Nested Kernel Fault Injection Tests */
 
 #include <stdint.h>
 #include "arch/x86_64/serial.h"
@@ -70,12 +70,12 @@ static void test_write_stack(const char *name, volatile uint64_t *addr) {
 }
 
 /**
- * run_nk_protection_tests - Run all nested kernel mappings protection tests
+ * run_nk_fault_injection_tests - Run all nested kernel fault injection tests
  * Returns: Never returns (system shuts down on first fault)
  */
-int run_nk_protection_tests(void) {
+int run_nk_fault_injection_tests(void) {
     serial_puts("\n========================================\n");
-    serial_puts("NESTED KERNEL PROTECTION TESTS\n");
+    serial_puts("NESTED KERNEL FAULT INJECTION TESTS\n");
     serial_puts("========================================\n");
 
     /* Verify unprivileged mode */

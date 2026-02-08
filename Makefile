@@ -76,9 +76,9 @@ PMM_TEST_OBJ := $(BUILD_DIR)/kernel_pmm_test.o
 TIMER_TEST_SRC := tests/timer/timer_test.c
 TIMER_TEST_OBJ := $(BUILD_DIR)/kernel_timer_test.o
 
-# Nested kernel mappings protection test sources (conditionally compiled)
-NK_PROTECTION_TEST_SRC := tests/nested_kernel_mapping_protection/nk_protection_test.c
-NK_PROTECTION_TEST_OBJ := $(BUILD_DIR)/nk_protection_test.o
+# Nested kernel fault injection test sources (conditionally compiled)
+NK_PROTECTION_TEST_SRC := tests/nk_fault_injection/nk_fault_injection_test.c
+NK_PROTECTION_TEST_OBJ := $(BUILD_DIR)/nk_fault_injection_test.o
 
 # Boot test sources (conditionally compiled)
 BOOT_TEST_SRC := tests/boot/boot_test.c
@@ -251,7 +251,7 @@ $(TIMER_TEST_OBJ): $(TIMER_TEST_SRC) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 endif
 
-# Compile nested kernel mappings protection test (from tests/nested_kernel_mapping_protection/) - only if enabled
+# Compile nested kernel fault injection test (from tests/nk_fault_injection/) - only if enabled
 ifeq ($(CONFIG_NK_PROTECTION_TESTS),1)
 $(NK_PROTECTION_TEST_OBJ): $(NK_PROTECTION_TEST_SRC) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -373,9 +373,9 @@ test-nested-kernel:
 	@echo "Running Nested Kernel Invariants Test..."
 	@python3 tests/nested_kernel_invariants/nested_kernel_invariants_test.py
 
-test-nk-protection:
-	@echo "Running Nested Kernel Mappings Protection Test..."
-	@python3 tests/nk_protection/nk_protection_test.py
+test-nk-fault-injection:
+	@echo "Running Nested Kernel Fault Injection Test..."
+	@python3 tests/nk_fault_injection/nk_fault_injection_test.py
 
 test-readonly-visibility:
 	@echo "Running Read-Only Visibility Test..."
