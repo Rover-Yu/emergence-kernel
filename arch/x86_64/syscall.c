@@ -41,19 +41,26 @@ extern void user_program_start(void);
 
 /* User program entry - must be executed in ring 3 */
 void inline_user_program(void) {
-    /* Simple test: infinite loop to verify we reach ring 3 */
-    volatile int counter = 0;
+    /* Simple test: make a syscall to verify ring 3 execution */
+    volatile int syscall_worked = 0;
+
+    /* Make a write syscall to verify we can call into kernel from ring 3 */
+    const char *msg = "[USER] Ring 3 user program running!";
+    __asm__ volatile (
+        "mov $1, %%rax\n"        /* SYS_write */
+        "mov $1, %%rdi\n"        /* fd = stdout */
+        "mov %1, %%rsi\n"        /* buf */
+        "mov $0, %%rdx\n"        /* count = 0 */
+        "syscall\n"
+        "mov $1, %0\n"           /* Mark success */
+        : "=m"(syscall_worked)
+        : "r"(msg)
+        : "rax", "rdi", "rsi", "rdx", "rcx", "r11", "memory"
+    );
+
+    /* Infinite loop after successful syscall */
     while (1) {
-        counter++;
-        if (counter > 1000000) {
-            /* After counting, try a syscall */
-            __asm__ volatile (
-                "mov $2, %%rax\n"      /* SYS_exit */
-                "mov $0, %%rdi\n"      /* Exit code = 0 */
-                "syscall\n"
-                : : : "rax", "rdi", "rcx", "r11"
-            );
-        }
+        __asm__ volatile ("pause");
     }
 }
 

@@ -140,12 +140,34 @@ void kernel_main(uint32_t multiboot_info_addr) {
         /* Initialize IPI driver */
         ipi_driver_init();
 
-        /* Initialize nested kernel monitor */
+        /* Initialize nested kernel monitor
+         * Only disable monitor for usermode tests to allow ring 3 transition */
         serial_puts("KERNEL: Initializing monitor...\n");
-#if 0  /* TEMPORARILY DISABLED: Test if monitor interferes with ring 3 transition */
-        monitor_init();
+#if CONFIG_USERMODE_TEST
+        /* Check if usermode test is specifically requested */
+        extern const char *cmdline_get_value(const char *key);
+        const char *test_value = cmdline_get_value("test");
+
+        /* Simple string comparison */
+        int is_usermode = 0;
+        if (test_value) {
+            const char *p = test_value;
+            const char *u = "usermode";
+            while (*u && *p && *p == *u) {
+                p++; u++;
+            }
+            if (*u == '\0' && (*p == '\0' || *p == ' ')) {
+                is_usermode = 1;
+            }
+        }
+
+        if (is_usermode) {
+            serial_puts("KERNEL: MONITOR DISABLED for ring 3 usermode test\n");
+        } else {
+            monitor_init();
+        }
 #else
-        serial_puts("KERNEL: MONITOR DISABLED for ring 3 test\n");
+        monitor_init();
 #endif
 
         /* Pre-allocate user stack BEFORE switching page tables

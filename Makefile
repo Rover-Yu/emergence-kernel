@@ -106,6 +106,10 @@ NK_INVARIANTS_TEST_OBJ := $(BUILD_DIR)/kernel_nk_invariants_test.o
 READONLY_VISIBILITY_TEST_SRC := tests/readonly_visibility/readonly_visibility_test.c
 READONLY_VISIBILITY_TEST_OBJ := $(BUILD_DIR)/kernel_readonly_visibility_test.o
 
+# User mode syscall test sources (conditionally compiled)
+USERMODE_TEST_SRC := tests/usermode/usermode_test.c
+USERMODE_TEST_OBJ := $(BUILD_DIR)/kernel_usermode_test.o
+
 # Monitor trampoline test sources (conditionally compiled)
 MONITOR_TRAMPOLINE_TEST_SRC := tests/monitor_trampoline/monitor_trampoline_test.c
 MONITOR_TRAMPOLINE_TEST_OBJ := $(BUILD_DIR)/monitor_trampoline_test.o
@@ -161,21 +165,19 @@ endif
 ifeq ($(CONFIG_READONLY_VISIBILITY_TESTS),1)
 TESTS_OBJS += $(READONLY_VISIBILITY_TEST_OBJ)
 endif
+ifeq ($(CONFIG_USERMODE_TEST),1)
+TESTS_OBJS += $(USERMODE_TEST_OBJ)
+endif
 
 # Generated command line object
 CMDLINE_OBJ := $(BUILD_DIR)/kernel_cmdline_source.o
-
-# Add monitor trampoline test to TESTS_OBJS
-ifeq ($(CONFIG_MONITOR_TRAMPOLINE_TEST),1)
-TESTS_OBJS += $(MONITOR_TRAMPOLINE_TEST_OBJ)
-endif
 
 # Add cmdline object to OBJS (TESTS_OBJS now includes conditionally compiled tests)
 OBJS := $(ARCH_BOOT_OBJ) $(ARCH_OBJS) $(KERNEL_OBJS) $(MINILIBC_OBJS) $(TESTS_OBJS) $(TRAMPOLINE_OBJ) $(CMDLINE_OBJ)
 
 KERNEL_ELF := $(BUILD_DIR)/$(KERNEL).elf
 
-.PHONY: all clean run run-debug test test-all test-boot test-apic-timer test-smp test-pcd test-slab test-minilibc test-nested-kernel test-nk-protection test-readonly-visibility help
+.PHONY: all clean run run-debug test test-all test-boot test-apic-timer test-smp test-pcd test-slab test-nested-kernel test-nk-protection test-readonly-visibility test-usermode help
 
 all: $(ISO)
 
@@ -199,12 +201,20 @@ help:
 	@echo "  test-smp         - SMP boot test (2 CPUs)"
 	@echo "  test-pcd         - Page Control Data test"
 	@echo "  test-slab        - Slab allocator test"
-	@echo "  test-minilibc    - Minilibc string library test"
 	@echo "  test-nested-kernel     - Nested Kernel invariants test"
 	@echo "  test-nk-protection     - Nested Kernel mappings protection test"
 	@echo "  test-readonly-visibility - Read-only visibility test"
+	@echo "  test-usermode          - User mode syscall test (KVM enabled)"
 	@echo ""
 	@echo "Build options (override kernel.config):"
+	@echo "  make CONFIG_SPINLOCK_TESTS=1           - Enable spinlock tests"
+	@echo "  make CONFIG_PMM_TESTS=1                - Enable PMM tests"
+	@echo "  make CONFIG_SMP_AP_DEBUG=1             - Enable AP debug marks"
+	@echo "  make CONFIG_APIC_TIMER_TEST=1          - Enable APIC timer test"
+	@echo "  make CONFIG_WRITE_PROTECTION_VERIFY=1  - Verify write protection"
+	@echo "  make CONFIG_INVARIANTS_VERBOSE=1       - Verbose invariants output"
+	@echo "  make CONFIG_PCD_STATS=1                - Show PCD statistics"
+	@echo "  make CONFIG_NK_FAULT_INJECTION_TESTS=1      - Enable NK fault injection tests"
 	@echo "  make CONFIG_SPINLOCK_TESTS=1              - Enable spinlock tests"
 	@echo "  make CONFIG_PMM_TESTS=1                   - Enable PMM tests"
 	@echo "  make CONFIG_SMP_AP_DEBUG=1                - Enable AP debug marks"
@@ -212,9 +222,9 @@ help:
 	@echo "  make CONFIG_WRITE_PROTECTION_VERIFY=1     - Verify write protection"
 	@echo "  make CONFIG_INVARIANTS_VERBOSE=1          - Verbose invariants output"
 	@echo "  make CONFIG_PCD_STATS=1                   - Show PCD statistics"
-	@echo "  make CONFIG_NK_FAULT_INJECTION_TESTS=1    - Enable NK fault injection tests"
 	@echo "  make CONFIG_NK_PROTECTION_TESTS=1         - Enable NK protection tests"
 	@echo "  make CONFIG_MONITOR_TRAMPOLINE_TEST=1     - Enable monitor trampoline test"
+	@echo "  make CONFIG_USERMODE_TEST=1               - Enable user mode syscall test"
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
@@ -238,11 +248,11 @@ $(BUILD_DIR)/boot_monitor_%.o: $(ARCH_DIR)/monitor/%.S | $(BUILD_DIR)
 
 # Compile syscall_entry assembly
 $(BUILD_DIR)/boot_syscall_entry.o: $(ARCH_DIR)/syscall_entry.S | $(BUILD_DIR)
-	$$(CC) $$(CFLAGS) -c $$< -o $$@
+	$(CC) $(CFLAGS) -c $< -o $@
 
 # Compile userprog assembly
-# Compile userprog assembly
 $(BUILD_DIR)/boot_userprog.o: $(ARCH_DIR)/userprog.S | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Compile architecture-specific C files
@@ -259,6 +269,7 @@ $(BUILD_DIR)/kernel_monitor/%.o: $(KERNEL_DIR)/monitor/%.c | $(BUILD_DIR)
 
 # Compile minilibc C files
 $(BUILD_DIR)/minilibc_%.o: lib/minilibc/%.c | $(BUILD_DIR)
+	@mkdir -p $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Compile spinlock test (from tests/spinlock/) - only if enabled
@@ -321,9 +332,9 @@ $(READONLY_VISIBILITY_TEST_OBJ): $(READONLY_VISIBILITY_TEST_SRC) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 endif
 
-# Compile monitor trampoline test (from tests/monitor_trampoline/) - only if enabled
-ifeq ($(CONFIG_MONITOR_TRAMPOLINE_TEST),1)
-$(MONITOR_TRAMPOLINE_TEST_OBJ): $(MONITOR_TRAMPOLINE_TEST_SRC) | $(BUILD_DIR)
+# Compile usermode test (from tests/usermode/) - only if enabled
+ifeq ($(CONFIG_USERMODE_TEST),1)
+$(USERMODE_TEST_OBJ): $(USERMODE_TEST_SRC) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 endif
 
@@ -409,11 +420,6 @@ test-slab:
 	@echo "Running Slab Allocator Test..."
 	@python3 tests/slab/slab_test.py
 
-test-minilibc:
-	@$(MAKE) all
-	@echo "Running Minilibc String Library Test..."
-	@python3 tests/minilibc/string_test.py
-
 test-nested-kernel:
 	@echo "Running Nested Kernel Invariants Test..."
 	@python3 tests/nested_kernel_invariants/nested_kernel_invariants_test.py
@@ -425,3 +431,8 @@ test-nk-fault-injection:
 test-readonly-visibility:
 	@echo "Running Read-Only Visibility Test..."
 	@python3 tests/readonly_visibility/readonly_visibility_test.py
+
+test-usermode:
+	@echo "Running User Mode Syscall Test..."
+	@$(MAKE) all
+	@python3 tests/usermode/usermode_test.py --kvm

@@ -25,6 +25,10 @@ syscall_entry:
     mov %rsp, %r15
     leaq nk_boot_stack_top(%rip), %rsp
 
+    /* Save RCX (return RIP) and R11 (RFLAGS) for later use */
+    push %rcx
+    push %r11
+
     /* Set up syscall arguments for C handler */
     /* Syscall number in RAX, args in RDI, RSI, RDX */
     mov %rdx, %r8        /* arg3 */
@@ -33,6 +37,10 @@ syscall_entry:
     mov %rax, %rdi       /* syscall number in RDI */
 
     call syscall_handler
+
+    /* Restore RCX and R11 */
+    pop %r11
+    pop %rcx
 
     /* Restore user stack pointer */
     mov %r15, %rsp
@@ -45,9 +53,13 @@ syscall_entry:
     pop %rbp
     pop %rbx
 
-    /* SYSRET returns to: RCX (user RIP), R11 (user RFLAGS) */
-    /* Switches to: user CS (from STAR), CPL 3 */
-    sysretq
+    /* Return from syscall
+     * For ring 0 testing: jmp *%rcx (return address saved by SYSCALL)
+     * For ring 3 calls: sysretq (would switch to CPL 3)
+     *
+     * For now, use jmp *%rcx which works for ring 0 -> ring 0 syscalls
+     * TODO: Add CPL detection for proper ring 3 support */
+    jmp *%rcx
 
 /* Function to jump to user mode using sysretq
  * sysretq switches from ring 0 to ring 3 using STAR MSR.

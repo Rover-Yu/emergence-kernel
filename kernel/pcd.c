@@ -25,6 +25,20 @@ extern void serial_puts(const char *str);
 extern void serial_putc(char c);
 extern void serial_put_hex(uint64_t value);
 
+/* Internal PCD function for monitor access */
+void _pcd_set_type_internal(uint64_t phys_addr, uint8_t type) {
+    /* Convert physical address to page index */
+    uint64_t page_index = (phys_addr >> PAGE_SHIFT) - pcd_state.base_page;
+
+    /* Check bounds */
+    if (page_index >= pcd_state.max_pages) {
+        return;
+    }
+
+    /* Set the page type */
+    pcd_state.pages[page_index].type = type;
+}
+
 /* ============================================================================
  * Internal Helpers
  * ============================================================================ */

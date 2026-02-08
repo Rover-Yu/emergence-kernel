@@ -575,6 +575,7 @@ extern int run_smp_tests(void);
 extern int run_pcd_tests(void);
 extern int run_nested_kernel_invariants_tests(void);
 extern int run_readonly_visibility_tests(void);
+extern int run_usermode_tests(void);
 
 /* Test registry array */
 const test_case_t test_registry[] = {
@@ -675,6 +676,15 @@ const test_case_t test_registry[] = {
         .run_func = run_minilibc_tests,
         .enabled = 1,
         .auto_run = 1  /* Auto-run after kernel init */
+    },
+#endif
+#if CONFIG_USERMODE_TEST
+    {
+        .name = "usermode",
+        .description = "User mode syscall and ring 3 execution tests",
+        .run_func = run_usermode_tests,
+        .enabled = 1,
+        .auto_run = 0  /* Manual only */
     },
 #endif
     { .name = NULL }  /* Sentinel */

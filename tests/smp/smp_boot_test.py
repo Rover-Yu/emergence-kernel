@@ -44,9 +44,9 @@ Examples:
     parser.add_argument(
         "--timeout",
         type=int,
-        default=5,
+        default=3,
         metavar="SECONDS",
-        help="QEMU timeout in seconds (default: 5)"
+        help="QEMU timeout in seconds (default: 3)"
     )
     parser.add_argument(
         "--cpus",
