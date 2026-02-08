@@ -214,7 +214,7 @@ void kernel_main(uint32_t multiboot_info_addr) {
             serial_put_hex(user_prog_addr);
             serial_puts("\n");
 
-#if CONFIG_NK_WRITE_PROTECTION_VERIFY
+#if CONFIG_TESTS_NK_INVARIANTS_VERIFY
             /* Verify all Nested Kernel invariants (including CR0.WP) */
             monitor_verify_invariants();
 #endif
