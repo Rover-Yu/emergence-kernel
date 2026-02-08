@@ -224,7 +224,11 @@ $(KERNEL_ELF): $(OBJS)
 	$(LD) $(LDFLAGS) -T $(ARCH_LINKER) $^ -o $@
 
 # Create ISO
-$(ISO): $(KERNEL_ELF) | $(ISO_DIR)
+# Always rebuild grub.cfg when ISO is built (to pick up KERNEL_CMDLINE changes)
+.PHONY: always-rebuild-grub
+always-rebuild-grub:
+
+$(ISO): $(KERNEL_ELF) always-rebuild-grub | $(ISO_DIR)
 	cp $(KERNEL_ELF) $(ISO_DIR)/boot/$(KERNEL).elf
 	echo 'set timeout=0' > $(ISO_DIR)/boot/grub/grub.cfg
 	echo 'set default=0' >> $(ISO_DIR)/boot/grub/grub.cfg
