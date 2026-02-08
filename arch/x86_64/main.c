@@ -94,7 +94,7 @@ void kernel_main(uint32_t multiboot_info_addr) {
     /* Initialize test framework (parses test= parameter from cmdline) */
     test_framework_init();
 
-#if CONFIG_PMM_TESTS
+#if CONFIG_TESTS_PMM
     /* PMM Tests */
     if (test_should_run("pmm")) {
         test_run_by_name("pmm");
@@ -109,7 +109,7 @@ void kernel_main(uint32_t multiboot_info_addr) {
     extern void pcd_init(void);
     pcd_init();
 
-#if CONFIG_SLAB_TESTS
+#if CONFIG_TESTS_SLAB
     /* Slab Allocator Tests */
     if (test_should_run("slab")) {
         test_run_by_name("slab");
@@ -143,7 +143,7 @@ void kernel_main(uint32_t multiboot_info_addr) {
         /* Initialize nested kernel monitor
          * Only disable monitor for usermode tests to allow ring 3 transition */
         serial_puts("KERNEL: Initializing monitor...\n");
-#if CONFIG_USERMODE_TEST
+#if CONFIG_TESTS_USERMODE
         /* Check if usermode test is specifically requested */
         extern const char *cmdline_get_value(const char *key);
         const char *test_value = cmdline_get_value("test");
@@ -172,7 +172,7 @@ void kernel_main(uint32_t multiboot_info_addr) {
 
         /* Pre-allocate user stack BEFORE switching page tables
          * PMM is only accessible with boot page tables */
-#if CONFIG_USERMODE_TEST
+#if CONFIG_TESTS_USERMODE
         extern void *prealloc_user_stack(void);
         void *stack = prealloc_user_stack();
         if (stack) {
@@ -219,13 +219,13 @@ void kernel_main(uint32_t multiboot_info_addr) {
             monitor_verify_invariants();
 #endif
 
-#if CONFIG_NK_PCD_STATS
+#if CONFIG_DEBUG_PCD_STATS
             /* Dump PCD statistics for debugging */
             extern void pcd_dump_stats(void);
             pcd_dump_stats();
 #endif
 
-#if CONFIG_PMM_TESTS
+#if CONFIG_TESTS_PMM
             /* PMM Tests - now running after monitor initialization
              * Uses monitor_pmm_alloc() for proper PCD enforcement */
             serial_puts("[ PMM tests ] Running allocation tests (via monitor)...\n");
@@ -306,7 +306,7 @@ void kernel_main(uint32_t multiboot_info_addr) {
         /* Mark BSP as ready */
         smp_mark_cpu_ready(0);
 
-#if CONFIG_SPINLOCK_TESTS
+#if CONFIG_TESTS_SPINLOCK
         /* Keep spinlock_test_start = 0 during AP startup
          * APs will wait for this flag to be set before joining tests */
         extern volatile int spinlock_test_start;
@@ -322,7 +322,7 @@ void kernel_main(uint32_t multiboot_info_addr) {
          * This allows the APIC timer to generate interrupts */
         enable_interrupts();
 
-#if CONFIG_SPINLOCK_TESTS
+#if CONFIG_TESTS_SPINLOCK
         /* Spin lock tests - only run if selected via cmdline */
         if (test_should_run("spinlock")) {
             /* Enable spin lock test mode - APs are polling for this flag
@@ -343,63 +343,63 @@ void kernel_main(uint32_t multiboot_info_addr) {
         }
 #endif
 
-#if CONFIG_APIC_TIMER_TEST
+#if CONFIG_TESTS_APIC_TIMER
         /* APIC Timer Tests - run after APs are ready */
         if (test_should_run("timer")) {
             test_run_by_name("timer");
         }
 #endif
 
-#if CONFIG_NK_FAULT_INJECTION_TESTS
+#if CONFIG_TESTS_NK_FAULT_INJECTION
         /* NK protection tests - manual only, run if explicitly selected */
         if (test_should_run("nk_protection")) {
             test_run_by_name("nk_protection");  /* Never returns */
         }
 #endif
 
-#if CONFIG_BOOT_TESTS
+#if CONFIG_TESTS_BOOT
         /* Boot tests - manual only, run if explicitly selected */
         if (test_should_run("boot")) {
             test_run_by_name("boot");
         }
 #endif
 
-#if CONFIG_SMP_TESTS
+#if CONFIG_TESTS_SMP
         /* SMP tests - manual only, run if explicitly selected */
         if (test_should_run("smp")) {
             test_run_by_name("smp");
         }
 #endif
 
-#if CONFIG_PCD_TESTS
+#if CONFIG_TESTS_PCD
         /* PCD tests - manual only, run if explicitly selected */
         if (test_should_run("pcd")) {
             test_run_by_name("pcd");
         }
 #endif
 
-#if CONFIG_NK_INVARIANTS_TESTS
+#if CONFIG_TESTS_NK_INVARIANTS
         /* Nested Kernel invariants tests - manual only, run if explicitly selected */
         if (test_should_run("nested_kernel_invariants")) {
             test_run_by_name("nested_kernel_invariants");
         }
 #endif
 
-#if CONFIG_NK_READONLY_VISIBILITY_TESTS
+#if CONFIG_TESTS_NK_READONLY_VISIBILITY
         /* Read-only visibility tests - manual only, run if explicitly selected */
         if (test_should_run("readonly_visibility")) {
             test_run_by_name("readonly_visibility");
         }
 #endif
 
-#if CONFIG_MINILIBC_TESTS
+#if CONFIG_TESTS_MINILIBC
         /* Minilibc string library tests - auto-run if explicitly selected */
         if (test_should_run("minilibc")) {
             test_run_by_name("minilibc");
         }
 #endif
 
-#if CONFIG_USERMODE_TEST
+#if CONFIG_TESTS_USERMODE
         /* User mode tests - manual only, run if explicitly selected */
         if (test_should_run("usermode")) {
             test_run_by_name("usermode");

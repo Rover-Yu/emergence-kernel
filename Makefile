@@ -25,23 +25,23 @@ GRUB_MKRESCUE := grub-mkrescue
 
 # Flags (x86_64 with multiboot support)
 CFLAGS := -ffreestanding -O2 -Wall -g -nostdlib -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2 -I.
-CFLAGS += -DCONFIG_SPINLOCK_TESTS=$(CONFIG_SPINLOCK_TESTS)
-CFLAGS += -DCONFIG_PMM_TESTS=$(CONFIG_PMM_TESTS)
-CFLAGS += -DCONFIG_SLAB_TESTS=$(CONFIG_SLAB_TESTS)
-CFLAGS += -DCONFIG_SMP_AP_DEBUG=$(CONFIG_SMP_AP_DEBUG)
-CFLAGS += -DCONFIG_APIC_TIMER_TEST=$(CONFIG_APIC_TIMER_TEST)
+CFLAGS += -DCONFIG_TESTS_SPINLOCK=$(CONFIG_TESTS_SPINLOCK)
+CFLAGS += -DCONFIG_TESTS_PMM=$(CONFIG_TESTS_PMM)
+CFLAGS += -DCONFIG_TESTS_SLAB=$(CONFIG_TESTS_SLAB)
+CFLAGS += -DCONFIG_DEBUG_SMP_AP=$(CONFIG_DEBUG_SMP_AP)
+CFLAGS += -DCONFIG_TESTS_APIC_TIMER=$(CONFIG_TESTS_APIC_TIMER)
 CFLAGS += -DCONFIG_NK_WRITE_PROTECTION_VERIFY=$(CONFIG_NK_WRITE_PROTECTION_VERIFY)
-CFLAGS += -DCONFIG_NK_INVARIANTS_VERBOSE=$(CONFIG_NK_INVARIANTS_VERBOSE)
-CFLAGS += -DCONFIG_NK_PCD_STATS=$(CONFIG_NK_PCD_STATS)
-CFLAGS += -DCONFIG_NK_FAULT_INJECTION_TESTS=$(CONFIG_NK_FAULT_INJECTION_TESTS)
-CFLAGS += -DCONFIG_BOOT_TESTS=$(CONFIG_BOOT_TESTS)
-CFLAGS += -DCONFIG_SMP_TESTS=$(CONFIG_SMP_TESTS)
-CFLAGS += -DCONFIG_PCD_TESTS=$(CONFIG_PCD_TESTS)
-CFLAGS += -DCONFIG_NK_INVARIANTS_TESTS=$(CONFIG_NK_INVARIANTS_TESTS)
-CFLAGS += -DCONFIG_NK_READONLY_VISIBILITY_TESTS=$(CONFIG_NK_READONLY_VISIBILITY_TESTS)
-CFLAGS += -DCONFIG_NK_TRAMPOLINE_TEST=$(CONFIG_NK_TRAMPOLINE_TEST)
-CFLAGS += -DCONFIG_MINILIBC_TESTS=$(CONFIG_MINILIBC_TESTS)
-CFLAGS += -DCONFIG_USERMODE_TEST=$(CONFIG_USERMODE_TEST)
+CFLAGS += -DCONFIG_DEBUG_NK_INVARIANTS_VERBOSE=$(CONFIG_DEBUG_NK_INVARIANTS_VERBOSE)
+CFLAGS += -DCONFIG_DEBUG_PCD_STATS=$(CONFIG_DEBUG_PCD_STATS)
+CFLAGS += -DCONFIG_TESTS_NK_FAULT_INJECTION=$(CONFIG_TESTS_NK_FAULT_INJECTION)
+CFLAGS += -DCONFIG_TESTS_BOOT=$(CONFIG_TESTS_BOOT)
+CFLAGS += -DCONFIG_TESTS_SMP=$(CONFIG_TESTS_SMP)
+CFLAGS += -DCONFIG_TESTS_PCD=$(CONFIG_TESTS_PCD)
+CFLAGS += -DCONFIG_TESTS_NK_INVARIANTS=$(CONFIG_TESTS_NK_INVARIANTS)
+CFLAGS += -DCONFIG_TESTS_NK_READONLY_VISIBILITY=$(CONFIG_TESTS_NK_READONLY_VISIBILITY)
+CFLAGS += -DCONFIG_TESTS_NK_TRAMPOLINE=$(CONFIG_TESTS_NK_TRAMPOLINE)
+CFLAGS += -DCONFIG_TESTS_MINILIBC=$(CONFIG_TESTS_MINILIBC)
+CFLAGS += -DCONFIG_TESTS_USERMODE=$(CONFIG_TESTS_USERMODE)
 LDFLAGS := -nostdlib -m elf_x86_64
 
 # Architecture-specific sources (x86_64)
@@ -136,37 +136,37 @@ KERNEL_OBJS := $(patsubst $(KERNEL_DIR)/%.c,$(BUILD_DIR)/kernel_%.o,$(KERNEL_C_S
 TESTS_OBJS := $(patsubst $(TESTS_DIR)/%.c,$(BUILD_DIR)/test_%.o,$(TESTS_C_SRCS))
 
 # Conditionally include test objects (must be BEFORE OBJS is defined)
-ifeq ($(CONFIG_SPINLOCK_TESTS),1)
+ifeq ($(CONFIG_TESTS_SPINLOCK),1)
 TESTS_OBJS += $(SPINLOCK_TEST_OBJ)
 endif
-ifeq ($(CONFIG_PMM_TESTS),1)
+ifeq ($(CONFIG_TESTS_PMM),1)
 TESTS_OBJS += $(PMM_TEST_OBJ)
 endif
-ifeq ($(CONFIG_SLAB_TESTS),1)
+ifeq ($(CONFIG_TESTS_SLAB),1)
 TESTS_OBJS += $(SLAB_TEST_OBJ)
 endif
-ifeq ($(CONFIG_APIC_TIMER_TEST),1)
+ifeq ($(CONFIG_TESTS_APIC_TIMER),1)
 TESTS_OBJS += $(TIMER_TEST_OBJ)
 endif
-ifeq ($(CONFIG_NK_FAULT_INJECTION_TESTS),1)
+ifeq ($(CONFIG_TESTS_NK_FAULT_INJECTION),1)
 TESTS_OBJS += $(NK_PROTECTION_TEST_OBJ)
 endif
-ifeq ($(CONFIG_BOOT_TESTS),1)
+ifeq ($(CONFIG_TESTS_BOOT),1)
 TESTS_OBJS += $(BOOT_TEST_OBJ)
 endif
-ifeq ($(CONFIG_SMP_TESTS),1)
+ifeq ($(CONFIG_TESTS_SMP),1)
 TESTS_OBJS += $(SMP_TEST_OBJ)
 endif
-ifeq ($(CONFIG_PCD_TESTS),1)
+ifeq ($(CONFIG_TESTS_PCD),1)
 TESTS_OBJS += $(PCD_TEST_OBJ)
 endif
-ifeq ($(CONFIG_NK_INVARIANTS_TESTS),1)
+ifeq ($(CONFIG_TESTS_NK_INVARIANTS),1)
 TESTS_OBJS += $(NK_INVARIANTS_TEST_OBJ)
 endif
-ifeq ($(CONFIG_NK_READONLY_VISIBILITY_TESTS),1)
+ifeq ($(CONFIG_TESTS_NK_READONLY_VISIBILITY),1)
 TESTS_OBJS += $(READONLY_VISIBILITY_TEST_OBJ)
 endif
-ifeq ($(CONFIG_USERMODE_TEST),1)
+ifeq ($(CONFIG_TESTS_USERMODE),1)
 TESTS_OBJS += $(USERMODE_TEST_OBJ)
 endif
 
@@ -208,24 +208,27 @@ help:
 	@echo "  test-usermode          - User mode syscall test (KVM enabled)"
 	@echo ""
 	@echo "Build options (override kernel.config):"
-	@echo "  make CONFIG_SPINLOCK_TESTS=1           - Enable spinlock tests"
-	@echo "  make CONFIG_PMM_TESTS=1                - Enable PMM tests"
-	@echo "  make CONFIG_SMP_AP_DEBUG=1             - Enable AP debug marks"
-	@echo "  make CONFIG_APIC_TIMER_TEST=1          - Enable APIC timer test"
+	@echo "  make CONFIG_TESTS_SPINLOCK=1             - Enable spinlock tests"
+	@echo "  make CONFIG_TESTS_PMM=1                  - Enable PMM tests"
+	@echo "  make CONFIG_TESTS_SLAB=1                  - Enable slab allocator tests"
+	@echo "  make CONFIG_TESTS_APIC_TIMER=1            - Enable APIC timer test"
+	@echo "  make CONFIG_TESTS_BOOT=1                  - Enable boot tests"
+	@echo "  make CONFIG_TESTS_SMP=1                   - Enable SMP tests"
+	@echo "  make CONFIG_TESTS_PCD=1                   - Enable PCD tests"
+	@echo "  make CONFIG_TESTS_MINILIBC=1              - Enable minilibc tests"
+	@echo "  make CONFIG_TESTS_USERMODE=1              - Enable user mode syscall tests"
+	@echo "  make CONFIG_TESTS_NK_INVARIANTS=1          - Enable NK invariants tests"
+	@echo "  make CONFIG_TESTS_NK_READONLY_VISIBILITY=1 - Enable NK read-only visibility tests"
+	@echo "  make CONFIG_TESTS_NK_FAULT_INJECTION=1    - Enable NK fault injection tests"
+	@echo "  make CONFIG_TESTS_NK_TRAMPOLINE=1         - Enable NK trampoline test"
+	@echo ""
+	@echo "Debug options:"
+	@echo "  make CONFIG_DEBUG_SMP_AP=1                - Enable SMP AP debug marks"
+	@echo "  make CONFIG_DEBUG_PCD_STATS=1             - Show PCD statistics"
+	@echo "  make CONFIG_DEBUG_NK_INVARIANTS_VERBOSE=1 - Verbose NK invariants output"
+	@echo ""
+	@echo "Nested Kernel options:"
 	@echo "  make CONFIG_NK_WRITE_PROTECTION_VERIFY=1  - Verify write protection"
-	@echo "  make CONFIG_NK_INVARIANTS_VERBOSE=1       - Verbose invariants output"
-	@echo "  make CONFIG_NK_PCD_STATS=1                - Show PCD statistics"
-	@echo "  make CONFIG_NK_FAULT_INJECTION_TESTS=1      - Enable NK fault injection tests"
-	@echo "  make CONFIG_SPINLOCK_TESTS=1              - Enable spinlock tests"
-	@echo "  make CONFIG_PMM_TESTS=1                   - Enable PMM tests"
-	@echo "  make CONFIG_SMP_AP_DEBUG=1                - Enable AP debug marks"
-	@echo "  make CONFIG_APIC_TIMER_TEST=1             - Enable APIC timer test"
-	@echo "  make CONFIG_NK_WRITE_PROTECTION_VERIFY=1     - Verify write protection"
-	@echo "  make CONFIG_NK_INVARIANTS_VERBOSE=1          - Verbose invariants output"
-	@echo "  make CONFIG_NK_PCD_STATS=1                   - Show PCD statistics"
-	@echo "  make CONFIG_NK_PROTECTION_TESTS=1         - Enable NK protection tests"
-	@echo "  make CONFIG_NK_TRAMPOLINE_TEST=1     - Enable monitor trampoline test"
-	@echo "  make CONFIG_USERMODE_TEST=1               - Enable user mode syscall test"
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
@@ -274,67 +277,67 @@ $(BUILD_DIR)/minilibc_%.o: lib/minilibc/%.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Compile spinlock test (from tests/spinlock/) - only if enabled
-ifeq ($(CONFIG_SPINLOCK_TESTS),1)
+ifeq ($(CONFIG_TESTS_SPINLOCK),1)
 $(SPINLOCK_TEST_OBJ): $(SPINLOCK_TEST_SRC) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 endif
 
 # Compile slab allocator test (from tests/slab/) - only if enabled
-ifeq ($(CONFIG_SLAB_TESTS),1)
+ifeq ($(CONFIG_TESTS_SLAB),1)
 $(SLAB_TEST_OBJ): $(SLAB_TEST_SRC) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 endif
 
 # Compile PMM test (from tests/pmm/) - only if enabled
-ifeq ($(CONFIG_PMM_TESTS),1)
+ifeq ($(CONFIG_TESTS_PMM),1)
 $(PMM_TEST_OBJ): $(PMM_TEST_SRC) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 endif
 
 # Compile APIC timer test (from tests/timer/) - only if enabled
-ifeq ($(CONFIG_APIC_TIMER_TEST),1)
+ifeq ($(CONFIG_TESTS_APIC_TIMER),1)
 $(TIMER_TEST_OBJ): $(TIMER_TEST_SRC) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 endif
 
 # Compile nested kernel fault injection test (from tests/nk_fault_injection/) - only if enabled
-ifeq ($(CONFIG_NK_FAULT_INJECTION_TESTS),1)
+ifeq ($(CONFIG_TESTS_NK_FAULT_INJECTION),1)
 $(NK_PROTECTION_TEST_OBJ): $(NK_PROTECTION_TEST_SRC) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 endif
 
 # Compile boot test (from tests/boot/) - only if enabled
-ifeq ($(CONFIG_BOOT_TESTS),1)
+ifeq ($(CONFIG_TESTS_BOOT),1)
 $(BOOT_TEST_OBJ): $(BOOT_TEST_SRC) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 endif
 
 # Compile SMP boot test (from tests/smp/) - only if enabled
-ifeq ($(CONFIG_SMP_TESTS),1)
+ifeq ($(CONFIG_TESTS_SMP),1)
 $(SMP_TEST_OBJ): $(SMP_TEST_SRC) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 endif
 
 # Compile PCD test (from tests/pcd/) - only if enabled
-ifeq ($(CONFIG_PCD_TESTS),1)
+ifeq ($(CONFIG_TESTS_PCD),1)
 $(PCD_TEST_OBJ): $(PCD_TEST_SRC) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 endif
 
 # Compile nested kernel invariants test (from tests/nested_kernel_invariants/) - only if enabled
-ifeq ($(CONFIG_NK_INVARIANTS_TESTS),1)
+ifeq ($(CONFIG_TESTS_NK_INVARIANTS),1)
 $(NK_INVARIANTS_TEST_OBJ): $(NK_INVARIANTS_TEST_SRC) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 endif
 
 # Compile read-only visibility test (from tests/readonly_visibility/) - only if enabled
-ifeq ($(CONFIG_NK_READONLY_VISIBILITY_TESTS),1)
+ifeq ($(CONFIG_TESTS_NK_READONLY_VISIBILITY),1)
 $(READONLY_VISIBILITY_TEST_OBJ): $(READONLY_VISIBILITY_TEST_SRC) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 endif
 
 # Compile usermode test (from tests/usermode/) - only if enabled
-ifeq ($(CONFIG_USERMODE_TEST),1)
+ifeq ($(CONFIG_TESTS_USERMODE),1)
 $(USERMODE_TEST_OBJ): $(USERMODE_TEST_SRC) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 endif

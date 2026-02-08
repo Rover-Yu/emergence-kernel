@@ -129,14 +129,14 @@ static void monitor_protect_state(void) {
  *
  * Output behavior:
  * - Always shows final PASS/FAIL result
- * - Shows per-invariant details only if CONFIG_NK_INVARIANTS_VERBOSE=1
+ * - Shows per-invariant details only if CONFIG_DEBUG_NK_INVARIANTS_VERBOSE=1
  */
 void monitor_verify_invariants(void) {
     extern int smp_get_cpu_index(void);
 
     int cpu_id = smp_get_cpu_index();
 
-#if CONFIG_NK_INVARIANTS_VERBOSE
+#if CONFIG_DEBUG_NK_INVARIANTS_VERBOSE
     serial_puts("\n=== Nested Kernel Invariant Verification (CPU ");
     serial_putc('0' + cpu_id);
     serial_puts(") ===\n");
@@ -160,7 +160,7 @@ void monitor_verify_invariants(void) {
     bool context_switch_available;
     uint64_t current_cr3;
 
-#if CONFIG_NK_INVARIANTS_VERBOSE
+#if CONFIG_DEBUG_NK_INVARIANTS_VERBOSE
     /* === Invariant 1: Protected data is read-only in outer kernel === */
     serial_puts("VERIFY: [Inv 1] PTPs read-only in outer kernel:\n");
     serial_puts("VERIFY:   unpriv_pd writable bit: ");
@@ -180,7 +180,7 @@ void monitor_verify_invariants(void) {
         cr0_wp_enabled = (cr0 & (1 << 16));
     }
 
-#if CONFIG_NK_INVARIANTS_VERBOSE
+#if CONFIG_DEBUG_NK_INVARIANTS_VERBOSE
     serial_puts("VERIFY: [Inv 2] CR0.WP enforcement active:\n");
     serial_puts("VERIFY:   CR0.WP bit: ");
     serial_putc(cr0_wp_enabled ? '1' : '0');
@@ -219,7 +219,7 @@ void monitor_verify_invariants(void) {
         }
     }
 
-#if CONFIG_NK_INVARIANTS_VERBOSE
+#if CONFIG_DEBUG_NK_INVARIANTS_VERBOSE
     serial_puts("VERIFY: [Inv 3] Global mappings accessible in both views:\n");
     serial_puts("VERIFY:   PML4 entries compared: 512 entries, mismatches: ");
     if (mismatch_count == 0) {
@@ -239,7 +239,7 @@ void monitor_verify_invariants(void) {
     /* Verify that we can access privileged mode via monitor call */
     context_switch_available = (monitor_pml4_phys != 0 && unpriv_pml4_phys != 0);
 
-#if CONFIG_NK_INVARIANTS_VERBOSE
+#if CONFIG_DEBUG_NK_INVARIANTS_VERBOSE
     serial_puts("VERIFY: [Inv 4] Context switch mechanism:\n");
     serial_puts("VERIFY:   nk_entry_trampoline available - ");
     if (context_switch_available) {
@@ -250,7 +250,7 @@ void monitor_verify_invariants(void) {
 #endif
 
     /* === Invariant 5: All PTPs marked read-only in outer kernel === */
-#if CONFIG_NK_INVARIANTS_VERBOSE
+#if CONFIG_DEBUG_NK_INVARIANTS_VERBOSE
     serial_puts("VERIFY: [Inv 5] PTPs writable in nested kernel:\n");
     serial_puts("VERIFY:   monitor_pd writable bit: ");
     serial_putc(monitor_writable ? '1' : '0');
@@ -268,7 +268,7 @@ void monitor_verify_invariants(void) {
     cr3_is_predeclared = (current_cr3 == monitor_pml4_phys) ||
                          (current_cr3 == unpriv_pml4_phys);
 
-#if CONFIG_NK_INVARIANTS_VERBOSE
+#if CONFIG_DEBUG_NK_INVARIANTS_VERBOSE
     serial_puts("VERIFY: [Inv 6] CR3 loaded with pre-declared PTP:\n");
     serial_puts("VERIFY:   Current CR3: 0x");
     serial_put_hex(current_cr3);
@@ -290,7 +290,7 @@ void monitor_verify_invariants(void) {
                    global_mappings_match && cr3_is_predeclared &&
                    context_switch_available;
 
-#if CONFIG_NK_INVARIANTS_VERBOSE
+#if CONFIG_DEBUG_NK_INVARIANTS_VERBOSE
     serial_puts("=== Verification Complete ===\n\n");
 #endif
 

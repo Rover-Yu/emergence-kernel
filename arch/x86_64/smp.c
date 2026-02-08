@@ -153,7 +153,7 @@ void smp_init(void) {
  */
 void smp_start_all_aps(void) {
     extern int ap_startup(uint8_t apic_id, uint32_t startup_addr);
-#if CONFIG_SMP_AP_DEBUG
+#if CONFIG_DEBUG_SMP_AP
     extern void serial_puts(const char *str);
     extern void serial_putc(char c);
 #endif
@@ -162,7 +162,7 @@ void smp_start_all_aps(void) {
      * Page number for STARTUP IPI = 0x7000 >> 12 = 7 */
     const uint32_t TRAMPOLINE_PAGE = 7;
 
-#if CONFIG_SMP_AP_DEBUG
+#if CONFIG_DEBUG_SMP_AP
     serial_puts("SMP: Starting all Application Processors...\n");
 #endif
 
@@ -190,7 +190,7 @@ void smp_start_all_aps(void) {
         int ret = ap_startup(apic_id, TRAMPOLINE_PAGE);
 
         if (ret < 0) {
-#if CONFIG_SMP_AP_DEBUG
+#if CONFIG_DEBUG_SMP_AP
             serial_puts("SMP: AP ");
             serial_putc('0' + i);
             serial_puts(" startup FAILED!\n");

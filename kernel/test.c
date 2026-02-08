@@ -32,7 +32,7 @@ static int tests_run_count = 0;
 
 #include <string.h>
 
-#if CONFIG_MINILIBC_TESTS
+#if CONFIG_TESTS_MINILIBC
 /* Minilibc string library tests */
 
 /* ============================================================================
@@ -579,7 +579,7 @@ extern int run_usermode_tests(void);
 
 /* Test registry array */
 const test_case_t test_registry[] = {
-#if CONFIG_PMM_TESTS
+#if CONFIG_TESTS_PMM
     {
         .name = "pmm",
         .description = "Physical memory manager allocation tests",
@@ -588,7 +588,7 @@ const test_case_t test_registry[] = {
         .auto_run = 1  /* Auto-run after pmm_init() */
     },
 #endif
-#if CONFIG_SLAB_TESTS
+#if CONFIG_TESTS_SLAB
     {
         .name = "slab",
         .description = "Slab allocator small object allocation tests",
@@ -606,7 +606,7 @@ const test_case_t test_registry[] = {
         .auto_run = 1  /* Auto-run after AP startup */
     },
 #endif
-#if CONFIG_APIC_TIMER_TEST
+#if CONFIG_TESTS_APIC_TIMER
     {
         .name = "timer",
         .description = "APIC timer interrupt-driven tests",
@@ -624,7 +624,7 @@ const test_case_t test_registry[] = {
         .auto_run = 0  /* Manual only (destructive test) */
     },
 #endif
-#if CONFIG_BOOT_TESTS
+#if CONFIG_TESTS_BOOT
     {
         .name = "boot",
         .description = "Basic kernel boot verification",
@@ -633,7 +633,7 @@ const test_case_t test_registry[] = {
         .auto_run = 0  /* Manual only */
     },
 #endif
-#if CONFIG_SMP_TESTS
+#if CONFIG_TESTS_SMP
     {
         .name = "smp",
         .description = "SMP startup and multi-CPU verification",
@@ -642,7 +642,7 @@ const test_case_t test_registry[] = {
         .auto_run = 0  /* Manual only */
     },
 #endif
-#if CONFIG_PCD_TESTS
+#if CONFIG_TESTS_PCD
     {
         .name = "pcd",
         .description = "Page Control Data initialization and tracking",
@@ -651,7 +651,7 @@ const test_case_t test_registry[] = {
         .auto_run = 0  /* Manual only */
     },
 #endif
-#if CONFIG_NK_INVARIANTS_TESTS
+#if CONFIG_TESTS_NK_INVARIANTS
     {
         .name = "nested_kernel_invariants",
         .description = "Nested Kernel invariants (ASPLOS '15)",
@@ -660,7 +660,7 @@ const test_case_t test_registry[] = {
         .auto_run = 0  /* Manual only */
     },
 #endif
-#if CONFIG_NK_READONLY_VISIBILITY_TESTS
+#if CONFIG_TESTS_NK_READONLY_VISIBILITY
     {
         .name = "readonly_visibility",
         .description = "Read-only mapping visibility for nested kernel",
@@ -669,7 +669,7 @@ const test_case_t test_registry[] = {
         .auto_run = 0  /* Manual only */
     },
 #endif
-#if CONFIG_MINILIBC_TESTS
+#if CONFIG_TESTS_MINILIBC
     {
         .name = "minilibc",
         .description = "Minimal string library tests (37 comprehensive tests for strlen, strcpy, strcmp, strncmp, memset, memcpy)",
