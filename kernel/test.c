@@ -660,7 +660,7 @@ const test_case_t test_registry[] = {
         .auto_run = 0  /* Manual only */
     },
 #endif
-#if CONFIG_READONLY_VISIBILITY_TESTS
+#if CONFIG_NK_READONLY_VISIBILITY_TESTS
     {
         .name = "readonly_visibility",
         .description = "Read-only mapping visibility for nested kernel",

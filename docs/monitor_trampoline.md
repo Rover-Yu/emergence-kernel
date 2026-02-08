@@ -227,11 +227,11 @@ The test verifies:
 
 ### Running the Test
 
-Enable with `CONFIG_MONITOR_TRAMPOLINE_TEST=1` in `kernel.config`:
+Enable with `CONFIG_NK_TRAMPOLINE_TEST=1` in `kernel.config`:
 
 ```bash
 # Enable test
-echo "CONFIG_MONITOR_TRAMPOLINE_TEST=y" >> kernel.config
+echo "CONFIG_NK_TRAMPOLINE_TEST=y" >> kernel.config
 
 # Build and run
 make

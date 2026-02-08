@@ -279,7 +279,7 @@ void ap_start(void) {
         serial_putc('0' + my_index);
         serial_puts(" switched to unprivileged mode\n");
 
-#if CONFIG_WRITE_PROTECTION_VERIFY
+#if CONFIG_NK_WRITE_PROTECTION_VERIFY
         /* Verify Nested Kernel invariants on AP as well */
         monitor_verify_invariants();
 #endif

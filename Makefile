@@ -30,15 +30,16 @@ CFLAGS += -DCONFIG_PMM_TESTS=$(CONFIG_PMM_TESTS)
 CFLAGS += -DCONFIG_SLAB_TESTS=$(CONFIG_SLAB_TESTS)
 CFLAGS += -DCONFIG_SMP_AP_DEBUG=$(CONFIG_SMP_AP_DEBUG)
 CFLAGS += -DCONFIG_APIC_TIMER_TEST=$(CONFIG_APIC_TIMER_TEST)
-CFLAGS += -DCONFIG_WRITE_PROTECTION_VERIFY=$(CONFIG_WRITE_PROTECTION_VERIFY)
-CFLAGS += -DCONFIG_INVARIANTS_VERBOSE=$(CONFIG_INVARIANTS_VERBOSE)
-CFLAGS += -DCONFIG_PCD_STATS=$(CONFIG_PCD_STATS)
+CFLAGS += -DCONFIG_NK_WRITE_PROTECTION_VERIFY=$(CONFIG_NK_WRITE_PROTECTION_VERIFY)
+CFLAGS += -DCONFIG_NK_INVARIANTS_VERBOSE=$(CONFIG_NK_INVARIANTS_VERBOSE)
+CFLAGS += -DCONFIG_NK_PCD_STATS=$(CONFIG_NK_PCD_STATS)
 CFLAGS += -DCONFIG_NK_FAULT_INJECTION_TESTS=$(CONFIG_NK_FAULT_INJECTION_TESTS)
 CFLAGS += -DCONFIG_BOOT_TESTS=$(CONFIG_BOOT_TESTS)
 CFLAGS += -DCONFIG_SMP_TESTS=$(CONFIG_SMP_TESTS)
 CFLAGS += -DCONFIG_PCD_TESTS=$(CONFIG_PCD_TESTS)
 CFLAGS += -DCONFIG_NK_INVARIANTS_TESTS=$(CONFIG_NK_INVARIANTS_TESTS)
-CFLAGS += -DCONFIG_READONLY_VISIBILITY_TESTS=$(CONFIG_READONLY_VISIBILITY_TESTS)
+CFLAGS += -DCONFIG_NK_READONLY_VISIBILITY_TESTS=$(CONFIG_NK_READONLY_VISIBILITY_TESTS)
+CFLAGS += -DCONFIG_NK_TRAMPOLINE_TEST=$(CONFIG_NK_TRAMPOLINE_TEST)
 CFLAGS += -DCONFIG_MINILIBC_TESTS=$(CONFIG_MINILIBC_TESTS)
 CFLAGS += -DCONFIG_USERMODE_TEST=$(CONFIG_USERMODE_TEST)
 LDFLAGS := -nostdlib -m elf_x86_64
@@ -162,7 +163,7 @@ endif
 ifeq ($(CONFIG_NK_INVARIANTS_TESTS),1)
 TESTS_OBJS += $(NK_INVARIANTS_TEST_OBJ)
 endif
-ifeq ($(CONFIG_READONLY_VISIBILITY_TESTS),1)
+ifeq ($(CONFIG_NK_READONLY_VISIBILITY_TESTS),1)
 TESTS_OBJS += $(READONLY_VISIBILITY_TEST_OBJ)
 endif
 ifeq ($(CONFIG_USERMODE_TEST),1)
@@ -211,19 +212,19 @@ help:
 	@echo "  make CONFIG_PMM_TESTS=1                - Enable PMM tests"
 	@echo "  make CONFIG_SMP_AP_DEBUG=1             - Enable AP debug marks"
 	@echo "  make CONFIG_APIC_TIMER_TEST=1          - Enable APIC timer test"
-	@echo "  make CONFIG_WRITE_PROTECTION_VERIFY=1  - Verify write protection"
-	@echo "  make CONFIG_INVARIANTS_VERBOSE=1       - Verbose invariants output"
-	@echo "  make CONFIG_PCD_STATS=1                - Show PCD statistics"
+	@echo "  make CONFIG_NK_WRITE_PROTECTION_VERIFY=1  - Verify write protection"
+	@echo "  make CONFIG_NK_INVARIANTS_VERBOSE=1       - Verbose invariants output"
+	@echo "  make CONFIG_NK_PCD_STATS=1                - Show PCD statistics"
 	@echo "  make CONFIG_NK_FAULT_INJECTION_TESTS=1      - Enable NK fault injection tests"
 	@echo "  make CONFIG_SPINLOCK_TESTS=1              - Enable spinlock tests"
 	@echo "  make CONFIG_PMM_TESTS=1                   - Enable PMM tests"
 	@echo "  make CONFIG_SMP_AP_DEBUG=1                - Enable AP debug marks"
 	@echo "  make CONFIG_APIC_TIMER_TEST=1             - Enable APIC timer test"
-	@echo "  make CONFIG_WRITE_PROTECTION_VERIFY=1     - Verify write protection"
-	@echo "  make CONFIG_INVARIANTS_VERBOSE=1          - Verbose invariants output"
-	@echo "  make CONFIG_PCD_STATS=1                   - Show PCD statistics"
+	@echo "  make CONFIG_NK_WRITE_PROTECTION_VERIFY=1     - Verify write protection"
+	@echo "  make CONFIG_NK_INVARIANTS_VERBOSE=1          - Verbose invariants output"
+	@echo "  make CONFIG_NK_PCD_STATS=1                   - Show PCD statistics"
 	@echo "  make CONFIG_NK_PROTECTION_TESTS=1         - Enable NK protection tests"
-	@echo "  make CONFIG_MONITOR_TRAMPOLINE_TEST=1     - Enable monitor trampoline test"
+	@echo "  make CONFIG_NK_TRAMPOLINE_TEST=1     - Enable monitor trampoline test"
 	@echo "  make CONFIG_USERMODE_TEST=1               - Enable user mode syscall test"
 
 $(BUILD_DIR):
@@ -327,7 +328,7 @@ $(NK_INVARIANTS_TEST_OBJ): $(NK_INVARIANTS_TEST_SRC) | $(BUILD_DIR)
 endif
 
 # Compile read-only visibility test (from tests/readonly_visibility/) - only if enabled
-ifeq ($(CONFIG_READONLY_VISIBILITY_TESTS),1)
+ifeq ($(CONFIG_NK_READONLY_VISIBILITY_TESTS),1)
 $(READONLY_VISIBILITY_TEST_OBJ): $(READONLY_VISIBILITY_TEST_SRC) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 endif

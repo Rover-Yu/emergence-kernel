@@ -70,11 +70,11 @@ Verify all 6 Nested Kernel invariants are correctly enforced.
 **Call from:** After switching to unprivileged mode (both BSP and APs)
 
 **Output behavior:**
-- **Quiet mode** (`CONFIG_INVARIANTS_VERBOSE=0`): Shows only final result
+- **Quiet mode** (`CONFIG_NK_INVARIANTS_VERBOSE=0`): Shows only final result
   ```
   [CPU 0] Nested Kernel invariants: PASS
   ```
-- **Verbose mode** (`CONFIG_INVARIANTS_VERBOSE=1`): Shows per-invariant details
+- **Verbose mode** (`CONFIG_NK_INVARIANTS_VERBOSE=1`): Shows per-invariant details
 
 **Example:**
 ```c
@@ -207,7 +207,7 @@ Monitor stack:    Only mapped in monitor page tables
 - Documentation: `docs/monitor_trampoline.md`
 
 **Testing:**
-Enable with `CONFIG_MONITOR_TRAMPOLINE_TEST=1` to run trampoline tests that verify:
+Enable with `CONFIG_NK_TRAMPOLINE_TEST=1` to run trampoline tests that verify:
 - Correct privilege mode transitions
 - State preservation across calls
 - Multiple call handling
@@ -275,8 +275,8 @@ From `arch/x86_64/paging.h`:
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `CONFIG_WRITE_PROTECTION_VERIFY` | 1 | Always verify invariants on all CPUs |
-| `CONFIG_INVARIANTS_VERBOSE` | 0 | Show detailed verification output |
+| `CONFIG_NK_WRITE_PROTECTION_VERIFY` | 1 | Always verify invariants on all CPUs |
+| `CONFIG_NK_INVARIANTS_VERBOSE` | 0 | Show detailed verification output |
 
 ---
 

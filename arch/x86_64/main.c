@@ -214,12 +214,12 @@ void kernel_main(uint32_t multiboot_info_addr) {
             serial_put_hex(user_prog_addr);
             serial_puts("\n");
 
-#if CONFIG_WRITE_PROTECTION_VERIFY
+#if CONFIG_NK_WRITE_PROTECTION_VERIFY
             /* Verify all Nested Kernel invariants (including CR0.WP) */
             monitor_verify_invariants();
 #endif
 
-#if CONFIG_PCD_STATS
+#if CONFIG_NK_PCD_STATS
             /* Dump PCD statistics for debugging */
             extern void pcd_dump_stats(void);
             pcd_dump_stats();
@@ -282,12 +282,12 @@ void kernel_main(uint32_t multiboot_info_addr) {
             serial_puts("[ PMM tests ] Tests complete\n");
 #endif /* CONFIG_PMM_TESTS */
 
-#if CONFIG_MONITOR_TRAMPOLINE_TEST
+#if CONFIG_NK_TRAMPOLINE_TEST
             /* Test monitor trampoline CR3 switching */
             serial_puts("KERNEL: Testing monitor trampoline...\n");
             extern void test_monitor_call_from_unprivileged(void);
             test_monitor_call_from_unprivileged();
-#endif /* CONFIG_MONITOR_TRAMPOLINE_TEST */
+#endif /* CONFIG_NK_TRAMPOLINE_TEST */
         } else {
             serial_puts("KERNEL: Monitor initialization failed\n");
         }
@@ -385,7 +385,7 @@ void kernel_main(uint32_t multiboot_info_addr) {
         }
 #endif
 
-#if CONFIG_READONLY_VISIBILITY_TESTS
+#if CONFIG_NK_READONLY_VISIBILITY_TESTS
         /* Read-only visibility tests - manual only, run if explicitly selected */
         if (test_should_run("readonly_visibility")) {
             test_run_by_name("readonly_visibility");
