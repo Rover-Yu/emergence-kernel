@@ -119,15 +119,6 @@ void kernel_main(uint32_t multiboot_info_addr) {
         idt_init();
         lapic_init();
         smp_init();
-
-#if CONFIG_APIC_TIMER_TEST
-        /* Initialize APIC Timer for high-frequency interrupts */
-        apic_timer_init();
-
-        /* Activate APIC timer */
-        timer_start();
-#endif
-
         serial_puts("BSP: Initialization complete\n");
     }
 
@@ -220,6 +211,13 @@ void kernel_main(uint32_t multiboot_info_addr) {
             }
 
             test_run_by_name("spinlock");
+        }
+#endif
+
+#if CONFIG_APIC_TIMER_TEST
+        /* APIC Timer Tests - run after APs are ready */
+        if (test_should_run("timer")) {
+            test_run_by_name("timer");
         }
 #endif
 

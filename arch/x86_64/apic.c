@@ -376,13 +376,13 @@ void apic_timer_init(void) {
     /* Set divide configuration register (divide by 1) */
     lapic_write(LAPIC_TIMER_DCR, LAPIC_TIMER_DIV_BY_1);
 
-    /* Configure timer LVT (periodic mode) */
+    /* Configure timer LVT (periodic mode, masked initially) */
     lvt_value = TIMER_VECTOR;              /* Interrupt vector */
     lvt_value |= LAPIC_TIMER_LVT_PERIODIC; /* Periodic mode */
+    lvt_value |= LAPIC_TIMER_LVT_MASK;     /* Mask timer initially */
     lapic_write(LAPIC_TIMER_LVT, lvt_value);
 
-    /* Set initial count to start the timer */
-    lapic_write(LAPIC_TIMER_ICR, 100000);
+    /* NOTE: Timer is NOT started here. timer_start() will unmask and start it. */
 
     serial_puts("APIC: APIC timer initialized successfully\n");
 }

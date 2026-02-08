@@ -286,6 +286,7 @@ use_default_cmdline:
          *   ""              - No tests run (default for production)
          *   "test=all"      - Run all auto_run tests
          *   "test=slab"     - Run only slab test
+         *   "test=timer"    - Run only APIC timer test
          *   "test=unified"  - Run all tests in unified mode
          *
          * On real hardware with a proper bootloader, use KERNEL_CMDLINE in Makefile

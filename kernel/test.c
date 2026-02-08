@@ -66,6 +66,7 @@ extern int run_pmm_tests(void);
 extern int run_slab_tests(void);
 extern int run_spinlock_tests(void);
 extern int run_nk_protection_tests(void);
+extern int run_apic_timer_tests(void);
 
 /* Test registry array */
 const test_case_t test_registry[] = {
@@ -94,6 +95,15 @@ const test_case_t test_registry[] = {
         .run_func = run_spinlock_tests,
         .enabled = 1,
         .auto_run = 1  /* Auto-run after AP startup */
+    },
+#endif
+#if CONFIG_APIC_TIMER_TEST
+    {
+        .name = "timer",
+        .description = "APIC timer interrupt-driven tests",
+        .run_func = run_apic_timer_tests,
+        .enabled = 1,
+        .auto_run = 1  /* Auto-run after BSP init */
     },
 #endif
 #if CONFIG_NK_PROTECTION_TESTS

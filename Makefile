@@ -67,6 +67,10 @@ SLAB_TEST_OBJ := $(BUILD_DIR)/kernel_slab_test.o
 PMM_TEST_SRC := tests/pmm/pmm_test.c
 PMM_TEST_OBJ := $(BUILD_DIR)/kernel_pmm_test.o
 
+# APIC timer test sources (conditionally compiled)
+TIMER_TEST_SRC := tests/timer/timer_test.c
+TIMER_TEST_OBJ := $(BUILD_DIR)/kernel_timer_test.o
+
 # Nested kernel mappings protection test sources (conditionally compiled)
 NK_PROTECTION_TEST_SRC := tests/nested_kernel_mapping_protection/nk_protection_test.c
 NK_PROTECTION_TEST_OBJ := $(BUILD_DIR)/nk_protection_test.o
@@ -96,6 +100,9 @@ TESTS_OBJS += $(PMM_TEST_OBJ)
 endif
 ifeq ($(CONFIG_SLAB_TESTS),1)
 TESTS_OBJS += $(SLAB_TEST_OBJ)
+endif
+ifeq ($(CONFIG_APIC_TIMER_TEST),1)
+TESTS_OBJS += $(TIMER_TEST_OBJ)
 endif
 ifeq ($(CONFIG_NK_PROTECTION_TESTS),1)
 TESTS_OBJS += $(NK_PROTECTION_TEST_OBJ)
@@ -188,6 +195,12 @@ endif
 # Compile PMM test (from tests/pmm/) - only if enabled
 ifeq ($(CONFIG_PMM_TESTS),1)
 $(PMM_TEST_OBJ): $(PMM_TEST_SRC) | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+endif
+
+# Compile APIC timer test (from tests/timer/) - only if enabled
+ifeq ($(CONFIG_APIC_TIMER_TEST),1)
+$(TIMER_TEST_OBJ): $(TIMER_TEST_SRC) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 endif
 
