@@ -145,8 +145,12 @@ def print_stats(grouped, period_name, top_n=10):
         print(f"\nNo {period_name} data available.")
         return
 
-    # Sort by period key
-    sorted_periods = sorted(grouped.items(), reverse=True)[:top_n]
+    # Sort by net line changes (additions - deletions), descending
+    sorted_periods = sorted(
+        grouped.items(),
+        key=lambda x: x[1]['additions'] - x[1]['deletions'],
+        reverse=True
+    )[:top_n]
 
     print(f"\n{'='*90}")
     print(f"Top {len(sorted_periods)} {period_name} (most recent first)")
