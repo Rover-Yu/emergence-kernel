@@ -69,6 +69,10 @@ ARCH_C_SRCS := $(ARCH_DIR)/main.c $(ARCH_DIR)/smp.c $(ARCH_DIR)/multiboot2.c \
 TRAMPOLINE_SRC := $(ARCH_DIR)/ap_trampoline.S
 TRAMPOLINE_OBJ := $(BUILD_DIR)/ap_trampoline.o
 
+# Multiboot2 header (assembled as object file for linking)
+MULTIBOOT_HEADER_SRC := $(ARCH_DIR)/multiboot_header.S
+MULTIBOOT_HEADER_OBJ := $(BUILD_DIR)/multiboot_header.o
+
 # Architecture-independent kernel sources
 KERNEL_DIR := kernel
 KERNEL_C_SRCS := $(KERNEL_DIR)/device.c $(KERNEL_DIR)/pmm.c $(KERNEL_DIR)/pcd.c \
@@ -182,13 +186,11 @@ ifeq ($(CONFIG_TESTS_USERMODE),1)
 TESTS_OBJS += $(USERMODE_TEST_OBJ)
 endif
 
-# Generated command line object
-CMDLINE_OBJ := $(BUILD_DIR)/kernel_cmdline_source.o
-
 # Add cmdline object to OBJS (TESTS_OBJS now includes conditionally compiled tests)
 OBJS := $(ARCH_BOOT_OBJ) $(ARCH_OBJS) $(KERNEL_OBJS) $(MINILIBC_OBJS) $(TESTS_OBJS) $(TRAMPOLINE_OBJ) $(CMDLINE_OBJ)
 
 KERNEL_ELF := $(BUILD_DIR)/$(KERNEL).elf
+KERNEL_BIN := $(BUILD_DIR)/$(KERNEL).bin
 
 .PHONY: all clean run run-debug test test-all test-boot test-apic-timer test-smp test-pcd test-slab test-nested-kernel test-nk-fault-injection test-readonly-visibility test-usermode help
 
@@ -394,21 +396,21 @@ $(BUILD_DIR)/kernel_cmdline_source.o: always-rebuild-cmdline
 	@echo "  CC      cmdline_source.c"
 	$(Q)$(CC) $(CFLAGS) -c $(CMDLINE_SOURCE) -o $@
 
+# Assemble multiboot header as 64-bit object file (for linking at offset 0)
+$(MULTIBOOT_HEADER_OBJ): $(MULTIBOOT_HEADER_SRC) | $(BUILD_DIR)
+	@echo "  AS      $<"
+	$(Q)$(AS) --64 -o $@ $<
+
 # Link kernel (trampoline is included as regular object)
-$(KERNEL_ELF): $(OBJS)
+$(KERNEL_ELF): $(MULTIBOOT_HEADER_OBJ) $(OBJS)
 	@echo "  LD      $@"
 	$(Q)$(LD) $(LDFLAGS) -T $(ARCH_LINKER) $^ -o $@
 
-# Create ISO
-# Generate embedded command line source file
-CMDLINE_SOURCE := $(BUILD_DIR)/cmdline_source.c
+# Extract raw binary from ELF (for booting)
+$(KERNEL_BIN): $(KERNEL_ELF)
+	objcopy -O binary $< $@
 
-.PHONY: always-rebuild-cmdline
-always-rebuild-cmdline:
-	@mkdir -p $(BUILD_DIR)
-	@echo "/* Auto-generated command line source */" > $(CMDLINE_SOURCE)
-	@echo "#include <stddef.h>" >> $(CMDLINE_SOURCE)
-	@echo "const char embedded_cmdline[] = \"$(KERNEL_CMDLINE)\";" >> $(CMDLINE_SOURCE)
+# Create ISO (use ELF for multiboot2)
 
 $(ISO): $(KERNEL_ELF) always-rebuild-cmdline | $(ISO_DIR) .tmp
 	cp $(KERNEL_ELF) $(ISO_DIR)/boot/$(KERNEL).elf
@@ -430,6 +432,8 @@ clean:
 	rm -rf $(BUILD_DIR) $(ISO_DIR) $(ISO)
 	rm -f ./emergence_test_* 2>/dev/null || true
 	rm -f /tmp/emergence_* 2>/dev/null || true
+	rm -f *.bin *.elf 2>/dev/null || true
+	rm -f $(BUILD_DIR)/multiboot_header.bin* 2>/dev/null || true
 
 # Test targets (Python 3 only)
 test: test-all
