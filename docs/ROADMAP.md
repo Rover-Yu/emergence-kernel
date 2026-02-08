@@ -82,18 +82,6 @@ Adopt a nested kernel architecture for enhanced isolation and security.
 
 **Rationale:** Nested kernel architecture provides stronger isolation guarantees by enforcing memory protection even within kernel mode. The unprivileged kernel handles most operations while the privileged kernel validates sensitive operations, reducing the attack surface and containing bugs.
 
-## Current Status
-
-The kernel currently implements:
-- Multiboot2 boot with GRUB
-- Long Mode (64-bit) transition
-- Symmetric Multi-Processing (SMP) with AP startup
-- Device driver framework (probe/init/remove pattern)
-- Local APIC, I/O APAC, interrupt handling, and timers
-- Slab allocator for small object allocation
-- VGA and serial console output
-- Unified test framework
-
 ## Contributing
 
 This roadmap represents the strategic direction of the project. Contributions that advance any milestone are welcome. Please refer to the project documentation for coding standards and submission guidelines.

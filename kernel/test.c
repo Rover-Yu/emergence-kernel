@@ -27,43 +27,13 @@ static char tests_run[MAX_TESTS];  /* 0 = not run, 1 = run */
 static int tests_run_count = 0;
 
 /* ============================================================================
- * Simple String Functions (kernel has no string.h)
- * ============================================================================ */
-
-/**
- * simple_strcmp - Compare two strings
- * @s1: First string
- * @s2: Second string
- *
- * Returns: 0 if equal, negative if s1 < s2, positive if s1 > s2
- */
-static int simple_strcmp(const char *s1, const char *s2) {
-    while (*s1 && (*s1 == *s2)) {
-        s1++;
-        s2++;
-    }
-    return *(unsigned char *)s1 - *(unsigned char *)s2;
-}
-
-/**
- * simple_strlen - Get string length
- * @s: String
- *
- * Returns: Length of string
- */
-static size_t simple_strlen(const char *s) {
-    size_t len = 0;
-    while (s[len]) len++;
-    return len;
-}
-
-/* ============================================================================
  * Test Registry
  * ============================================================================ */
 
+#include <string.h>
+
 #if CONFIG_MINILIBC_TESTS
 /* Minilibc string library tests */
-#include <string.h>
 
 /* ============================================================================
  * strlen Tests
@@ -742,10 +712,10 @@ void test_framework_init(void) {
     serial_puts("\n");
 
     /* Determine test mode */
-    if (simple_strcmp(test_value, "all") == 0) {
+    if (strcmp(test_value, "all") == 0) {
         test_mode = TEST_MODE_ALL;
         serial_puts("[TEST] Mode: ALL (run all auto_run tests)\n");
-    } else if (simple_strcmp(test_value, "unified") == 0) {
+    } else if (strcmp(test_value, "unified") == 0) {
         test_mode = TEST_MODE_UNIFIED;
         serial_puts("[TEST] Mode: UNIFIED (run all selected tests at end)\n");
     } else {
@@ -778,7 +748,7 @@ int test_should_run(const char *name) {
     if (test_mode == TEST_MODE_ALL) {
         /* Find test in registry and check auto_run flag */
         for (int i = 0; test_registry[i].name != NULL; i++) {
-            if (simple_strcmp(test_registry[i].name, name) == 0) {
+            if (strcmp(test_registry[i].name, name) == 0) {
                 return test_registry[i].enabled && test_registry[i].auto_run;
             }
         }
@@ -787,7 +757,7 @@ int test_should_run(const char *name) {
 
     /* test=<name>: run only the specified test */
     if (test_mode == TEST_MODE_SPECIFIC) {
-        return (simple_strcmp(selected_test_name, name) == 0);
+        return (strcmp(selected_test_name, name) == 0);
     }
 
     return 0;
@@ -808,7 +778,7 @@ int test_run_by_name(const char *name) {
 
     /* Find test in registry */
     for (int i = 0; test_registry[i].name != NULL; i++) {
-        if (simple_strcmp(test_registry[i].name, name) == 0) {
+        if (strcmp(test_registry[i].name, name) == 0) {
             test = &test_registry[i];
             break;
         }

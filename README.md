@@ -10,6 +10,13 @@ This is a research kernel project aimed at exploring the boundaries of LLM capab
 
 ## Recent Developments
 
+**Minilibc (February 2025)**
+- Minimal C library for essential string and memory operations
+- Implements strlen, strcpy, strcmp, strncmp, memset, memcpy
+- 37 comprehensive kernel tests with edge case coverage
+- Python integration tests with QEMU automation
+- Zero external dependencies, kernel-safe implementation
+
 **Nested Kernel Isolation**
 - PCD (Page Control Data) system tracks page types for fine-grained protection
 - Separation of privileged monitor mode and unprivileged kernel mode
@@ -18,7 +25,7 @@ This is a research kernel project aimed at exploring the boundaries of LLM capab
 
 **Test Framework**
 - Unified test suite with runtime selection via kernel command line
-- Tests for PMM, slab allocator, APIC timer, and nested kernel invariants
+- Tests for PMM, slab allocator, APIC timer, minilibc, and nested kernel invariants
 - Python-based integration tests with QEMU automation
 
 ---
@@ -81,10 +88,12 @@ make test-boot          # Basic kernel boot test (1 CPU)
 make test-smp           # SMP boot test (2 CPUs)
 make test-apic-timer    # APIC timer test (1 CPU)
 make test-slab          # Slab allocator test (2 CPUs)
+make test-minilibc      # Minilibc string library test (1 CPU)
 
 # Run specific test via kernel command line
 make run KERNEL_CMDLINE='test=timer'     # Run timer test
 make run KERNEL_CMDLINE='test=all'       # Run all tests
+make run KERNEL_CMDLINE='test=minilibc'  # Run minilibc tests
 ```
 
 See [tests/README.md](tests/README.md) for detailed testing documentation.
@@ -97,11 +106,17 @@ See [tests/README.md](tests/README.md) for detailed testing documentation.
 Emergence-Kernel/
 ├── arch/x86_64/          # Architecture-specific code (boot, APIC, paging)
 ├── kernel/               # Core kernel (SMP, devices, monitor, PCD)
+├── lib/                  # Libraries
+│   └── minilibc/        # Minimal C library (string & memory functions)
 ├── tests/                # Integration tests and test framework
+│   └── minilibc/        # Minilibc Python integration tests
 ├── docs/                 # Documentation (ROADMAP.md, design docs)
+│   └── minilibc.md      # Minilibc library documentation
 ├── include/              # Public headers
+│   └── string.h         # Minilibc string library API
 ├── Makefile              # Build system
 ├── kernel.config         # Default configuration
+├── CHANGELOG.md          # Project changelog
 └── CLAUDE.md             # Project guide for Claude Code
 ```
 
