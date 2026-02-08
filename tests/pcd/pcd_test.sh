@@ -13,7 +13,7 @@ set -e
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 KERNEL_ISO="${SCRIPT_DIR}/../../emergence.iso"
-QEMU_TIMEOUT=10
+QEMU_TIMEOUT=3
 
 # Source test library (KERNEL_ISO must be set before sourcing)
 source "${SCRIPT_DIR}/../lib/test_lib.sh"
@@ -38,82 +38,14 @@ main() {
     echo "Timeout: ${QEMU_TIMEOUT} seconds"
     echo ""
 
-    # Run QEMU and capture output
-    local output_file=$(run_qemu_capture 1 ${QEMU_TIMEOUT})
+    # Run QEMU with kernel test command line and capture output
+    local output_file=$(run_make_kernel_cmdline "test=pcd" ${QEMU_TIMEOUT})
 
-    echo "Analyzing boot logs for PCD initialization..."
+    echo "Verifying PCD test results..."
     echo ""
 
-    local boot_log=$(cat "$output_file" 2>/dev/null || echo "")
-    local all_passed=true
-
-    # Test 1: Verify PCD initialization
-    if echo "$boot_log" | grep -q "PCD: Initializing Page Control Data system"; then
-        print_result "PCD initialization started" "true"
-    else
-        print_result "PCD initialization started" "false" "No PCD init message"
-        all_passed=false
-    fi
-
-    # Test 2: Verify PCD array allocation
-    if echo "$boot_log" | grep -q "PCD: Allocating.*bytes for PCD array"; then
-        print_result "PCD array allocation" "true"
-    else
-        print_result "PCD array allocation" "false" "No PCD array allocation"
-        all_passed=false
-    fi
-
-    # Test 3: Verify PCD is managing pages
-    if echo "$boot_log" | grep -q "PCD: Managing.*pages"; then
-        print_result "PCD managing pages" "true"
-    else
-        print_result "PCD managing pages" "false" "No PCD page count"
-        all_passed=false
-    fi
-
-    # Test 4: Verify PCD initialized successfully
-    if echo "$boot_log" | grep -q "PCD: Initialized successfully"; then
-        print_result "PCD initialization complete" "true"
-    else
-        print_result "PCD initialization complete" "false" "PCD init failed"
-        all_passed=false
-    fi
-
-    # Test 5: Verify monitor initialization still works after PCD
-    if echo "$boot_log" | grep -q "MONITOR: Initializing nested kernel architecture"; then
-        print_result "Monitor initialization (after PCD)" "true"
-    else
-        print_result "Monitor initialization (after PCD)" "false" "Monitor not initialized"
-        all_passed=false
-    fi
-
-    # Test 6: Verify page tables marked as NK_PGTABLE
-    if echo "$boot_log" | grep -q "MONITOR: Page tables initialized"; then
-        print_result "Monitor page tables initialized" "true"
-    else
-        print_result "Monitor page tables initialized" "false" "Page tables not initialized"
-        all_passed=false
-    fi
-
-    # Test 7: Verify Nested Kernel invariants still pass
-    if echo "$boot_log" | grep -q "\[CPU 0\] Nested Kernel invariants: PASS"; then
-        print_result "Nested Kernel invariants (with PCD)" "true"
-    else
-        print_result "Nested Kernel invariants (with PCD)" "false" "Invariants failed"
-        all_passed=false
-    fi
-
-    echo ""
-    echo "PCD Test Summary:"
-    if [ "$all_passed" = true ]; then
-        echo "  Status: ALL TESTS PASSED"
-        TESTS_PASSED=1
-        TESTS_FAILED=0
-    else
-        echo "  Status: SOME TESTS FAILED"
-        TESTS_PASSED=0
-        TESTS_FAILED=1
-    fi
+    # Check for [TEST] PASSED: pcd marker
+    assert_test_passed "pcd" "$output_file"
 
     print_summary
 }

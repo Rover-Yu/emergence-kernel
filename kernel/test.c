@@ -67,6 +67,11 @@ extern int run_slab_tests(void);
 extern int run_spinlock_tests(void);
 extern int run_nk_protection_tests(void);
 extern int run_apic_timer_tests(void);
+extern int run_boot_tests(void);
+extern int run_smp_tests(void);
+extern int run_pcd_tests(void);
+extern int run_nested_kernel_invariants_tests(void);
+extern int run_readonly_visibility_tests(void);
 
 /* Test registry array */
 const test_case_t test_registry[] = {
@@ -113,6 +118,51 @@ const test_case_t test_registry[] = {
         .run_func = run_nk_protection_tests,
         .enabled = 1,
         .auto_run = 0  /* Manual only (destructive test) */
+    },
+#endif
+#if CONFIG_BOOT_TESTS
+    {
+        .name = "boot",
+        .description = "Basic kernel boot verification",
+        .run_func = run_boot_tests,
+        .enabled = 1,
+        .auto_run = 0  /* Manual only */
+    },
+#endif
+#if CONFIG_SMP_TESTS
+    {
+        .name = "smp",
+        .description = "SMP startup and multi-CPU verification",
+        .run_func = run_smp_tests,
+        .enabled = 1,
+        .auto_run = 0  /* Manual only */
+    },
+#endif
+#if CONFIG_PCD_TESTS
+    {
+        .name = "pcd",
+        .description = "Page Control Data initialization and tracking",
+        .run_func = run_pcd_tests,
+        .enabled = 1,
+        .auto_run = 0  /* Manual only */
+    },
+#endif
+#if CONFIG_NK_INVARIANTS_TESTS
+    {
+        .name = "nested_kernel_invariants",
+        .description = "Nested Kernel invariants (ASPLOS '15)",
+        .run_func = run_nested_kernel_invariants_tests,
+        .enabled = 1,
+        .auto_run = 0  /* Manual only */
+    },
+#endif
+#if CONFIG_READONLY_VISIBILITY_TESTS
+    {
+        .name = "readonly_visibility",
+        .description = "Read-only mapping visibility for nested kernel",
+        .run_func = run_readonly_visibility_tests,
+        .enabled = 1,
+        .auto_run = 0  /* Manual only */
     },
 #endif
     { .name = NULL }  /* Sentinel */

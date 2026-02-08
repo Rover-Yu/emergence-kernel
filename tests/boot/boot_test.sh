@@ -13,7 +13,7 @@ set -e
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 KERNEL_ISO="${SCRIPT_DIR}/../../emergence.iso"
-QEMU_TIMEOUT=5
+QEMU_TIMEOUT=3
 
 # Source test library (KERNEL_ISO must be set before sourcing)
 source "${SCRIPT_DIR}/../lib/test_lib.sh"
@@ -38,58 +38,14 @@ main() {
     echo "Timeout: ${QEMU_TIMEOUT} seconds"
     echo ""
 
-    # Run QEMU and capture output
-    local output_file=$(run_qemu_capture 1 ${QEMU_TIMEOUT})
+    # Run QEMU with kernel test command line and capture output
+    local output_file=$(run_make_kernel_cmdline "test=boot" ${QEMU_TIMEOUT})
 
-    echo "Analyzing boot logs..."
+    echo "Verifying boot test results..."
     echo ""
 
-    local boot_log=$(cat "$output_file" 2>/dev/null || echo "")
-
-    # Test 1: Kernel greeting message
-    if echo "$boot_log" | grep -q "Emergence Kernel"; then
-        print_result "Kernel greeting message" "true"
-    else
-        print_result "Kernel greeting message" "false" "No greeting message found"
-    fi
-
-    # Test 2: BSP initialization started
-    if echo "$boot_log" | grep -q "BSP: Initializing"; then
-        print_result "BSP initialization started" "true"
-    else
-        print_result "BSP initialization started" "false" "BSP init message not found"
-    fi
-
-    # Test 3: BSP initialization completed
-    if echo "$boot_log" | grep -q "BSP: Initialization complete"; then
-        print_result "BSP initialization completed" "true"
-    else
-        print_result "BSP initialization completed" "false" "BSP completion message not found"
-    fi
-
-    # Test 4: CPU 0 (BSP) booted
-    if echo "$boot_log" | grep -q "CPU 0.*APIC ID.*Successfully booted"; then
-        print_result "CPU 0 (BSP) booted" "true"
-    else
-        print_result "CPU 0 (BSP) booted" "false" "CPU 0 boot message not found"
-    fi
-
-    # Test 5: No exceptions
-    assert_no_exceptions "$output_file"
-
-    # Test 6: APIC initialization present
-    if echo "$boot_log" | grep -q "APIC:.*Local APIC initialized"; then
-        print_result "APIC initialization" "true" "APIC messages found"
-    else
-        print_result "APIC initialization" "false" "No APIC messages found"
-    fi
-
-    # Test 7: Spinlock tests complete
-    if echo "$boot_log" | grep -q "system is shutting down"; then
-        print_result "Kernel tests complete" "true" "Shutdown message found"
-    else
-        print_result "Kernel tests complete" "false" "Shutdown message not found"
-    fi
+    # Check for [TEST] PASSED: boot marker
+    assert_test_passed "boot" "$output_file"
 
     print_summary
 }

@@ -34,6 +34,11 @@ CFLAGS += -DCONFIG_WRITE_PROTECTION_VERIFY=$(CONFIG_WRITE_PROTECTION_VERIFY)
 CFLAGS += -DCONFIG_INVARIANTS_VERBOSE=$(CONFIG_INVARIANTS_VERBOSE)
 CFLAGS += -DCONFIG_PCD_STATS=$(CONFIG_PCD_STATS)
 CFLAGS += -DCONFIG_NK_PROTECTION_TESTS=$(CONFIG_NK_PROTECTION_TESTS)
+CFLAGS += -DCONFIG_BOOT_TESTS=$(CONFIG_BOOT_TESTS)
+CFLAGS += -DCONFIG_SMP_TESTS=$(CONFIG_SMP_TESTS)
+CFLAGS += -DCONFIG_PCD_TESTS=$(CONFIG_PCD_TESTS)
+CFLAGS += -DCONFIG_NK_INVARIANTS_TESTS=$(CONFIG_NK_INVARIANTS_TESTS)
+CFLAGS += -DCONFIG_READONLY_VISIBILITY_TESTS=$(CONFIG_READONLY_VISIBILITY_TESTS)
 LDFLAGS := -nostdlib -m elf_x86_64
 
 # Architecture-specific sources (x86_64)
@@ -75,6 +80,26 @@ TIMER_TEST_OBJ := $(BUILD_DIR)/kernel_timer_test.o
 NK_PROTECTION_TEST_SRC := tests/nested_kernel_mapping_protection/nk_protection_test.c
 NK_PROTECTION_TEST_OBJ := $(BUILD_DIR)/nk_protection_test.o
 
+# Boot test sources (conditionally compiled)
+BOOT_TEST_SRC := tests/boot/boot_test.c
+BOOT_TEST_OBJ := $(BUILD_DIR)/kernel_boot_test.o
+
+# SMP boot test sources (conditionally compiled)
+SMP_TEST_SRC := tests/smp/smp_boot_test.c
+SMP_TEST_OBJ := $(BUILD_DIR)/kernel_smp_test.o
+
+# PCD test sources (conditionally compiled)
+PCD_TEST_SRC := tests/pcd/pcd_test.c
+PCD_TEST_OBJ := $(BUILD_DIR)/kernel_pcd_test.o
+
+# Nested Kernel invariants test sources (conditionally compiled)
+NK_INVARIANTS_TEST_SRC := tests/nested_kernel_invariants/nested_kernel_invariants_test.c
+NK_INVARIANTS_TEST_OBJ := $(BUILD_DIR)/kernel_nk_invariants_test.o
+
+# Read-only visibility test sources (conditionally compiled)
+READONLY_VISIBILITY_TEST_SRC := tests/readonly_visibility/readonly_visibility_test.c
+READONLY_VISIBILITY_TEST_OBJ := $(BUILD_DIR)/kernel_readonly_visibility_test.o
+
 # Test sources (reference only, not compiled into kernel)
 # These test files are kept for documentation purposes
 TESTS_DIR := tests
@@ -108,6 +133,21 @@ TESTS_OBJS += $(TIMER_TEST_OBJ)
 endif
 ifeq ($(CONFIG_NK_PROTECTION_TESTS),1)
 TESTS_OBJS += $(NK_PROTECTION_TEST_OBJ)
+endif
+ifeq ($(CONFIG_BOOT_TESTS),1)
+TESTS_OBJS += $(BOOT_TEST_OBJ)
+endif
+ifeq ($(CONFIG_SMP_TESTS),1)
+TESTS_OBJS += $(SMP_TEST_OBJ)
+endif
+ifeq ($(CONFIG_PCD_TESTS),1)
+TESTS_OBJS += $(PCD_TEST_OBJ)
+endif
+ifeq ($(CONFIG_NK_INVARIANTS_TESTS),1)
+TESTS_OBJS += $(NK_INVARIANTS_TEST_OBJ)
+endif
+ifeq ($(CONFIG_READONLY_VISIBILITY_TESTS),1)
+TESTS_OBJS += $(READONLY_VISIBILITY_TEST_OBJ)
 endif
 
 # Generated command line object
@@ -217,6 +257,36 @@ $(NK_PROTECTION_TEST_OBJ): $(NK_PROTECTION_TEST_SRC) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 endif
 
+# Compile boot test (from tests/boot/) - only if enabled
+ifeq ($(CONFIG_BOOT_TESTS),1)
+$(BOOT_TEST_OBJ): $(BOOT_TEST_SRC) | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+endif
+
+# Compile SMP boot test (from tests/smp/) - only if enabled
+ifeq ($(CONFIG_SMP_TESTS),1)
+$(SMP_TEST_OBJ): $(SMP_TEST_SRC) | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+endif
+
+# Compile PCD test (from tests/pcd/) - only if enabled
+ifeq ($(CONFIG_PCD_TESTS),1)
+$(PCD_TEST_OBJ): $(PCD_TEST_SRC) | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+endif
+
+# Compile nested kernel invariants test (from tests/nested_kernel_invariants/) - only if enabled
+ifeq ($(CONFIG_NK_INVARIANTS_TESTS),1)
+$(NK_INVARIANTS_TEST_OBJ): $(NK_INVARIANTS_TEST_SRC) | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+endif
+
+# Compile read-only visibility test (from tests/readonly_visibility/) - only if enabled
+ifeq ($(CONFIG_READONLY_VISIBILITY_TESTS),1)
+$(READONLY_VISIBILITY_TEST_OBJ): $(READONLY_VISIBILITY_TEST_SRC) | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+endif
+
 # Compile test C files
 $(BUILD_DIR)/test_%.o: $(TESTS_DIR)/%.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -263,6 +333,8 @@ run-debug: $(ISO)
 
 clean:
 	rm -rf $(BUILD_DIR) $(ISO_DIR) $(ISO)
+	rm -f ./emergence_test_* 2>/dev/null || true
+	rm -f /tmp/emergence_* 2>/dev/null || true
 
 # Test targets
 test: test-all

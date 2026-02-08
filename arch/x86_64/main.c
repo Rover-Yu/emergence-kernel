@@ -233,6 +233,41 @@ void kernel_main(uint32_t multiboot_info_addr) {
         }
 #endif
 
+#if CONFIG_BOOT_TESTS
+        /* Boot tests - manual only, run if explicitly selected */
+        if (test_should_run("boot")) {
+            test_run_by_name("boot");
+        }
+#endif
+
+#if CONFIG_SMP_TESTS
+        /* SMP tests - manual only, run if explicitly selected */
+        if (test_should_run("smp")) {
+            test_run_by_name("smp");
+        }
+#endif
+
+#if CONFIG_PCD_TESTS
+        /* PCD tests - manual only, run if explicitly selected */
+        if (test_should_run("pcd")) {
+            test_run_by_name("pcd");
+        }
+#endif
+
+#if CONFIG_NK_INVARIANTS_TESTS
+        /* Nested Kernel invariants tests - manual only, run if explicitly selected */
+        if (test_should_run("nested_kernel_invariants")) {
+            test_run_by_name("nested_kernel_invariants");
+        }
+#endif
+
+#if CONFIG_READONLY_VISIBILITY_TESTS
+        /* Read-only visibility tests - manual only, run if explicitly selected */
+        if (test_should_run("readonly_visibility")) {
+            test_run_by_name("readonly_visibility");
+        }
+#endif
+
         /* Run unified tests if test=unified was specified */
         test_run_unified();
 

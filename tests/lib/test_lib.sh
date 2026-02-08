@@ -84,6 +84,8 @@ run_qemu_capture() {
         qemu_cmd="$qemu_cmd -enable-kvm"
     fi
 
+    echo ${iso_path}
+
     # Run QEMU with serial output to file, timeout after specified seconds
     # Use -serial stdio and redirect to file instead of -serial file:
     # Include shutdown device for clean VM exit (8-bit I/O for exit code 0)
@@ -106,6 +108,60 @@ run_qemu_capture() {
 
     # Output just the file path to stdout
     echo "$SERIAL_OUTPUT"
+}
+
+#
+# run_make_kernel_cmdline - Run make run with KERNEL_CMDLINE and capture output
+#
+# Parameters:
+#   cmdline - Kernel command line arguments (e.g., "test=boot")
+#   timeout - Timeout in seconds (default: 5)
+#
+# Returns: Path to the output file (stored in SERIAL_OUTPUT global)
+#
+run_make_kernel_cmdline() {
+    local cmdline="$1"
+    local timeout=${2:-5}
+    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local kernel_dir="$(dirname "$(dirname "$script_dir")")"
+
+    # Create temp file for serial output
+    SERIAL_OUTPUT="./emergence_test_$$"
+
+    # Run make run with KERNEL_CMDLINE
+    timeout ${timeout} sh -c "make -C \"$kernel_dir\" run KERNEL_CMDLINE=\"${cmdline}\" >"${SERIAL_OUTPUT}\" 2>&1" || true
+
+    # Check if output was captured
+    if [ ! -f "$SERIAL_OUTPUT" ]; then
+        echo -e "${RED}Error: Failed to capture serial output${NC}" >&2
+        return 1
+    fi
+
+    # Output just the file path to stdout
+    echo "$SERIAL_OUTPUT"
+}
+
+#
+# assert_test_passed - Check if [TEST] PASSED marker exists for test
+#
+# Parameters:
+#   test_name  - Name of the test (e.g., "boot", "smp", "timer")
+#   file       - File to search (default: $SERIAL_OUTPUT)
+#
+# Returns: 0 if PASSED marker found, 1 otherwise
+#
+assert_test_passed() {
+    local test_name="$1"
+    local file="${2:-$SERIAL_OUTPUT}"
+    local pattern="\[TEST\] PASSED: ${test_name}"
+
+    if grep -q "$pattern" "$file" 2>/dev/null; then
+        print_result "$test_name" "true" "Test passed"
+        return 0
+    else
+        print_result "$test_name" "false" "PASSED marker not found"
+        return 1
+    fi
 }
 
 #
@@ -356,11 +412,13 @@ cleanup() {
     if [ -n "$SERIAL_OUTPUT" ] && [ -f "$SERIAL_OUTPUT" ]; then
         rm -f "$SERIAL_OUTPUT"
     fi
+     Also clean up any other emergence_test files in current directory
+    rm -f ./emergence_test_* 2>/dev/null
 }
 
 #
-# setup_trap - Set up cleanup trap
+# setup_trap - Set up cleanup trap for multiple signals
 #
 setup_trap() {
-    trap cleanup EXIT
+    trap cleanup EXIT INT TERM HUP
 }
