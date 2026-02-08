@@ -75,8 +75,16 @@ gdb -x .gdbinit                              # Connects to QEMU GDB server on lo
 ### Build System
 - Uses a single Makefile with explicit dependency tracking
 - AP trampoline (`ap_trampoline.bin.S`) is built as 16-bit binary, then included via `incbin`
+- Multiboot2 header (`multiboot_header.S`) is assembled as flat binary and prepended to kernel ELF
 - Output: `build/emergence.elf` → `emergence.iso` (multiboot2)
 - **Embedded command line:** `KERNEL_CMDLINE` is compiled into `build/cmdline_source.c` as fallback when multiboot info is unavailable
+
+### Multiboot2 Header (`arch/x86_64/multiboot_header.S`)
+- Standalone multiboot2 header assembled as flat binary
+- Prepended to kernel ELF to ensure placement within first 8KB
+- Minimal header: magic, architecture, length, checksum, end tag
+- No information request tags (relies on GRUB 2.06 defaults)
+- Traditional multiboot2 compliance for maximum bootloader compatibility
 
 ### Build System Insights
 
@@ -105,12 +113,13 @@ OBJS := $(ARCH_OBJS) $(TESTS_OBJS)
 - This dual approach ensures command line works in both QEMU (embedded) and real hardware (multiboot)
 
 ### Boot Flow (BSP - Bootstrap Processor)
-1. `_start` in `arch/x86_64/boot.S` (32-bit entry)
-2. Atomic increment of `cpu_boot_counter` to determine BSP/AP
-3. Setup page tables and GDT for Long Mode
-4. Enable Long Mode and jump to 64-bit
-5. Copy AP trampoline to physical address 0x7000
-6. Call `kernel_main()` in `kernel/main.c`
+1. GRUB loads `emergence.elf`, finds multiboot2 header at offset 0
+2. `_start` in `arch/x86_64/boot.S` (32-bit entry)
+3. Atomic increment of `cpu_boot_counter` to determine BSP/AP
+4. Setup page tables and GDT for Long Mode
+5. Enable Long Mode and jump to 64-bit
+6. Copy AP trampoline to physical address 0x7000
+7. Call `kernel_main()` in `kernel/main.c`
 
 ### AP (Application Processor) Startup
 1. BSP sends STARTUP IPI to APs
