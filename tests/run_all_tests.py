@@ -29,8 +29,11 @@ TESTS = [
      "Read-Only Visibility", "readonly_visibility", 1, 3),
     ("timer/apic_timer_test.py", "APIC Timer", "timer", 1, 5),
     ("smp/smp_boot_test.py", "SMP Boot", "smp", 2, 5),
-    ("nk_protection/nk_protection_test.py",
-     "Nested Kernel Mappings Protection", "nk_protection", 1, 10),
+    # NOTE: nk_protection test is disabled by default
+    # It requires CONFIG_NK_PROTECTION_TESTS=1 to be compiled into kernel
+    # Run manually with: python3 tests/nk_protection/nk_protection_test.py
+    # ("nk_protection/nk_protection_test.py",
+    #  "Nested Kernel Mappings Protection", "nk_protection", 1, 10),
 ]
 
 
