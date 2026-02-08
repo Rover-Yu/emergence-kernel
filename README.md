@@ -47,6 +47,23 @@ This is a research kernel project aimed at exploring the boundaries of LLM capab
 
 ---
 
+## Roadmap
+
+Emergence Kernel is pursuing several ambitious goals to explore novel kernel architectures:
+
+| Goal | Description |
+|------|-------------|
+| **Basic Kernel Capabilities** | User/kernel multitasking, virtual memory, system calls |
+| **Lua Programmable Framework** | Scriptable kernel extensions via Lua runtime |
+| **Graph-Based VFS** | File system as a graph structure for flexible relationships |
+| **Automatic Memory Management** | Reference counting/GC for kernel objects |
+| **LLM-Based File System** | Semantic storage via specfs or similar |
+| **Nested Kernel Architecture** | Privileged/unprivileged kernel layers for isolation |
+
+📖 See [docs/ROADMAP.md](docs/ROADMAP.md) for the complete roadmap with detailed deliverables.
+
+---
+
 ## Building and Running
 
 ### Requirements
