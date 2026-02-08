@@ -342,36 +342,64 @@ test: test-all
 test-all:
 	@$(MAKE) all
 	@echo "Running Emergence Kernel test suite..."
-	@cd tests && ./run_all_tests.sh
+	@if [ -f "tests/run_all_tests.py" ]; then \
+		python3 tests/run_all_tests.py; \
+	else \
+		cd tests && ./run_all_tests.sh; \
+	fi
 
 test-boot:
 	@$(MAKE) all
 	@echo "Running Basic Kernel Boot Test..."
-	@cd tests && ./boot/boot_test.sh
+	@if [ -f "tests/boot/boot_test.py" ]; then \
+		python3 tests/boot/boot_test.py; \
+	else \
+		cd tests && ./boot/boot_test.sh; \
+	fi
 
 test-apic-timer:
 	@$(MAKE) all
 	@echo "Running APIC Timer Test..."
-	@cd tests && ./timer/apic_timer_test.sh
+	@if [ -f "tests/timer/apic_timer_test.py" ]; then \
+		python3 tests/timer/apic_timer_test.py; \
+	else \
+		cd tests && ./timer/apic_timer_test.sh; \
+	fi
 
 test-smp:
 	@$(MAKE) all
 	@echo "Running SMP Boot Test..."
-	@cd tests && ./smp/smp_boot_test.sh 4
+	@if [ -f "tests/smp/smp_boot_test.py" ]; then \
+		python3 tests/smp/smp_boot_test.py --cpus 4; \
+	else \
+		cd tests && ./smp/smp_boot_test.sh 4; \
+	fi
 
 test-pcd:
 	@$(MAKE) all
 	@echo "Running Page Control Data (PCD) Test..."
-	@cd tests && ./pcd/pcd_test.sh
+	@if [ -f "tests/pcd/pcd_test.py" ]; then \
+		python3 tests/pcd/pcd_test.py; \
+	else \
+		cd tests && ./pcd/pcd_test.sh; \
+	fi
 
 test-slab:
 	@$(MAKE) all
 	@echo "Running Slab Allocator Test..."
-	@cd tests && ./slab/slab_test.sh
+	@if [ -f "tests/slab/slab_test.py" ]; then \
+		python3 tests/slab/slab_test.py; \
+	else \
+		cd tests && ./slab/slab_test.sh; \
+	fi
 
 test-nested-kernel:
 	@echo "Running Nested Kernel Invariants Test..."
-	@cd tests && ./nested_kernel_invariants/nested_kernel_invariants_test.sh
+	@if [ -f "tests/nested_kernel_invariants/nested_kernel_invariants_test.py" ]; then \
+		python3 tests/nested_kernel_invariants/nested_kernel_invariants_test.py; \
+	else \
+		cd tests && ./nested_kernel_invariants/nested_kernel_invariants_test.sh; \
+	fi
 
 test-nk-protection:
 	@echo "Running Nested Kernel Mappings Protection Test..."
@@ -379,4 +407,8 @@ test-nk-protection:
 
 test-readonly-visibility:
 	@echo "Running Read-Only Visibility Test..."
-	@cd tests && ./readonly_visibility/readonly_visibility_test.sh
+	@if [ -f "tests/readonly_visibility/readonly_visibility_test.py" ]; then \
+		python3 tests/readonly_visibility/readonly_visibility_test.py; \
+	else \
+		cd tests && ./readonly_visibility/readonly_visibility_test.sh; \
+	fi
