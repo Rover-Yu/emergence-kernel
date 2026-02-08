@@ -111,7 +111,7 @@ const test_case_t test_registry[] = {
         .auto_run = 1  /* Auto-run after BSP init */
     },
 #endif
-#if CONFIG_NK_PROTECTION_TESTS
+#if CONFIG_NK_FAULT_INJECTION_TESTS
     {
         .name = "nk_fault_injection",
         .description = "Nested kernel fault injection tests (destructive)",

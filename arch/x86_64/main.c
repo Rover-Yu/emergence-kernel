@@ -226,7 +226,7 @@ void kernel_main(uint32_t multiboot_info_addr) {
         }
 #endif
 
-#if CONFIG_NK_PROTECTION_TESTS
+#if CONFIG_NK_FAULT_INJECTION_TESTS
         /* NK protection tests - manual only, run if explicitly selected */
         if (test_should_run("nk_protection")) {
             test_run_by_name("nk_protection");  /* Never returns */

@@ -30,7 +30,7 @@ TESTS = [
     ("timer/apic_timer_test.py", "APIC Timer", "timer", 1, 5),
     ("smp/smp_boot_test.py", "SMP Boot", "smp", 2, 5),
     # NOTE: nk_fault_injection test is disabled by default
-    # It requires CONFIG_NK_PROTECTION_TESTS=1 to be compiled into kernel
+    # It requires CONFIG_NK_FAULT_INJECTION_TESTS=1 to be compiled into kernel
     # Run manually with: python3 tests/nk_fault_injection/nk_fault_injection_test.py
     # ("nk_fault_injection/nk_fault_injection_test.py",
     #  "Nested Kernel Fault Injection", "nk_fault_injection", 1, 10),
