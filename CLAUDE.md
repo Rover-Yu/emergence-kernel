@@ -25,12 +25,15 @@ make
 make clean
 ```
 
-### Run in QEMU (2 CPUs)
+### Run in QEMU with custom command line
 ```bash
-make run
-# or
-./run-qemu.sh  # 4 CPUs
+make run                                      # Default: motto="Learning with Every Boot"
+make run KERNEL_CMDLINE='test=timer'          # Run specific test
+make run KERNEL_CMDLINE='test=all'            # Run all tests
+make run KERNEL_CMDLINE='test=unified'        # Unified test execution
 ```
+
+**Note:** The `KERNEL_CMDLINE` variable is embedded into the kernel at build time and used as a fallback when multiboot info is unavailable (e.g., in QEMU). This enables runtime test selection without recompilation.
 
 ### Debug with GDB
 Terminal 1:
@@ -55,6 +58,33 @@ gdb -x .gdbinit
 - Uses a single Makefile with explicit dependency tracking
 - AP trampoline (`ap_trampoline.bin.S`) is built as 16-bit binary, then included via `incbin`
 - Output: `build/emergence.elf` → `emergence.iso` (multiboot2)
+- **Embedded command line:** `KERNEL_CMDLINE` is compiled into `build/cmdline_source.c` as fallback when multiboot info is unavailable
+
+### Build System Insights
+
+**Critical Makefile Ordering:**
+When using conditional blocks to add objects to a variable (e.g., `TESTS_OBJS`), the conditionals must be evaluated BEFORE the variable is used in other definitions. For example:
+
+```makefile
+# WRONG: OBJS defined before conditionals add to TESTS_OBJS
+TESTS_OBJS := $(patsubst ...)
+OBJS := $(ARCH_OBJS) $(TESTS_OBJS)  # TESTS_OBJS is empty here!
+ifeq ($(CONFIG_FOO),1)
+TESTS_OBJS += foo.o  # Too late, OBJS already defined
+endif
+
+# RIGHT: Conditionals before OBJS definition
+TESTS_OBJS := $(patsubst ...)
+ifeq ($(CONFIG_FOO),1)
+TESTS_OBJS += foo.o  # Added before OBJS uses TESTS_OBJS
+endif
+OBJS := $(ARCH_OBJS) $(TESTS_OBJS)
+```
+
+**Command Line Propagation:**
+- `KERNEL_CMDLINE` variable in Makefile → embedded into kernel binary → fallback if multiboot fails
+- GRUB is also configured with the command line via grub.cfg generation
+- This dual approach ensures command line works in both QEMU (embedded) and real hardware (multiboot)
 
 ### Boot Flow (BSP - Bootstrap Processor)
 1. `_start` in `arch/x86_64/boot.S` (32-bit entry)
@@ -110,11 +140,14 @@ gdb -x .gdbinit
 - Slab allocator: Each slab is one page (4KB), objects packed after metadata header
 
 ### Current State (as of recent commits)
-- Slab allocator implemented with 8 power-of-two caches (32B - 4KB)
-- Slab allocator tests: single alloc/free, multiple allocations, reuse verification, all cache sizes, size rounding
-- AP startup via trampoline is implemented but being debugged
+- **Unified test framework** with runtime selection via kernel command line
+- **APIC timer test** implemented and integrated (runs after APs are ready)
+- **Kernel command line support** with embedded fallback for QEMU environments
+- Slab allocator with 8 power-of-two caches (32B - 4KB)
+- Tests available: PMM, SLAB, APIC Timer, Spinlock (conditional), NK Protection (manual)
+- AP startup via trampoline fully functional (3/3 APs boot successfully)
 - ACPI parsing temporarily disabled; uses default APIC IDs
-- IPI handler EOI fix verified, test not yet implemented
+- Fail-fast test behavior: system shutdown on first test failure
 
 ## Testing
 
@@ -151,11 +184,26 @@ make test-slab          # Slab allocator test (2 CPUs)
 
 ### Test Framework
 
-The test suite uses a bash-based framework:
+The project uses a dual-layer test framework:
+
+**1. Bash Integration Tests (tests/):**
 - `tests/lib/test_lib.sh` - Common test utilities (QEMU runner, assertions, output formatting)
 - `tests/run_all_tests.sh` - Test suite runner that executes all tests and reports results
+- Integration tests run QEMU with specified CPU counts, capture serial output, and verify expected patterns
 
-Integration tests run QEMU with specified CPU counts, capture serial output, and verify expected patterns in the boot logs.
+**2. Unified Kernel Test Framework (kernel/test.c):**
+- Runtime test selection via kernel command line: `test=<name|all|unified>`
+- Test registry with `test_case_t` structures (name, description, run_func, enabled, auto_run)
+- Distributed auto-run: Tests execute at their subsystem init points (when selected)
+- Fail-fast behavior: System shuts down immediately on first test failure
+- No `test=` parameter: No tests run (default production behavior)
+
+**Available kernel tests:**
+- `pmm` - Physical memory manager allocation tests
+- `slab` - Slab allocator small object allocation tests
+- `timer` - APIC timer interrupt-driven tests (runs after APs are ready)
+- `spinlock` - Spinlock synchronization tests (when CONFIG_SPINLOCK_TESTS=1)
+- `nk_protection` - Nested kernel mappings protection tests (manual only)
 
 ### Kernel Tests
 
