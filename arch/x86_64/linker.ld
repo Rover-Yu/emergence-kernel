@@ -15,15 +15,15 @@ SECTIONS
     /* ============================================================
      * Kernel code starts at 1MB
      * ============================================================
-     * The multiboot header MUST be within the first 8192 bytes of the kernel.
-     * We start with the kernel at 1MB, then place the trampoline separately.
+     * Multiboot2 header is placed at the beginning of .text section.
+     * For ELF files, GRUB 2.06 can find the header beyond the first 8KB
+     * by using ELF program headers.
      */
     . = 1M;
     _kernel_start = .;
 
-    /* Text section - multiboot header first, then code */
+    /* Text section - code only (multiboot header prepended separately) */
     .text ALIGN(4K) : {
-        *(.multiboot)       /* Must be first for GRUB */
         *(.text*)
     } :text
 
@@ -48,16 +48,6 @@ SECTIONS
      * ============================================================
      * The trampoline must be at a fixed physical address so the BSP
      * can tell APs where to start via STARTUP IPI.
-     *
-     * We place these sections AFTER the main kernel sections in the file,
-     * but load them at physical address 0x7000 using AT().
-     *
-     * This ensures:
-     * 1. The multiboot header is at the start of the first LOAD segment
-     * 2. The trampoline is loaded at the correct physical address
-     *
-     * NOTE: The section name pattern changed from .ap_trampoline to
-     * .ok_ap_boot_trampoline to match the actual assembly section names.
      */
     /* Real mode and protected mode code */
     .ap_trampoline 0x7000 : AT(0x7000) {
@@ -78,4 +68,11 @@ SECTIONS
     .ap_trampoline_got 0x9000 : AT(0x9000) {
         *(.ok_ap_boot_trampoline_got)
     } :trampoline
+
+    /* Discard sections we don't need */
+    /DISCARD/ : {
+        *(.comment)
+        *(.eh_frame*)
+        *(.note*)
+    }
 }
