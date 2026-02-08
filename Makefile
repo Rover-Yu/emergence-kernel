@@ -52,7 +52,7 @@ TRAMPOLINE_OBJ := $(BUILD_DIR)/ap_trampoline.o
 # Architecture-independent kernel sources
 KERNEL_DIR := kernel
 KERNEL_C_SRCS := $(KERNEL_DIR)/device.c $(KERNEL_DIR)/pmm.c $(KERNEL_DIR)/pcd.c \
-                 $(KERNEL_DIR)/slab.c \
+                 $(KERNEL_DIR)/slab.c $(KERNEL_DIR)/test.c \
                  $(KERNEL_DIR)/monitor/monitor.c
 
 # Spinlock test sources (conditionally compiled)
@@ -62,6 +62,10 @@ SPINLOCK_TEST_OBJ := $(BUILD_DIR)/kernel_spinlock_test.o
 # Slab allocator test sources (conditionally compiled)
 SLAB_TEST_SRC := tests/slab/slab_test.c
 SLAB_TEST_OBJ := $(BUILD_DIR)/kernel_slab_test.o
+
+# PMM test sources (conditionally compiled)
+PMM_TEST_SRC := tests/pmm/pmm_test.c
+PMM_TEST_OBJ := $(BUILD_DIR)/kernel_pmm_test.o
 
 # Nested kernel mappings protection test sources (conditionally compiled)
 NK_PROTECTION_TEST_SRC := tests/nested_kernel_mapping_protection/nk_protection_test.c
@@ -86,6 +90,9 @@ TESTS_OBJS := $(patsubst $(TESTS_DIR)/%.c,$(BUILD_DIR)/test_%.o,$(TESTS_C_SRCS))
 # Conditionally include test objects
 ifeq ($(CONFIG_SPINLOCK_TESTS),1)
 TESTS_OBJS += $(SPINLOCK_TEST_OBJ)
+endif
+ifeq ($(CONFIG_PMM_TESTS),1)
+TESTS_OBJS += $(PMM_TEST_OBJ)
 endif
 ifeq ($(CONFIG_SLAB_TESTS),1)
 TESTS_OBJS += $(SLAB_TEST_OBJ)
@@ -175,6 +182,12 @@ endif
 # Compile slab allocator test (from tests/slab/) - only if enabled
 ifeq ($(CONFIG_SLAB_TESTS),1)
 $(SLAB_TEST_OBJ): $(SLAB_TEST_SRC) | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+endif
+
+# Compile PMM test (from tests/pmm/) - only if enabled
+ifeq ($(CONFIG_PMM_TESTS),1)
+$(PMM_TEST_OBJ): $(PMM_TEST_SRC) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 endif
 

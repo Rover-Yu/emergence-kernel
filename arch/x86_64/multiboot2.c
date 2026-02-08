@@ -61,7 +61,7 @@ static void parse_cmdline(multiboot_tag_cmdline_t *tag) {
 
 /* Simple key-value parser for cmdline */
 /* Format: key1=value1 key2=value2 or key1="quoted value" */
-static const char *cmdline_get_value(const char *key) {
+const char *cmdline_get_value(const char *key) {
     static char value_buf[256];
     const char *p = kernel_cmdline;
     size_t key_len = 0;
@@ -277,16 +277,34 @@ void multiboot2_parse(uint32_t mbi_addr) {
 use_default_cmdline:
     /* Set default cmdline if multiboot info was invalid */
     if (kernel_cmdline[0] == '\0') {
-        const char *default_cmdline = "quote=\"Mathematics is the queen of sciences\" --author=Gauss";
+        /*
+         * NOTE: In QEMU with GRUB, the multiboot info structure may not pass
+         * the command line correctly. For testing purposes, you can modify the
+         * default_cmdline below to specify which tests to run.
+         *
+         * Examples:
+         *   ""              - No tests run (default for production)
+         *   "test=all"      - Run all auto_run tests
+         *   "test=slab"     - Run only slab test
+         *   "test=unified"  - Run all tests in unified mode
+         *
+         * On real hardware with a proper bootloader, use KERNEL_CMDLINE in Makefile
+         * or pass via GRUB configuration.
+         */
+        const char *default_cmdline = "";  /* Default: no tests */
         size_t i = 0;
         while (i < sizeof(kernel_cmdline) - 1 && default_cmdline[i] != '\0') {
             kernel_cmdline[i] = default_cmdline[i];
             i++;
         }
         kernel_cmdline[i] = '\0';
-        serial_puts("CMDLINE: Using default: ");
-        serial_puts(kernel_cmdline);
-        serial_puts("\n");
+        if (default_cmdline[0] != '\0') {
+            serial_puts("CMDLINE: Using default: ");
+            serial_puts(kernel_cmdline);
+            serial_puts("\n");
+        } else {
+            serial_puts("CMDLINE: Using default (empty - no tests will run)\n");
+        }
     }
 
 fallback:

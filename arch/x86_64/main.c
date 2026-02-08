@@ -14,6 +14,7 @@
 #include "arch/x86_64/io.h"
 #include "arch/x86_64/power.h"
 #include "arch/x86_64/multiboot2.h"
+#include "kernel/test.h"
 
 /* External driver initialization functions */
 extern int serial_driver_init(void);
@@ -84,6 +85,16 @@ void kernel_main(uint32_t multiboot_info_addr) {
     /* Parse and display kernel command line */
     multiboot_get_cmdline();
 
+    /* Initialize test framework (parses test= parameter from cmdline) */
+    test_framework_init();
+
+#if CONFIG_PMM_TESTS
+    /* PMM Tests */
+    if (test_should_run("pmm")) {
+        test_run_by_name("pmm");
+    }
+#endif /* CONFIG_PMM_TESTS */
+
     /* Initialize Slab Allocator (for small object allocation) */
     extern void slab_init(void);
     slab_init();
@@ -94,60 +105,10 @@ void kernel_main(uint32_t multiboot_info_addr) {
 
 #if CONFIG_SLAB_TESTS
     /* Slab Allocator Tests */
-    extern int run_slab_tests(void);
-    serial_puts("[ SLAB tests ] Running slab allocator tests...\n");
-    int slab_failures = run_slab_tests();
-    if (slab_failures == 0) {
-        serial_puts("[ SLAB tests ] All slab allocator tests PASSED\n");
-    } else {
-        serial_puts("[ SLAB tests ] Some slab allocator tests FAILED\n");
-        serial_puts("[ SLAB tests ] Failures: ");
-        serial_put_hex(slab_failures);
-        serial_puts("\n");
+    if (test_should_run("slab")) {
+        test_run_by_name("slab");
     }
 #endif /* CONFIG_SLAB_TESTS */
-
-#if CONFIG_PMM_TESTS
-    /* PMM Tests */
-    serial_puts("[ PMM tests ] Running allocation tests...\n");
-
-    /* Test 1: Single page allocation */
-    void *page1 = pmm_alloc(0);
-    void *page2 = pmm_alloc(0);
-    serial_puts("[ PMM tests ] Allocated page1 at 0x");
-    serial_put_hex((uint64_t)page1);
-    serial_puts(", page2 at 0x");
-    serial_put_hex((uint64_t)page2);
-    serial_puts("\n");
-
-    /* Test 2: Multi-page allocation (order 3 = 8 pages = 32KB) */
-    void *block = pmm_alloc(3);
-    serial_puts("[ PMM tests ] Allocated 32KB block at 0x");
-    serial_put_hex((uint64_t)block);
-    serial_puts("\n");
-
-    /* Test 3: Free and coalesce */
-    pmm_free(page1, 0);
-    pmm_free(page2, 0);
-    serial_puts("[ PMM tests ] Freed pages (buddy coalescing)\n");
-
-    /* Test 4: Statistics */
-    uint64_t free = pmm_get_free_pages();
-    uint64_t total = pmm_get_total_pages();
-    serial_puts("[ PMM tests ] Free: ");
-    serial_put_hex(free);
-    serial_puts(" / Total: ");
-    serial_put_hex(total);
-    serial_puts("\n");
-
-    /* Test 5: Allocate adjacent pages to verify they were coalesced */
-    void *page3 = pmm_alloc(1);  /* Request 2 pages */
-    serial_puts("[ PMM tests ] Allocated 2-page block at 0x");
-    serial_put_hex((uint64_t)page3);
-    serial_puts(" (should be same as page1 if coalesced)\n");
-
-    serial_puts("[ PMM tests ] Tests complete\n");
-#endif /* CONFIG_PMM_TESTS */
 
     /* BSP specific initialization - must complete BEFORE starting APs */
     /* Get CPU ID first to determine if we're BSP or AP */
@@ -242,40 +203,35 @@ void kernel_main(uint32_t multiboot_info_addr) {
         enable_interrupts();
 
 #if CONFIG_SPINLOCK_TESTS
-        /* Enable spin lock test mode - APs are polling for this flag
-         * Once set, APs will wake from their polling loop and join SMP tests */
-        spinlock_test_start = 1;
+        /* Spin lock tests - only run if selected via cmdline */
+        if (test_should_run("spinlock")) {
+            /* Enable spin lock test mode - APs are polling for this flag
+             * Once set, APs will wake from their polling loop and join SMP tests */
+            extern volatile int spinlock_test_start;
+            spinlock_test_start = 1;
 
-        /* Memory barrier to ensure APs see the flag change immediately */
-        asm volatile("" ::: "memory");
+            /* Memory barrier to ensure APs see the flag change immediately */
+            asm volatile("" ::: "memory");
 
-        /* Small delay to ensure APs wake up and enter spinlock_test_ap_entry()
-         * This gives APs time to exit their polling loop and start waiting for phase 1 */
-        for (volatile int i = 0; i < 1000000; i++) {
-            asm volatile("pause");
-        }
+            /* Small delay to ensure APs wake up and enter spinlock_test_ap_entry()
+             * This gives APs time to exit their polling loop and start waiting for phase 1 */
+            for (volatile int i = 0; i < 1000000; i++) {
+                asm volatile("pause");
+            }
 
-        /* Run spin lock tests */
-        serial_puts("SMP: Starting spin lock tests...\n");
-        extern int run_spinlock_tests(void);
-        int test_failures = run_spinlock_tests();
-        if (test_failures == 0) {
-            serial_puts("SMP: All spin lock tests PASSED\n");
-        } else {
-            serial_puts("SMP: Some spin lock tests FAILED\n");
-            serial_puts("SMP: Failures: ");
-            serial_put_hex(test_failures);
-            serial_puts("\n");
+            test_run_by_name("spinlock");
         }
 #endif
 
 #if CONFIG_NK_PROTECTION_TESTS
-        /* Run nested kernel mappings protection tests - these will trigger faults and shutdown */
-        serial_puts("KERNEL: Starting nested kernel mappings protection tests...\n");
-        extern int run_nk_protection_tests(void);
-        run_nk_protection_tests();  /* Never returns */
-        serial_puts("KERNEL: NK protection tests returned unexpectedly\n");
+        /* NK protection tests - manual only, run if explicitly selected */
+        if (test_should_run("nk_protection")) {
+            test_run_by_name("nk_protection");  /* Never returns */
+        }
 #endif
+
+        /* Run unified tests if test=unified was specified */
+        test_run_unified();
 
         /* BSP waits with interrupts enabled for timer interrupts to fire
          * The HLT instruction will wake up on each interrupt */
