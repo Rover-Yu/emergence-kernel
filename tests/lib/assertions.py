@@ -249,6 +249,17 @@ class Assertions:
 
         return True
 
+    def assert_not_in_output(self, pattern: str) -> bool:
+        """Check that pattern is NOT found in output.
+
+        Args:
+            pattern: Regular expression pattern to search for
+
+        Returns:
+            True if pattern is NOT found, False otherwise
+        """
+        return not bool(re.search(pattern, self.content))
+
     def assert_boot_complete(self) -> bool:
         """Check that kernel boot completed.
 

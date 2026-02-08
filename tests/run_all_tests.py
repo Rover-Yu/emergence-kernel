@@ -23,6 +23,7 @@ TESTS = [
     ("boot/boot_test.py", "Basic Kernel Boot", "boot", 1, 3),
     ("pcd/pcd_test.py", "Page Control Data (PCD)", "pcd", 1, 3),
     ("slab/slab_test.py", "Slab Allocator", "slab", 2, 5),
+    ("minilibc/string_test.py", "Minilibc String Library", "minilibc", 1, 10),
     ("nested_kernel_invariants/nested_kernel_invariants_test.py",
      "Nested Kernel Invariants", "nested_kernel_invariants", 1, 3),
     ("readonly_visibility/readonly_visibility_test.py",

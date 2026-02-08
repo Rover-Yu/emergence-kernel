@@ -39,6 +39,7 @@ CFLAGS += -DCONFIG_SMP_TESTS=$(CONFIG_SMP_TESTS)
 CFLAGS += -DCONFIG_PCD_TESTS=$(CONFIG_PCD_TESTS)
 CFLAGS += -DCONFIG_NK_INVARIANTS_TESTS=$(CONFIG_NK_INVARIANTS_TESTS)
 CFLAGS += -DCONFIG_READONLY_VISIBILITY_TESTS=$(CONFIG_READONLY_VISIBILITY_TESTS)
+CFLAGS += -DCONFIG_MINILIBC_TESTS=$(CONFIG_MINILIBC_TESTS)
 LDFLAGS := -nostdlib -m elf_x86_64
 
 # Architecture-specific sources (x86_64)
@@ -59,6 +60,10 @@ KERNEL_DIR := kernel
 KERNEL_C_SRCS := $(KERNEL_DIR)/device.c $(KERNEL_DIR)/pmm.c $(KERNEL_DIR)/pcd.c \
                  $(KERNEL_DIR)/slab.c $(KERNEL_DIR)/test.c \
                  $(KERNEL_DIR)/monitor/monitor.c
+
+# Minilibc sources
+MINILIBC_C_SRCS := lib/minilibc/string.c
+MINILIBC_OBJS := $(patsubst lib/minilibc/%.c,$(BUILD_DIR)/minilibc_%.o,$(MINILIBC_C_SRCS))
 
 # Spinlock test sources (conditionally compiled)
 SPINLOCK_TEST_SRC := tests/spinlock/spinlock_test.c
@@ -154,11 +159,11 @@ endif
 CMDLINE_OBJ := $(BUILD_DIR)/kernel_cmdline_source.o
 
 # Add cmdline object to OBJS (TESTS_OBJS now includes conditionally compiled tests)
-OBJS := $(ARCH_BOOT_OBJ) $(ARCH_OBJS) $(KERNEL_OBJS) $(TESTS_OBJS) $(TRAMPOLINE_OBJ) $(CMDLINE_OBJ)
+OBJS := $(ARCH_BOOT_OBJ) $(ARCH_OBJS) $(KERNEL_OBJS) $(MINILIBC_OBJS) $(TESTS_OBJS) $(TRAMPOLINE_OBJ) $(CMDLINE_OBJ)
 
 KERNEL_ELF := $(BUILD_DIR)/$(KERNEL).elf
 
-.PHONY: all clean run run-debug test test-all test-boot test-apic-timer test-smp test-pcd test-slab test-nested-kernel test-nk-protection test-readonly-visibility help
+.PHONY: all clean run run-debug test test-all test-boot test-apic-timer test-smp test-pcd test-slab test-minilibc test-nested-kernel test-nk-protection test-readonly-visibility help
 
 all: $(ISO)
 
@@ -182,6 +187,7 @@ help:
 	@echo "  test-smp         - SMP boot test (2 CPUs)"
 	@echo "  test-pcd         - Page Control Data test"
 	@echo "  test-slab        - Slab allocator test"
+	@echo "  test-minilibc    - Minilibc string library test"
 	@echo "  test-nested-kernel     - Nested Kernel invariants test"
 	@echo "  test-nk-protection     - Nested Kernel mappings protection test"
 	@echo "  test-readonly-visibility - Read-only visibility test"
@@ -225,6 +231,10 @@ $(BUILD_DIR)/kernel_%.o: $(KERNEL_DIR)/%.c | $(BUILD_DIR)
 
 $(BUILD_DIR)/kernel_monitor/%.o: $(KERNEL_DIR)/monitor/%.c | $(BUILD_DIR)
 	@mkdir -p $(BUILD_DIR)/kernel_monitor
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Compile minilibc C files
+$(BUILD_DIR)/minilibc_%.o: lib/minilibc/%.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Compile spinlock test (from tests/spinlock/) - only if enabled
@@ -368,6 +378,11 @@ test-slab:
 	@$(MAKE) all
 	@echo "Running Slab Allocator Test..."
 	@python3 tests/slab/slab_test.py
+
+test-minilibc:
+	@$(MAKE) all
+	@echo "Running Minilibc String Library Test..."
+	@python3 tests/minilibc/string_test.py
 
 test-nested-kernel:
 	@echo "Running Nested Kernel Invariants Test..."

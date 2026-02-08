@@ -268,6 +268,13 @@ void kernel_main(uint32_t multiboot_info_addr) {
         }
 #endif
 
+#if CONFIG_MINILIBC_TESTS
+        /* Minilibc string library tests - auto-run if explicitly selected */
+        if (test_should_run("minilibc")) {
+            test_run_by_name("minilibc");
+        }
+#endif
+
         /* Run unified tests if test=unified was specified */
         test_run_unified();
 
