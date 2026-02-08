@@ -408,12 +408,6 @@ $(MULTIBOOT_HEADER_OBJ): $(MULTIBOOT_HEADER_SRC) | $(BUILD_DIR)
 $(KERNEL_ELF): $(MULTIBOOT_HEADER_OBJ) $(OBJS)
 	@echo "  LD      $@"
 	$(Q)$(LD) $(LDFLAGS) -T $(ARCH_LINKER) $^ -o $@
-	$(CC) $(CFLAGS) -c $(CMDLINE_SOURCE) -o $@
-
-# Link kernel as ELF with multiboot header as first object
-$(KERNEL_ELF): $(MULTIBOOT_HEADER_OBJ) $(OBJS)
-	$(LD) $(LDFLAGS) -T $(ARCH_LINKER) $^ -o $@
->>>>>>> 0a25119 (feat: integrate standalone multiboot2 header with embedded cmdline fallback)
 
 # Extract raw binary from ELF (for booting)
 $(KERNEL_BIN): $(KERNEL_ELF)
