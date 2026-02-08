@@ -6,6 +6,9 @@
 #include "kernel/pmm.h"
 #include "arch/x86_64/serial.h"
 
+/* External embedded command line (generated at build time from KERNEL_CMDLINE) */
+extern const char embedded_cmdline[];
+
 /* External function for serial output */
 extern void serial_puts(const char *str);
 extern void serial_putc(char c);
@@ -188,9 +191,24 @@ void multiboot2_parse(uint32_t mbi_addr) {
     multiboot_tag_t *tag;
     uint64_t total_size;
     int found_memory = 0;
+    int found_cmdline = 0;
 
     serial_puts("PMM: Parsing multiboot2 info at 0x");
     put_hex(mbi_addr);
+    serial_puts("\n");
+
+    /* Check if multiboot info address is in a reasonable range */
+    if (mbi_addr < 0x100000 || mbi_addr > 0x10000000) {
+        serial_puts("PMM: WARNING: Multiboot info address looks suspicious\n");
+    }
+
+    /* Debug: Print first 32 bytes of multiboot info */
+    serial_puts("PMM: Multiboot info dump:\n");
+    uint8_t *mbi_bytes = (uint8_t *)mbi;
+    for (int i = 0; i < 32; i++) {
+        put_hex(mbi_bytes[i]);
+        serial_puts(" ");
+    }
     serial_puts("\n");
 
     /* Check if multiboot info is valid */
@@ -278,34 +296,22 @@ use_default_cmdline:
     /* Set default cmdline if multiboot info was invalid */
     if (kernel_cmdline[0] == '\0') {
         /*
-         * NOTE: In QEMU with GRUB, the multiboot info structure may not pass
-         * the command line correctly. For testing purposes, you can modify the
-         * default_cmdline below to specify which tests to run.
-         *
-         * Examples:
-         *   ""              - No tests run (default for production)
-         *   "test=all"      - Run all auto_run tests
-         *   "test=slab"     - Run only slab test
-         *   "test=timer"    - Run only APIC timer test
-         *   "test=unified"  - Run all tests in unified mode
-         *
-         * On real hardware with a proper bootloader, use KERNEL_CMDLINE in Makefile
-         * or pass via GRUB configuration.
+         * Use embedded command line (from KERNEL_CMDLINE Makefile variable)
+         * This is the fallback when multiboot info is not available (e.g., in QEMU)
          */
-        const char *default_cmdline = "";  /* Default: no tests */
+        const char *embedded = embedded_cmdline;
         size_t i = 0;
-        while (i < sizeof(kernel_cmdline) - 1 && default_cmdline[i] != '\0') {
-            kernel_cmdline[i] = default_cmdline[i];
+
+        /* Copy embedded cmdline to global buffer */
+        while (i < sizeof(kernel_cmdline) - 1 && embedded[i] != '\0') {
+            kernel_cmdline[i] = embedded[i];
             i++;
         }
         kernel_cmdline[i] = '\0';
-        if (default_cmdline[0] != '\0') {
-            serial_puts("CMDLINE: Using default: ");
-            serial_puts(kernel_cmdline);
-            serial_puts("\n");
-        } else {
-            serial_puts("CMDLINE: Using default (empty - no tests will run)\n");
-        }
+
+        serial_puts("CMDLINE: Using embedded command line: '");
+        serial_puts(kernel_cmdline);
+        serial_puts("'\n");
     }
 
 fallback:

@@ -6,8 +6,8 @@ BUILD_DIR := build
 ISO_DIR := isodir
 
 # Kernel command line (passed via GRUB multiboot2)
-# Default: Gauss quote - "Mathematics is the queen of sciences"
-KERNEL_CMDLINE ?= quote="Mathematics is the queen of sciences" --author=Gauss
+# Default: Learning with Every Boot
+KERNEL_CMDLINE ?= motto="Learning with Every Boot"
 
 # ========================================================================
 # Configuration
@@ -89,9 +89,11 @@ ARCH_BOOT_OBJ := $(patsubst $(ARCH_DIR)/%.S,$(BUILD_DIR)/boot_%.o,$(ARCH_DIR)/bo
                 $(BUILD_DIR)/boot_monitor_monitor_call.o
 ARCH_OBJS := $(patsubst $(ARCH_DIR)/%.c,$(BUILD_DIR)/arch_%.o,$(ARCH_C_SRCS))
 KERNEL_OBJS := $(patsubst $(KERNEL_DIR)/%.c,$(BUILD_DIR)/kernel_%.o,$(KERNEL_C_SRCS))
+
+# Initialize TESTS_OBJS with reference test sources (currently empty)
 TESTS_OBJS := $(patsubst $(TESTS_DIR)/%.c,$(BUILD_DIR)/test_%.o,$(TESTS_C_SRCS))
 
-# Conditionally include test objects
+# Conditionally include test objects (must be BEFORE OBJS is defined)
 ifeq ($(CONFIG_SPINLOCK_TESTS),1)
 TESTS_OBJS += $(SPINLOCK_TEST_OBJ)
 endif
@@ -108,7 +110,12 @@ ifeq ($(CONFIG_NK_PROTECTION_TESTS),1)
 TESTS_OBJS += $(NK_PROTECTION_TEST_OBJ)
 endif
 
-OBJS := $(ARCH_BOOT_OBJ) $(ARCH_OBJS) $(KERNEL_OBJS) $(TESTS_OBJS) $(TRAMPOLINE_OBJ)
+# Generated command line object
+CMDLINE_OBJ := $(BUILD_DIR)/kernel_cmdline_source.o
+
+# Add cmdline object to OBJS (TESTS_OBJS now includes conditionally compiled tests)
+OBJS := $(ARCH_BOOT_OBJ) $(ARCH_OBJS) $(KERNEL_OBJS) $(TESTS_OBJS) $(TRAMPOLINE_OBJ) $(CMDLINE_OBJ)
+
 KERNEL_ELF := $(BUILD_DIR)/$(KERNEL).elf
 
 .PHONY: all clean run run-debug test test-all test-boot test-apic-timer test-smp test-pcd test-slab test-nested-kernel test-nk-protection test-readonly-visibility help
@@ -219,16 +226,26 @@ $(BUILD_DIR)/test_%.o: $(TESTS_DIR)/%.c | $(BUILD_DIR)
 $(TRAMPOLINE_OBJ): $(TRAMPOLINE_SRC) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+# Compile generated cmdline source (always rebuild when KERNEL_CMDLINE changes)
+$(BUILD_DIR)/kernel_cmdline_source.o: always-rebuild-cmdline
+	$(CC) $(CFLAGS) -c $(CMDLINE_SOURCE) -o $@
+
 # Link kernel (trampoline is included as regular object)
 $(KERNEL_ELF): $(OBJS)
 	$(LD) $(LDFLAGS) -T $(ARCH_LINKER) $^ -o $@
 
 # Create ISO
-# Always rebuild grub.cfg when ISO is built (to pick up KERNEL_CMDLINE changes)
-.PHONY: always-rebuild-grub
-always-rebuild-grub:
+# Generate embedded command line source file
+CMDLINE_SOURCE := $(BUILD_DIR)/cmdline_source.c
 
-$(ISO): $(KERNEL_ELF) always-rebuild-grub | $(ISO_DIR)
+.PHONY: always-rebuild-cmdline
+always-rebuild-cmdline:
+	@mkdir -p $(BUILD_DIR)
+	@echo "/* Auto-generated command line source */" > $(CMDLINE_SOURCE)
+	@echo "#include <stddef.h>" >> $(CMDLINE_SOURCE)
+	@echo "const char embedded_cmdline[] = \"$(KERNEL_CMDLINE)\";" >> $(CMDLINE_SOURCE)
+
+$(ISO): $(KERNEL_ELF) always-rebuild-cmdline | $(ISO_DIR)
 	cp $(KERNEL_ELF) $(ISO_DIR)/boot/$(KERNEL).elf
 	echo 'set timeout=0' > $(ISO_DIR)/boot/grub/grub.cfg
 	echo 'set default=0' >> $(ISO_DIR)/boot/grub/grub.cfg

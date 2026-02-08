@@ -42,6 +42,11 @@ void kernel_main(uint32_t multiboot_info_addr) {
     serial_put_hex(multiboot_info_addr);
     serial_puts("\n");
 
+    /* Check if the address is zero - this indicates multiboot didn't provide info */
+    if (multiboot_info_addr == 0) {
+        serial_puts("MAIN: WARNING: mbi_addr is 0, multiboot may not have loaded properly\n");
+    }
+
     /* Initialize VGA directly (only BSP should do this) */
     vga_init();
 
