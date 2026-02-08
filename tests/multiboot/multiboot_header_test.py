@@ -2,8 +2,14 @@
 """
 Multiboot2 Header Verification Test
 
-This test verifies that the multiboot2 header is correctly placed at the
-beginning of the kernel ELF file and contains valid magic and checksum.
+This test verifies that the multiboot2 header is correctly placed in the
+kernel ELF file and contains valid magic and checksum.
+
+For ELF files (which we use), GRUB 2.06 finds the multiboot header by scanning
+the program headers. The header is placed at the beginning of the .text section
+via the linker script, which ensures it's at load address 0x100000 (1MB).
+
+The .text section starts at file offset 0x4000 (16384) in the ELF.
 """
 
 import sys
@@ -23,26 +29,35 @@ class MultibootHeaderTest(unittest.TestCase):
         self.build_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'build')
         self.kernel_path = os.path.join(self.build_dir, 'emergence.elf')
 
-    def test_header_at_file_start(self):
-        """Verify multiboot header is at the beginning of the kernel"""
-        # Skip test if kernel doesn't exist
+        # The .text section starts at file offset 0x4000 (16384) in the ELF
+        # This is where the multiboot header is placed via the linker script
+        self.text_offset = 0x4000
+
+    def test_kernel_exists(self):
+        """Verify kernel ELF file exists"""
+        self.assertTrue(os.path.exists(self.kernel_path),
+                       f"Kernel not found at {self.kernel_path}")
+
+    def test_header_at_text_start(self):
+        """Verify multiboot header is at the start of .text section"""
         if not os.path.exists(self.kernel_path):
             self.skipTest(f"Kernel not found at {self.kernel_path}")
 
         with open(self.kernel_path, 'rb') as f:
+            f.seek(self.text_offset)
             # Read first 4 bytes - should be multiboot magic
             magic = struct.unpack('<I', f.read(4))[0]
 
         self.assertEqual(magic, 0xe85250d6,
-                        "Multiboot2 magic number not found at file start")
+                        "Multiboot2 magic number not found at .text section start")
 
     def test_header_checksum_valid(self):
         """Verify multiboot header checksum is correct"""
-        # Skip test if kernel doesn't exist
         if not os.path.exists(self.kernel_path):
             self.skipTest(f"Kernel not found at {self.kernel_path}")
 
         with open(self.kernel_path, 'rb') as f:
+            f.seek(self.text_offset)
             # Read header fields
             magic = struct.unpack('<I', f.read(4))[0]
             architecture = struct.unpack('<I', f.read(4))[0]
@@ -58,12 +73,11 @@ class MultibootHeaderTest(unittest.TestCase):
 
     def test_header_architecture_i386(self):
         """Verify architecture field is 0 (i386)"""
-        # Skip test if kernel doesn't exist
         if not os.path.exists(self.kernel_path):
             self.skipTest(f"Kernel not found at {self.kernel_path}")
 
         with open(self.kernel_path, 'rb') as f:
-            f.seek(4)  # Skip magic
+            f.seek(self.text_offset + 4)  # Skip magic
             architecture = struct.unpack('<I', f.read(4))[0]
 
         self.assertEqual(architecture, 0,
@@ -71,13 +85,11 @@ class MultibootHeaderTest(unittest.TestCase):
 
     def test_header_within_first_8kb(self):
         """Verify entire header is within first 8KB (8192 bytes)"""
-        # Skip test if kernel doesn't exist
         if not os.path.exists(self.kernel_path):
             self.skipTest(f"Kernel not found at {self.kernel_path}")
 
         with open(self.kernel_path, 'rb') as f:
-            # Read header length
-            f.seek(8)  # Skip magic and architecture
+            f.seek(self.text_offset + 8)  # Skip magic and architecture
             header_length = struct.unpack('<I', f.read(4))[0]
 
         self.assertLess(header_length, 8192,

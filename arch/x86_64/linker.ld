@@ -22,8 +22,9 @@ SECTIONS
     . = 1M;
     _kernel_start = .;
 
-    /* Text section - code only (multiboot header prepended separately) */
+    /* Text section - multiboot header first, then code */
     .text ALIGN(4K) : {
+        *(.multiboot)
         *(.text*)
     } :text
 

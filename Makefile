@@ -186,6 +186,9 @@ ifeq ($(CONFIG_TESTS_USERMODE),1)
 TESTS_OBJS += $(USERMODE_TEST_OBJ)
 endif
 
+# Generated command line object (embedded fallback)
+CMDLINE_OBJ := $(BUILD_DIR)/kernel_cmdline_source.o
+
 # Add cmdline object to OBJS (TESTS_OBJS now includes conditionally compiled tests)
 OBJS := $(ARCH_BOOT_OBJ) $(ARCH_OBJS) $(KERNEL_OBJS) $(MINILIBC_OBJS) $(TESTS_OBJS) $(TRAMPOLINE_OBJ) $(CMDLINE_OBJ)
 
@@ -405,12 +408,27 @@ $(MULTIBOOT_HEADER_OBJ): $(MULTIBOOT_HEADER_SRC) | $(BUILD_DIR)
 $(KERNEL_ELF): $(MULTIBOOT_HEADER_OBJ) $(OBJS)
 	@echo "  LD      $@"
 	$(Q)$(LD) $(LDFLAGS) -T $(ARCH_LINKER) $^ -o $@
+	$(CC) $(CFLAGS) -c $(CMDLINE_SOURCE) -o $@
+
+# Link kernel as ELF with multiboot header as first object
+$(KERNEL_ELF): $(MULTIBOOT_HEADER_OBJ) $(OBJS)
+	$(LD) $(LDFLAGS) -T $(ARCH_LINKER) $^ -o $@
+>>>>>>> 0a25119 (feat: integrate standalone multiboot2 header with embedded cmdline fallback)
 
 # Extract raw binary from ELF (for booting)
 $(KERNEL_BIN): $(KERNEL_ELF)
 	objcopy -O binary $< $@
 
 # Create ISO (use ELF for multiboot2)
+# Generate embedded command line source file
+CMDLINE_SOURCE := $(BUILD_DIR)/cmdline_source.c
+
+.PHONY: always-rebuild-cmdline
+always-rebuild-cmdline:
+	@mkdir -p $(BUILD_DIR)
+	@echo "/* Auto-generated command line source */" > $(CMDLINE_SOURCE)
+	@echo "#include <stddef.h>" >> $(CMDLINE_SOURCE)
+	@echo "const char embedded_cmdline[] = \"$(KERNEL_CMDLINE)\";" >> $(CMDLINE_SOURCE)
 
 $(ISO): $(KERNEL_ELF) always-rebuild-cmdline | $(ISO_DIR) .tmp
 	cp $(KERNEL_ELF) $(ISO_DIR)/boot/$(KERNEL).elf
@@ -433,7 +451,6 @@ clean:
 	rm -f ./emergence_test_* 2>/dev/null || true
 	rm -f /tmp/emergence_* 2>/dev/null || true
 	rm -f *.bin *.elf 2>/dev/null || true
-	rm -f $(BUILD_DIR)/multiboot_header.bin* 2>/dev/null || true
 
 # Test targets (Python 3 only)
 test: test-all
