@@ -55,6 +55,11 @@ Examples:
         metavar="COUNT",
         help="Number of CPUs to use (default: 2)"
     )
+    parser.add_argument(
+        "-q", "--quiet",
+        action="store_true",
+        help="Suppress header/footer, show only result"
+    )
     return parser.parse_args()
 
 
@@ -64,11 +69,12 @@ def main():
 
     output = TerminalOutput()
 
-    # Print test header
-    output.print_header("SMP Boot Test", width=40)
-    print(f"CPU Count: {args.cpus}")
-    print(f"Timeout: {args.timeout} seconds")
-    print()
+    # Print test header (skip in quiet mode)
+    if not args.quiet:
+        output.print_header("SMP Boot Test", width=40)
+        print(f"CPU Count: {args.cpus}")
+        print(f"Timeout: {args.timeout} seconds")
+        print()
 
     # Create framework and run test
     framework = create_framework(
@@ -76,7 +82,8 @@ def main():
         cpu_count=args.cpus,
         timeout=args.timeout,
         verbose=args.verbose,
-        keep_output=args.keep_output
+        keep_output=args.keep_output,
+        quiet=args.quiet
     )
 
     # Check prerequisites
@@ -85,8 +92,9 @@ def main():
         sys.exit(1)
 
     # Run the test
-    print(f"Starting QEMU with {args.cpus} CPU(s)...")
-    print()
+    if not args.quiet:
+        print(f"Starting QEMU with {args.cpus} CPU(s)...")
+        print()
 
     if framework.run_test("smp", cpu_count=args.cpus):
         exit_code = framework.print_summary()

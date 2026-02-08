@@ -88,13 +88,14 @@ def list_tests():
         print()
 
 
-def run_test_script(script_path: Path, verbose: bool, keep_output: bool) -> bool:
+def run_test_script(script_path: Path, verbose: bool, keep_output: bool, quiet: bool = True) -> bool:
     """Run a test script directly.
 
     Args:
         script_path: Path to the test script
         verbose: Whether to enable verbose output
         keep_output: Whether to keep output files
+        quiet: Suppress header/footer output (default: True)
 
     Returns:
         True if test passed, False otherwise
@@ -105,6 +106,8 @@ def run_test_script(script_path: Path, verbose: bool, keep_output: bool) -> bool
 
     if verbose:
         cmd.append("--verbose")
+    else:
+        cmd.append("--quiet")
 
     if keep_output:
         cmd.append("--keep-output")
@@ -171,6 +174,8 @@ def main():
 
         if args.verbose:
             cmd.append("--verbose")
+        else:
+            cmd.append("--quiet")
 
         if args.keep_output:
             cmd.append("--keep-output")
@@ -187,8 +192,6 @@ def main():
         else:
             summary.failed += 1
         summary.total_tests += 1
-
-        print()
 
     # Print summary
     print()

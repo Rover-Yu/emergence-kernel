@@ -106,12 +106,13 @@ class TestFramework:
 
         cmdline = self.config.get_qemu_cmdline(test_name)
 
-        # Print test start
-        self.output.print_test_start(
-            test_name,
-            cpu_count,
-            self.config.qemu_timeout
-        )
+        # Print test start (skip in quiet mode)
+        if not self.config.quiet:
+            self.output.print_test_start(
+                test_name,
+                cpu_count,
+                self.config.qemu_timeout
+            )
 
         # Run test with timing
         start_time = time.time()
@@ -127,7 +128,8 @@ class TestFramework:
         assertions = Assertions(output_content)
 
         if assertions.assert_test_passed(test_name):
-            self.output.print_success(f"{test_name} test passed")
+            if not self.config.quiet:
+                self.output.print_success(f"{test_name} test passed")
             self.tests_passed += 1
             self.test_results.append(TestResult(
                 test_name=test_name,
@@ -144,12 +146,13 @@ class TestFramework:
             if assertions.assert_test_failed(test_name):
                 failure_reason = "Test explicitly reported failure"
 
-            self.output.print_failure(
-                f"{test_name} test failed",
-                failure_reason
-            )
+            if not self.config.quiet:
+                self.output.print_failure(
+                    f"{test_name} test failed",
+                    failure_reason
+                )
 
-            if self.config.verbose:
+            if not self.config.quiet and self.config.verbose:
                 self.output.print_warning("\nFailure output:")
                 self.output.print_verbose(assertions.get_failure_snippet())
 
@@ -190,11 +193,12 @@ class TestFramework:
 
         cmdline = self.config.get_qemu_cmdline(test_name)
 
-        self.output.print_test_start(
-            test_name,
-            cpu_count,
-            self.config.qemu_timeout
-        )
+        if not self.config.quiet:
+            self.output.print_test_start(
+                test_name,
+                cpu_count,
+                self.config.qemu_timeout
+            )
 
         start_time = time.time()
 
@@ -210,7 +214,8 @@ class TestFramework:
 
         try:
             if custom_assertions(assertions):
-                self.output.print_success(f"{test_name} test passed")
+                if not self.config.quiet:
+                    self.output.print_success(f"{test_name} test passed")
                 self.tests_passed += 1
                 self.test_results.append(TestResult(
                     test_name=test_name,
@@ -221,12 +226,13 @@ class TestFramework:
                 ))
                 return True
             else:
-                self.output.print_failure(
-                    f"{test_name} test failed",
-                    "Custom assertions failed"
-                )
+                if not self.config.quiet:
+                    self.output.print_failure(
+                        f"{test_name} test failed",
+                        "Custom assertions failed"
+                    )
 
-                if self.config.verbose:
+                if not self.config.quiet and self.config.verbose:
                     self.output.print_warning("\nFailure output:")
                     self.output.print_verbose(assertions.get_failure_snippet())
 
@@ -254,6 +260,10 @@ class TestFramework:
         Returns:
             Exit code (0 if all passed, 1 if any failed)
         """
+        # Skip printing in quiet mode (only return exit code)
+        if self.config.quiet:
+            return 0 if self.tests_failed == 0 else 1
+
         total = self.tests_passed + self.tests_failed
         total_duration = sum(r.duration for r in self.test_results)
 
@@ -310,7 +320,8 @@ def create_framework(
     cpu_count: int = 1,
     timeout: int = 3,
     verbose: bool = False,
-    keep_output: bool = False
+    keep_output: bool = False,
+    quiet: bool = False
 ) -> TestFramework:
     """Helper function to create a configured TestFramework.
 
@@ -320,6 +331,7 @@ def create_framework(
         timeout: QEMU timeout in seconds
         verbose: Whether to show verbose output
         keep_output: Whether to keep output files
+        quiet: Whether to suppress test start messages
 
     Returns:
         Configured TestFramework instance
@@ -329,7 +341,8 @@ def create_framework(
         cpu_count=cpu_count,
         qemu_timeout=timeout,
         verbose=verbose,
-        keep_output=keep_output
+        keep_output=keep_output,
+        quiet=quiet
     )
 
     return TestFramework(config)
@@ -339,7 +352,8 @@ def run_single_test(
     test_name: str,
     cpu_count: int = 1,
     timeout: int = 3,
-    verbose: bool = False
+    verbose: bool = False,
+    quiet: bool = False
 ) -> int:
     """Convenience function to run a single test.
 
@@ -348,11 +362,12 @@ def run_single_test(
         cpu_count: Number of CPUs to use
         timeout: QEMU timeout in seconds
         verbose: Whether to show verbose output
+        quiet: Whether to suppress test start messages
 
     Returns:
         Exit code (0 if passed, 1 if failed)
     """
-    with create_framework(test_name, cpu_count, timeout, verbose) as framework:
+    with create_framework(test_name, cpu_count, timeout, verbose, False, quiet) as framework:
         if framework.run_test(test_name, cpu_count):
             return framework.print_summary()
         return 1

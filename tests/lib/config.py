@@ -47,6 +47,7 @@ class TestConfig:
 
     # Output settings
     verbose: bool = False
+    quiet: bool = False
     keep_output: bool = False
     results_dir: Path = field(init=False)
 

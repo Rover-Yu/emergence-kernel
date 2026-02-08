@@ -46,6 +46,11 @@ Examples:
         metavar="SECONDS",
         help="QEMU timeout in seconds (default: 3)"
     )
+    parser.add_argument(
+        "-q", "--quiet",
+        action="store_true",
+        help="Suppress header/footer, show only result"
+    )
     return parser.parse_args()
 
 
@@ -55,11 +60,12 @@ def main():
 
     output = TerminalOutput()
 
-    # Print test header
-    output.print_header("Read-Only Visibility Test", width=40)
-    print(f"CPU Count: 1")
-    print(f"Timeout: {args.timeout} seconds")
-    print()
+    # Print test header (skip in quiet mode)
+    if not args.quiet:
+        output.print_header("Read-Only Visibility Test", width=40)
+        print(f"CPU Count: 1")
+        print(f"Timeout: {args.timeout} seconds")
+        print()
 
     # Create framework and run test
     framework = create_framework(
@@ -67,7 +73,8 @@ def main():
         cpu_count=1,
         timeout=args.timeout,
         verbose=args.verbose,
-        keep_output=args.keep_output
+        keep_output=args.keep_output,
+        quiet=args.quiet
     )
 
     # Check prerequisites
@@ -76,8 +83,9 @@ def main():
         sys.exit(1)
 
     # Run the test
-    print("Starting QEMU with 1 CPU...")
-    print()
+    if not args.quiet:
+        print("Starting QEMU with 1 CPU...")
+        print()
 
     if framework.run_test("readonly_visibility", cpu_count=1):
         exit_code = framework.print_summary()
