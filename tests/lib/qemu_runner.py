@@ -134,7 +134,6 @@ class QEMURunner:
         """
         with self.capture_output("test") as output_file:
             cmd = [
-                "timeout", str(timeout),
                 "make", "-C", str(self.config.project_root),
                 "run", f"KERNEL_CMDLINE={cmdline}"
             ]
@@ -142,17 +141,24 @@ class QEMURunner:
             if self.config.verbose:
                 print(f"Running: {' '.join(cmd)}")
 
-            result = subprocess.run(
-                cmd,
-                stdout=output_file.open('w'),
-                stderr=subprocess.STDOUT,
-                timeout=timeout + 1  # Give timeout command time to kill
-            )
+            # Use Python's built-in timeout instead of external timeout command
+            # to avoid buffering issues where output can be lost when timeout kills process
+            try:
+                result = subprocess.run(
+                    cmd,
+                    stdout=output_file.open('w'),
+                    stderr=subprocess.STDOUT,
+                    timeout=timeout
+                )
+                exit_code = result.returncode
+            except subprocess.TimeoutExpired:
+                # Timeout occurred - QEMU was terminated
+                exit_code = 124  # Standard timeout exit code
 
             # Read content before cleanup
             content = output_file.read_text()
 
-            return content, result.returncode
+            return content, exit_code
 
     def run_qemu_direct(self, cpu_count: int, timeout: int) -> Tuple[str, int]:
         """Run QEMU directly (legacy method for compatibility).
@@ -170,23 +176,27 @@ class QEMURunner:
         with self.capture_output("qemu") as output_file:
             qemu_cmd = self._build_qemu_command(cpu_count)
 
-            # Wrap with timeout command
-            cmd = ["timeout", str(timeout)] + qemu_cmd
-
             if self.config.verbose:
-                print(f"Running: {' '.join(cmd)}")
+                print(f"Running: {' '.join(qemu_cmd)}")
 
-            result = subprocess.run(
-                cmd,
-                stdout=output_file.open('w'),
-                stderr=subprocess.STDOUT,
-                timeout=timeout + 1
-            )
+            # Use Python's built-in timeout instead of external timeout command
+            # to avoid buffering issues where output can be lost when timeout kills process
+            try:
+                result = subprocess.run(
+                    qemu_cmd,
+                    stdout=output_file.open('w'),
+                    stderr=subprocess.STDOUT,
+                    timeout=timeout
+                )
+                exit_code = result.returncode
+            except subprocess.TimeoutExpired:
+                # Timeout occurred - QEMU was terminated
+                exit_code = 124  # Standard timeout exit code
 
             # Read content before cleanup
             content = output_file.read_text()
 
-            return content, result.returncode
+            return content, exit_code
 
     def run_qemu_with_env(self, cpu_count: int, cmdline: str, timeout: int) -> Tuple[str, int]:
         """Run QEMU with custom kernel command line.
@@ -207,23 +217,27 @@ class QEMURunner:
             # Add kernel command line
             qemu_cmd.extend(["-append", cmdline])
 
-            # Wrap with timeout command
-            cmd = ["timeout", str(timeout)] + qemu_cmd
-
             if self.config.verbose:
-                print(f"Running: {' '.join(cmd)}")
+                print(f"Running: {' '.join(qemu_cmd)}")
 
-            result = subprocess.run(
-                cmd,
-                stdout=output_file.open('w'),
-                stderr=subprocess.STDOUT,
-                timeout=timeout + 1
-            )
+            # Use Python's built-in timeout instead of external timeout command
+            # to avoid buffering issues where output can be lost when timeout kills process
+            try:
+                result = subprocess.run(
+                    qemu_cmd,
+                    stdout=output_file.open('w'),
+                    stderr=subprocess.STDOUT,
+                    timeout=timeout
+                )
+                exit_code = result.returncode
+            except subprocess.TimeoutExpired:
+                # Timeout occurred - QEMU was terminated
+                exit_code = 124  # Standard timeout exit code
 
             # Read content before cleanup
             content = output_file.read_text()
 
-            return content, result.returncode
+            return content, exit_code
 
     def __enter__(self):
         """Enter context manager.
