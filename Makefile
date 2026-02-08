@@ -23,6 +23,14 @@ AS := as
 LD := ld
 GRUB_MKRESCUE := grub-mkrescue
 
+# Verbosity: V=1 for verbose output, V=0 for quiet (default)
+V ?= 0
+ifeq ($(V),1)
+Q =
+else
+Q = @
+endif
+
 # Flags (x86_64 with multiboot support)
 CFLAGS := -ffreestanding -O2 -Wall -g -nostdlib -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2 -I.
 CFLAGS += -DCONFIG_TESTS_SPINLOCK=$(CONFIG_TESTS_SPINLOCK)
@@ -187,8 +195,12 @@ help:
 	@echo "=============================="
 	@echo ""
 	@echo "Build targets:"
-	@echo "  all              - Build kernel ISO"
+	@echo "  all              - Build kernel ISO (quiet output)"
 	@echo "  clean            - Remove build artifacts"
+	@echo ""
+	@echo "Verbosity:"
+	@echo "  V=1              - Show full compiler commands"
+	@echo "  Example: make V=1"
 	@echo ""
 	@echo "Run targets:"
 	@echo "  run              - Run kernel in QEMU (4 CPUs, 128M RAM)"
@@ -241,126 +253,149 @@ $(ISO_DIR):
 
 # Compile architecture-specific boot assembly
 $(BUILD_DIR)/boot_%.o: $(ARCH_DIR)/boot.S | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@
+	@echo "  AS      $<"
+	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 
 # Compile ISR assembly
 $(BUILD_DIR)/isr_%.o: $(ARCH_DIR)/isr.S | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@
+	@echo "  AS      $<"
+	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 
 # Compile monitor assembly files
 $(BUILD_DIR)/boot_monitor_%.o: $(ARCH_DIR)/monitor/%.S | $(BUILD_DIR)
 	@mkdir -p $(BUILD_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@
+	@echo "  AS      $<"
+	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 
 
 # Compile syscall_entry assembly
 $(BUILD_DIR)/boot_syscall_entry.o: $(ARCH_DIR)/syscall_entry.S | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@
+	@echo "  AS      $<"
+	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 
 # Compile userprog assembly
 $(BUILD_DIR)/boot_userprog.o: $(ARCH_DIR)/userprog.S | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@
-	$(CC) $(CFLAGS) -c $< -o $@
+	@echo "  AS      $<"
+	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 
 # Compile architecture-specific C files
 $(BUILD_DIR)/arch_%.o: $(ARCH_DIR)/%.c | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@
+	@echo "  CC      $<"
+	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 
 # Compile architecture-independent kernel C files
 $(BUILD_DIR)/kernel_%.o: $(KERNEL_DIR)/%.c | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@
+	@echo "  CC      $<"
+	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/kernel_monitor/%.o: $(KERNEL_DIR)/monitor/%.c | $(BUILD_DIR)
 	@mkdir -p $(BUILD_DIR)/kernel_monitor
-	$(CC) $(CFLAGS) -c $< -o $@
+	@echo "  CC      $<"
+	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 
 # Compile minilibc C files
 $(BUILD_DIR)/minilibc_%.o: lib/minilibc/%.c | $(BUILD_DIR)
 	@mkdir -p $(BUILD_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@
+	@echo "  CC      $<"
+	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 
 # Compile spinlock test (from tests/spinlock/) - only if enabled
 ifeq ($(CONFIG_TESTS_SPINLOCK),1)
 $(SPINLOCK_TEST_OBJ): $(SPINLOCK_TEST_SRC) | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@
+	@echo "  CC      $<"
+	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 endif
 
 # Compile slab allocator test (from tests/slab/) - only if enabled
 ifeq ($(CONFIG_TESTS_SLAB),1)
 $(SLAB_TEST_OBJ): $(SLAB_TEST_SRC) | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@
+	@echo "  CC      $<"
+	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 endif
 
 # Compile PMM test (from tests/pmm/) - only if enabled
 ifeq ($(CONFIG_TESTS_PMM),1)
 $(PMM_TEST_OBJ): $(PMM_TEST_SRC) | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@
+	@echo "  CC      $<"
+	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 endif
 
 # Compile APIC timer test (from tests/timer/) - only if enabled
 ifeq ($(CONFIG_TESTS_APIC_TIMER),1)
 $(TIMER_TEST_OBJ): $(TIMER_TEST_SRC) | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@
+	@echo "  CC      $<"
+	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 endif
 
 # Compile nested kernel fault injection test (from tests/nk_fault_injection/) - only if enabled
 ifeq ($(CONFIG_TESTS_NK_FAULT_INJECTION),1)
 $(NK_PROTECTION_TEST_OBJ): $(NK_PROTECTION_TEST_SRC) | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@
+	@echo "  CC      $<"
+	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 endif
 
 # Compile boot test (from tests/boot/) - only if enabled
 ifeq ($(CONFIG_TESTS_BOOT),1)
 $(BOOT_TEST_OBJ): $(BOOT_TEST_SRC) | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@
+	@echo "  CC      $<"
+	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 endif
 
 # Compile SMP boot test (from tests/smp/) - only if enabled
 ifeq ($(CONFIG_TESTS_SMP),1)
 $(SMP_TEST_OBJ): $(SMP_TEST_SRC) | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@
+	@echo "  CC      $<"
+	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 endif
 
 # Compile PCD test (from tests/pcd/) - only if enabled
 ifeq ($(CONFIG_TESTS_PCD),1)
 $(PCD_TEST_OBJ): $(PCD_TEST_SRC) | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@
+	@echo "  CC      $<"
+	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 endif
 
 # Compile nested kernel invariants test (from tests/nested_kernel_invariants/) - only if enabled
 ifeq ($(CONFIG_TESTS_NK_INVARIANTS),1)
 $(NK_INVARIANTS_TEST_OBJ): $(NK_INVARIANTS_TEST_SRC) | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@
+	@echo "  CC      $<"
+	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 endif
 
 # Compile read-only visibility test (from tests/readonly_visibility/) - only if enabled
 ifeq ($(CONFIG_TESTS_NK_READONLY_VISIBILITY),1)
 $(READONLY_VISIBILITY_TEST_OBJ): $(READONLY_VISIBILITY_TEST_SRC) | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@
+	@echo "  CC      $<"
+	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 endif
 
 # Compile usermode test (from tests/usermode/) - only if enabled
 ifeq ($(CONFIG_TESTS_USERMODE),1)
 $(USERMODE_TEST_OBJ): $(USERMODE_TEST_SRC) | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@
+	@echo "  CC      $<"
+	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 endif
 
 # Compile test C files
 $(BUILD_DIR)/test_%.o: $(TESTS_DIR)/%.c | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@
+	@echo "  CC      $<"
+	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 
 # Compile AP trampoline (as 64-bit assembly, uses PIC)
 # Use CC to get C preprocessor for conditional compilation
 $(TRAMPOLINE_OBJ): $(TRAMPOLINE_SRC) | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@
+	@echo "  AS      $<"
+	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 
 # Compile generated cmdline source (always rebuild when KERNEL_CMDLINE changes)
 $(BUILD_DIR)/kernel_cmdline_source.o: always-rebuild-cmdline
-	$(CC) $(CFLAGS) -c $(CMDLINE_SOURCE) -o $@
+	@echo "  CC      cmdline_source.c"
+	$(Q)$(CC) $(CFLAGS) -c $(CMDLINE_SOURCE) -o $@
 
 # Link kernel (trampoline is included as regular object)
 $(KERNEL_ELF): $(OBJS)
-	$(LD) $(LDFLAGS) -T $(ARCH_LINKER) $^ -o $@
+	@echo "  LD      $@"
+	$(Q)$(LD) $(LDFLAGS) -T $(ARCH_LINKER) $^ -o $@
 
 # Create ISO
 # Generate embedded command line source file
