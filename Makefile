@@ -190,7 +190,7 @@ OBJS := $(ARCH_BOOT_OBJ) $(ARCH_OBJS) $(KERNEL_OBJS) $(MINILIBC_OBJS) $(TESTS_OB
 
 KERNEL_ELF := $(BUILD_DIR)/$(KERNEL).elf
 
-.PHONY: all clean run run-debug test test-all test-boot test-apic-timer test-smp test-pcd test-slab test-nested-kernel test-nk-protection test-readonly-visibility test-usermode help
+.PHONY: all clean run run-debug test test-all test-boot test-apic-timer test-smp test-pcd test-slab test-nested-kernel test-nk-fault-injection test-readonly-visibility test-usermode help
 
 all: $(ISO)
 
@@ -206,9 +206,9 @@ help:
 	@echo "  V=1              - Show full compiler commands"
 	@echo "  Example: make V=1"
 	@echo ""
-	@echo "Run targets:"
+	@echo "Run targets (using test framework):"
 	@echo "  run              - Run kernel in QEMU (4 CPUs, 128M RAM, 8s timeout)"
-	@echo "  run-debug        - Run kernel in QEMU with GDB server (freeze at start)"
+	@echo "  run-debug        - Run kernel in QEMU with GDB server on port 1234"
 	@echo ""
 	@echo "Test targets:"
 	@echo "  test             - Run all tests (test-all)"
@@ -219,7 +219,7 @@ help:
 	@echo "  test-pcd         - Page Control Data test"
 	@echo "  test-slab        - Slab allocator test"
 	@echo "  test-nested-kernel     - Nested Kernel invariants test"
-	@echo "  test-nk-protection     - Nested Kernel mappings protection test"
+	@echo "  test-nk-fault-injection - Nested Kernel fault injection test"
 	@echo "  test-readonly-visibility - Read-only visibility test"
 	@echo "  test-usermode          - User mode syscall test (KVM enabled)"
 	@echo ""
@@ -237,14 +237,12 @@ help:
 	@echo "  make CONFIG_TESTS_NK_READONLY_VISIBILITY=1 - Enable NK read-only visibility tests"
 	@echo "  make CONFIG_TESTS_NK_FAULT_INJECTION=1    - Enable NK fault injection tests"
 	@echo "  make CONFIG_TESTS_NK_TRAMPOLINE=1         - Enable NK trampoline test"
+	@echo "  make CONFIG_TESTS_NK_INVARIANTS_VERIFY=1 - Verify NK invariants write protection"
 	@echo ""
 	@echo "Debug options:"
 	@echo "  make CONFIG_DEBUG_SMP_AP=1                - Enable SMP AP debug marks"
 	@echo "  make CONFIG_DEBUG_PCD_STATS=1             - Show PCD statistics"
 	@echo "  make CONFIG_DEBUG_NK_INVARIANTS_VERBOSE=1 - Verbose NK invariants output"
-	@echo ""
-	@echo "Nested Kernel options:"
-	@echo "  make CONFIG_TESTS_NK_INVARIANTS_VERIFY=1  - Verify write protection"
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)

@@ -34,18 +34,34 @@ make run KERNEL_CMDLINE='test=all'            # Run all tests
 make run KERNEL_CMDLINE='test=unified'        # Unified test execution
 ```
 
+**Note:** `make run` now uses the Python test framework (`tests/run.py`) with an 8-second timeout. This prevents hanging QEMU instances. For debugging, use `make run-debug` which starts GDB server on port 1234.
+
 **Note:** The `KERNEL_CMDLINE` variable is embedded into the kernel at build time and used as a fallback when multiboot info is unavailable (e.g., in QEMU). This enables runtime test selection without recompilation.
 
 ### Debug with GDB
 Terminal 1:
 ```bash
-make run-debug
+make run-debug                                # Starts QEMU with GDB server, frozen at startup
 ```
 
 Terminal 2:
 ```bash
-gdb -x .gdbinit
+gdb -x .gdbinit                              # Connects to QEMU GDB server on localhost:1234
 ```
+
+### QEMU Testing Patterns
+
+**Python subprocess for QEMU (tests/run.py, tests/lib/qemu_runner.py):**
+- Use `subprocess.run()` with `timeout=N` for automatic termination
+- For file output, use `buffering=0` with binary mode to prevent data loss on timeout
+- Avoid `-serial stdio` with `-nographic` (causes terminal interaction artifacts)
+- Debug mode: add `-s -S` flags for GDB server (port 1234, freeze at startup)
+
+**Serial port flushing (arch/x86_64/serial_driver.c, arch/x86_64/power.c):**
+- Call `serial_flush()` before shutdown to ensure all output is transmitted
+- Flush waits for LSR bit 6 (TEMT - Transmitter Empty) which indicates both THR and FIFO are empty
+- Without flush, characters in the UART FIFO may be lost when QEMU exits via isa-debug-exit
+- Add halt loop immediately after QEMU shutdown port write to prevent execution from continuing
 
 ## Architecture
 
