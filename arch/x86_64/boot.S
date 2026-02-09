@@ -3,35 +3,6 @@
 /* GDT segment selectors */
 #define GDT_TSS         0x28   /* Index 5 */
 
-/* Multiboot2 Header */
-.section .multiboot
-.align 8
-
-multiboot_header_start:
-    /* magic */
-    .long 0xe85250d6
-    /* architecture: i386 */
-    .long 0
-    /* header length */
-    .long multiboot_header_end - multiboot_header_start
-    /* checksum */
-    .long -(0xe85250d6 + 0 + (multiboot_header_end - multiboot_header_start))
-
-    /* Information request tag - request cmdline and memory map */
-    .short 1                     /* type: information request */
-    .short 0                     /* flags */
-    .long 16                     /* size */
-
-    /* Requested tags: cmdline (1) and mmap (6) */
-    .long 1                      /* MULTIBOOT_TAG_CMDLINE */
-    .long 6                      /* MULTIBOOT_TAG_MMAP */
-
-    /* End tag */
-    .short 0                     /* type: end tag */
-    .short 0                     /* flags */
-    .long 8                      /* size */
-multiboot_header_end:
-
 /* External symbols from C code
  * These are resolved at link time via the GOT in the trampoline */
 .extern ap_start              /* AP entry point function */
@@ -185,8 +156,11 @@ boot_is_bsp:
     /* Set up temporary stack */
     mov $nk_boot_stack_top, %esp
 
-    /* Save Multiboot info pointer (passed in ebx) to %esi */
-    mov %ebx, %esi
+    /* Save Multiboot info pointer (passed in ebx) to %edi
+     * We use %edi instead of %esi because page table setup clobbers %esi.
+     * %rdi is the first argument register for x86_64, perfect for kernel_main().
+     * In 32-bit mode, writing to %edi automatically zeroes upper 32 bits of %rdi. */
+    mov %ebx, %edi
 
     /* ============================================================
      * MMU Initialization for x86-64 Long Mode
@@ -452,7 +426,7 @@ long_mode_start:
 
     /* Call kernel main */
     /* Note: bsp_init_done will be set by kernel code when ready */
-    mov %rsi, %rdi        /* Pass multiboot info in %rdi (first argument) */
+    /* %rdi already contains the MBI address from boot (no overwrite needed) */
     call kernel_main
 
     /* Halt if kernel returns */

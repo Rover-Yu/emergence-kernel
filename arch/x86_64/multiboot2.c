@@ -16,6 +16,10 @@ extern void serial_putc(char c);
 /* Global kernel command line (max 1024 bytes) */
 static char kernel_cmdline[1024];
 
+/* Store multiboot info address and size for PMM reservation */
+static uint32_t stored_mbi_addr = 0;
+static uint32_t stored_mbi_size = 0;
+
 /* Helper: Convert number to hex string and print */
 static void put_hex(uint64_t value) {
     const char hex_chars[] = "0123456789ABCDEF";
@@ -192,6 +196,9 @@ void multiboot2_parse(uint32_t mbi_addr) {
     uint64_t total_size;
     int found_memory = 0;
 
+    /* Store MBI info for PMM reservation */
+    stored_mbi_addr = mbi_addr;
+
     serial_puts("PMM: Parsing multiboot2 info at 0x");
     put_hex(mbi_addr);
     serial_puts("\n");
@@ -217,6 +224,9 @@ void multiboot2_parse(uint32_t mbi_addr) {
     }
 
     total_size = mbi->total_size;
+
+    /* Store MBI size for PMM reservation (align to page) */
+    stored_mbi_size = (uint32_t)total_size;
 
     /* If total_size is 0 or too small, boot loader didn't provide info */
     if (total_size < sizeof(multiboot_info_t)) {
@@ -319,6 +329,16 @@ use_default_cmdline:
     }
 
     serial_puts("PMM: Multiboot2 parsing complete\n");
+}
+
+/* Get multiboot info address and size for PMM reservation */
+void multiboot_get_info(uint32_t *addr, uint32_t *size) {
+    if (addr != NULL) {
+        *addr = stored_mbi_addr;
+    }
+    if (size != NULL) {
+        *size = stored_mbi_size;
+    }
 }
 
 /* Accessor function to get kernel command line */

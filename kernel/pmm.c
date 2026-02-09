@@ -228,6 +228,24 @@ void pmm_init(uint32_t mbi_addr) {
     /* Parse multiboot2 memory map */
     multiboot2_parse(mbi_addr);
 
+    /* Reserve multiboot info structure (before allocating memory) */
+    uint32_t mbi_info_addr;
+    uint32_t mbi_info_size;
+    multiboot_get_info(&mbi_info_addr, &mbi_info_size);
+
+    if (mbi_info_addr != 0 && mbi_info_size != 0) {
+        /* Align size to page boundary */
+        uint32_t mbi_pages = (mbi_info_size + PAGE_SIZE - 1) / PAGE_SIZE;
+        uint64_t mbi_size_aligned = mbi_pages * PAGE_SIZE;
+
+        serial_puts("PMM: Reserving multiboot info at 0x");
+        put_hex(mbi_info_addr);
+        serial_puts(", size ");
+        put_hex(mbi_size_aligned);
+        serial_puts(" bytes\n");
+        pmm_reserve_region(mbi_info_addr, mbi_size_aligned);
+    }
+
     /* Reserve kernel region */
     uint64_t kernel_start = (uint64_t)_kernel_start;
     uint64_t kernel_end = (uint64_t)_kernel_end;
@@ -240,9 +258,11 @@ void pmm_init(uint32_t mbi_addr) {
     serial_puts(" bytes\n");
     pmm_reserve_region(kernel_start, kernel_size);
 
-    /* Reserve AP trampoline (0x7000 - 0x9000) */
-    serial_puts("PMM: Reserving trampoline at 0x7000, size 8192 bytes\n");
-    pmm_reserve_region(0x7000, 8192);
+    /* Reserve AP trampoline (0x7000 - 0x9FFF)
+     * Includes: trampoline code (4KB), GDT64, stub (4KB), and GOT (4KB)
+     * Total: 12KB from 0x7000 to 0x9FFF */
+    serial_puts("PMM: Reserving trampoline at 0x7000, size 12288 bytes\n");
+    pmm_reserve_region(0x7000, 12288);
 
     /* Reserve boot stack area */
     serial_puts("PMM: Reserving boot stacks, size 32768 bytes\n");
