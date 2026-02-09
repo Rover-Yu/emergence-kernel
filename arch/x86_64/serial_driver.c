@@ -211,6 +211,37 @@ void serial_puts(const char *str) {
 }
 
 /**
+ * serial_flush - Wait for all serial output to complete
+ *
+ * This function waits for both the transmit hold register and the
+ * transmit FIFO to be empty, ensuring all characters have been sent.
+ * Call this before system shutdown to ensure all output is visible.
+ */
+void serial_flush(void) {
+    struct serial_data *data = (struct serial_data *)com1_device.driver_data;
+    uint16_t base;
+    uint8_t lsr;
+
+    serial_lock_acquire();
+
+    if (!data) {
+        base = 0x3F8;
+    } else {
+        base = data->base_port;
+    }
+
+    /* Wait for transmitter holding register and transmitter FIFO to be empty
+     * LSR bit 5 (THRE): Transmitter holding register empty
+     * LSR bit 6 (TEMT): Transmitter empty (both THR and FIFO empty)
+     */
+    do {
+        lsr = inb(base + SERIAL_REG_LINE_STAT);
+    } while ((lsr & 0x40) == 0);  /* Wait for TEMT (bit 6) */
+
+    serial_lock_release();
+}
+
+/**
  * serial_unlock - Release the serial spinlock (for SMP handoff)
  *
  * This function is used during AP startup to release the serial lock

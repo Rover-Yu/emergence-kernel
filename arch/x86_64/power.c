@@ -19,14 +19,23 @@ void system_shutdown(void) {
     /* Print shutdown message and exit QEMU cleanly */
     serial_puts("system is shutting down\n");
 
+    /* Flush serial output to ensure all characters are transmitted */
+    serial_flush();
+
     /* Try QEMU/Bochs shutdown port first (8-bit write for predictable exit code) */
     outb(SHUTDOWN_PORT_QEMU, SHUTDOWN_CMD_QEMU);
 
-    /* If we reach here, shutdown failed - try VirtualBox (8-bit write) */
+    /* Halt immediately - QEMU should have exited above.
+     * If execution reaches here, QEMU shutdown failed. Continue to fallback below. */
+    while (1) {
+        asm volatile ("hlt");
+    }
+
+    /* The code below should never execute in QEMU. It's only for other environments. */
     outb(SHUTDOWN_PORT_VBOX, SHUTDOWN_CMD_VBOX);
+    serial_puts("SHUTDOWN: Port I/O failed, halting...\n");
 
     /* If still here, halt forever */
-    serial_puts("SHUTDOWN: Port I/O failed, halting...\n");
     while (1) {
         asm volatile ("hlt");
     }

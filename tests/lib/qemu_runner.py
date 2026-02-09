@@ -106,6 +106,8 @@ class QEMURunner:
             cmd.append("-enable-kvm")
 
         # Add machine and memory settings
+        # Note: -nographic already redirects serial to stdout, so we don't need -serial stdio
+        # which can cause terminal interaction issues (partial characters echoed)
         cmd.extend([
             "-M", self.config.qemu_machine,
             "-m", self.config.qemu_memory,
@@ -113,8 +115,7 @@ class QEMURunner:
             "-monitor", "none",
             "-smp", str(cpu_count),
             "-cdrom", str(self.config.kernel_iso),
-            "-device", "isa-debug-exit,iobase=0xB004,iosize=1",
-            "-serial", "stdio"
+            "-device", "isa-debug-exit,iobase=0xB004,iosize=1"
         ])
 
         return cmd
@@ -143,13 +144,15 @@ class QEMURunner:
 
             # Use Python's built-in timeout instead of external timeout command
             # to avoid buffering issues where output can be lost when timeout kills process
+            # Use bufsize=0 for unbuffered I/O to capture all output before exit
             try:
-                result = subprocess.run(
-                    cmd,
-                    stdout=output_file.open('w'),
-                    stderr=subprocess.STDOUT,
-                    timeout=timeout
-                )
+                with output_file.open('wb', buffering=0) as f:
+                    result = subprocess.run(
+                        cmd,
+                        stdout=f,
+                        stderr=subprocess.STDOUT,
+                        timeout=timeout
+                    )
                 exit_code = result.returncode
             except subprocess.TimeoutExpired:
                 # Timeout occurred - QEMU was terminated
@@ -181,13 +184,15 @@ class QEMURunner:
 
             # Use Python's built-in timeout instead of external timeout command
             # to avoid buffering issues where output can be lost when timeout kills process
+            # Use bufsize=0 for unbuffered I/O to capture all output before exit
             try:
-                result = subprocess.run(
-                    qemu_cmd,
-                    stdout=output_file.open('w'),
-                    stderr=subprocess.STDOUT,
-                    timeout=timeout
-                )
+                with output_file.open('wb', buffering=0) as f:
+                    result = subprocess.run(
+                        qemu_cmd,
+                        stdout=f,
+                        stderr=subprocess.STDOUT,
+                        timeout=timeout
+                    )
                 exit_code = result.returncode
             except subprocess.TimeoutExpired:
                 # Timeout occurred - QEMU was terminated
@@ -222,13 +227,15 @@ class QEMURunner:
 
             # Use Python's built-in timeout instead of external timeout command
             # to avoid buffering issues where output can be lost when timeout kills process
+            # Use bufsize=0 for unbuffered I/O to capture all output before exit
             try:
-                result = subprocess.run(
-                    qemu_cmd,
-                    stdout=output_file.open('w'),
-                    stderr=subprocess.STDOUT,
-                    timeout=timeout
-                )
+                with output_file.open('wb', buffering=0) as f:
+                    result = subprocess.run(
+                        qemu_cmd,
+                        stdout=f,
+                        stderr=subprocess.STDOUT,
+                        timeout=timeout
+                    )
                 exit_code = result.returncode
             except subprocess.TimeoutExpired:
                 # Timeout occurred - QEMU was terminated

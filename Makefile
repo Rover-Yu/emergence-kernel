@@ -423,7 +423,7 @@ $(ISO): $(KERNEL_ELF) always-rebuild-cmdline | $(ISO_DIR) .tmp
 	env TMPDIR=$(PWD)/.tmp $(GRUB_MKRESCUE) -o $@ $(ISO_DIR)
 
 run: $(ISO)
-	qemu-system-x86_64 -enable-kvm -M pc -m 128M -nographic -cdrom $(ISO) -smp 4 -device isa-debug-exit,iobase=0xB004,iosize=1 || exit 0
+	@python3 tests/run.py --timeout 8 || exit 0
 
 run-debug: $(ISO)
 	qemu-system-x86_64 -enable-kvm -M pc -m 128M -nographic -cdrom $(ISO) -smp 4 -s -S -device isa-debug-exit,iobase=0xB004,iosize=1 || exit 0
