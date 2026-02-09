@@ -207,8 +207,8 @@ help:
 	@echo "  Example: make V=1"
 	@echo ""
 	@echo "Run targets:"
-	@echo "  run              - Run kernel in QEMU (4 CPUs, 128M RAM)"
-	@echo "  run-debug        - Run kernel in QEMU with GDB server on :1234"
+	@echo "  run              - Run kernel in QEMU (4 CPUs, 128M RAM, 8s timeout)"
+	@echo "  run-debug        - Run kernel in QEMU with GDB server (freeze at start)"
 	@echo ""
 	@echo "Test targets:"
 	@echo "  test             - Run all tests (test-all)"
@@ -426,7 +426,7 @@ run: $(ISO)
 	@python3 tests/run.py --timeout 8 || exit 0
 
 run-debug: $(ISO)
-	qemu-system-x86_64 -enable-kvm -M pc -m 128M -nographic -cdrom $(ISO) -smp 4 -s -S -device isa-debug-exit,iobase=0xB004,iosize=1 || exit 0
+	@python3 tests/run.py --debug || exit 0
 
 clean:
 	rm -rf $(BUILD_DIR) $(ISO_DIR) $(ISO)

@@ -26,6 +26,7 @@ class TestConfig:
         qemu_machine: QEMU machine type (e.g., "pc")
         test_name: Name of the test being run
         cpu_count: Number of CPUs to use
+        debug_mode: Enable QEMU debug mode (-s -S for GDB)
         verbose: Whether to show verbose output
         keep_output: Whether to keep test output files
         results_dir: Directory for test results (auto-created)
@@ -44,6 +45,7 @@ class TestConfig:
     # Test settings
     test_name: str = ""
     cpu_count: int = 1
+    debug_mode: bool = False
 
     # Output settings
     verbose: bool = False

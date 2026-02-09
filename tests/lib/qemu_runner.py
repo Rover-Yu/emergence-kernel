@@ -118,6 +118,10 @@ class QEMURunner:
             "-device", "isa-debug-exit,iobase=0xB004,iosize=1"
         ])
 
+        # Add debug mode flags (-s for GDB server, -S to freeze at startup)
+        if self.config.debug_mode:
+            cmd.extend(["-s", "-S"])
+
         return cmd
 
     def run_via_make(self, cmdline: str, timeout: int) -> Tuple[str, int]:
