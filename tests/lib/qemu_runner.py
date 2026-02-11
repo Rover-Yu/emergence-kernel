@@ -9,14 +9,114 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 from contextlib import contextmanager
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 try:
     from .config import TestConfig
 except ImportError:
     from config import TestConfig
+
+
+class StreamingProcessExecutor:
+    """Handles subprocess execution with output streaming.
+
+    Uses non-daemon thread to ensure all output is captured before exit.
+    Prevents pipe buffer overflow and data loss.
+    """
+
+    CHUNK_SIZE = 65536  # 64KB chunks for efficient reading
+
+    def __init__(self, command: List[str], timeout: int,
+                 output_callback: Optional[Callable[[bytes], None]] = None):
+        """Initialize the streaming executor.
+
+        Args:
+            command: Command to execute
+            timeout: Timeout in seconds
+            output_callback: Optional callback for real-time output (receives bytes)
+        """
+        self.command = command
+        self.timeout = timeout
+        self.output_callback = output_callback
+        self.output_bytes: bytearray = bytearray()
+        self.output_lock = threading.Lock()
+        self.process: Optional[subprocess.Popen] = None
+        self.reader_thread: Optional[threading.Thread] = None
+
+    def _reader_thread_func(self, stdout) -> None:
+        """Continuously read output until EOF.
+
+        Args:
+            stdout: Binary file object to read from
+        """
+        while True:
+            try:
+                chunk = stdout.read(self.CHUNK_SIZE)
+                if not chunk:  # EOF
+                    break
+                with self.output_lock:
+                    self.output_bytes.extend(chunk)
+                if self.output_callback:
+                    self.output_callback(chunk)
+            except Exception:
+                # Pipe closed or error, stop reading
+                break
+
+    def run(self) -> Tuple[str, int]:
+        """Execute with streaming capture.
+
+        Returns:
+            Tuple of (complete_output, exit_code)
+        """
+        self.process = subprocess.Popen(
+            self.command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            bufsize=0  # Unbuffered binary mode
+        )
+
+        # Use non-daemon thread to ensure it completes before exit
+        self.reader_thread = threading.Thread(
+            target=self._reader_thread_func,
+            args=(self.process.stdout,)
+        )
+        self.reader_thread.start()
+
+        try:
+            # Wait for process to complete (naturally or via timeout)
+            exit_code = self.process.wait(timeout=self.timeout)
+        except subprocess.TimeoutExpired:
+            # DON'T kill immediately - give process time to flush output
+            # The kernel should exit via isa-debug-exit, but if it doesn't,
+            # we'll kill after a short grace period
+            try:
+                exit_code = self.process.wait(timeout=2.0)
+            except subprocess.TimeoutExpired:
+                # Process is hung, force kill
+                self.process.kill()
+                exit_code = 124
+
+        # Wait for reader thread to finish - CRITICAL: wait indefinitely
+        # Non-daemon thread will keep running until it reads all data (EOF)
+        # No timeout - we MUST wait for thread to finish to capture all output
+        self.reader_thread.join()
+
+        # Close stdout
+        if self.process.stdout:
+            try:
+                self.process.stdout.close()
+            except Exception:
+                pass
+
+        with self.output_lock:
+            # Decode bytes to text, using surrogateescape for invalid sequences
+            complete_output = self.output_bytes.decode('utf-8', errors='surrogateescape')
+
+        return complete_output, exit_code
 
 
 class QEMURunner:
@@ -90,11 +190,14 @@ class QEMURunner:
                 if output_file in self._temp_files:
                     self._temp_files.remove(output_file)
 
-    def _build_qemu_command(self, cpu_count: int) -> List[str]:
+    def _build_qemu_command(self, cpu_count: int,
+                            serial_output_path: Optional[Path] = None) -> List[str]:
         """Build QEMU command line.
 
         Args:
             cpu_count: Number of CPUs
+            serial_output_path: If provided, use file-based serial output.
+                               If None, use -nographic for interactive I/O (debug mode).
 
         Returns:
             List of command arguments
@@ -106,17 +209,26 @@ class QEMURunner:
             cmd.append("-enable-kvm")
 
         # Add machine and memory settings
-        # Note: -nographic already redirects serial to stdout, so we don't need -serial stdio
-        # which can cause terminal interaction issues (partial characters echoed)
         cmd.extend([
             "-M", self.config.qemu_machine,
             "-m", self.config.qemu_memory,
-            "-nographic",
             "-monitor", "none",
             "-smp", str(cpu_count),
             "-cdrom", str(self.config.kernel_iso),
             "-device", "isa-debug-exit,iobase=0xB004,iosize=1"
         ])
+
+        # Serial output mode: file-based for reliable capture, or interactive for debug
+        if serial_output_path:
+            # File-based serial output - QEMU writes directly to file
+            # This eliminates the race condition with pipe buffers
+            cmd.extend([
+                "-display", "none",
+                "-serial", f"file:{serial_output_path}"
+            ])
+        else:
+            # Interactive mode for debugging (-nographic redirects serial to stdout)
+            cmd.append("-nographic")
 
         # Add debug mode flags (-s for GDB server, -S to freeze at startup)
         if self.config.debug_mode:
@@ -130,6 +242,10 @@ class QEMURunner:
         This is the preferred method as it uses the project's Makefile
         which may have additional configuration.
 
+        Note: This method uses the pipe-based approach via 'make run', which
+        still has the race condition. For reliable output capture, use
+        run_qemu_direct() or run_qemu_with_env() which use file-based serial.
+
         Args:
             cmdline: Kernel command line (e.g., "test=boot")
             timeout: Timeout in seconds
@@ -137,41 +253,103 @@ class QEMURunner:
         Returns:
             Tuple of (output_content, exit_code)
         """
+        cmd = [
+            "make", "-C", str(self.config.project_root),
+            "run", f"KERNEL_CMDLINE={cmdline}"
+        ]
+
+        if self.config.verbose:
+            print(f"Running: {' '.join(cmd)}", file=sys.stderr)
+
+        # Optional real-time callback for debugging
+        callback = None
+        if hasattr(self.config, 'real_time_output') and self.config.real_time_output:
+            # Callback receives bytes, decode before writing to stdout
+            callback = lambda chunk: sys.stdout.buffer.write(chunk)
+
+        executor = StreamingProcessExecutor(
+            command=cmd,
+            timeout=timeout,
+            output_callback=callback
+        )
+
+        content, exit_code = executor.run()
+
+        # Save to file for record-keeping
         with self.capture_output("test") as output_file:
-            cmd = [
-                "make", "-C", str(self.config.project_root),
-                "run", f"KERNEL_CMDLINE={cmdline}"
-            ]
+            output_file.write_text(content)
 
-            if self.config.verbose:
-                print(f"Running: {' '.join(cmd)}")
+        return content, exit_code
 
-            # Use Python's built-in timeout instead of external timeout command
-            # to avoid buffering issues where output can be lost when timeout kills process
-            # Use bufsize=0 for unbuffered I/O to capture all output before exit
+    def _run_qemu_with_file_serial(self, cpu_count: int, timeout: int,
+                                    serial_file: Path) -> Tuple[str, int]:
+        """Run QEMU with file-based serial output.
+
+        This method writes serial output directly to a file, eliminating
+        the race condition between QEMU shutdown and pipe buffer propagation.
+
+        Args:
+            cpu_count: Number of CPUs
+            timeout: Timeout in seconds
+            serial_file: Path to file for serial output
+
+        Returns:
+            Tuple of (output_content, exit_code)
+        """
+        qemu_cmd = self._build_qemu_command(cpu_count, serial_output_path=serial_file)
+
+        if self.config.verbose:
+            print(f"Running: {' '.join(qemu_cmd)}", file=sys.stderr)
+
+        # Create empty serial file before QEMU starts
+        serial_file.touch()
+
+        try:
+            # Run QEMU with timeout - no stdout capture needed
+            result = subprocess.run(
+                qemu_cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=timeout
+            )
+            exit_code = result.returncode
+        except subprocess.TimeoutExpired:
+            # Process timed out - need to kill it
+            # subprocess.run doesn't give us the Popen object, so we need to handle this
+            # Re-run with Popen to properly kill
+            process = subprocess.Popen(
+                qemu_cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
             try:
-                with output_file.open('wb', buffering=0) as f:
-                    result = subprocess.run(
-                        cmd,
-                        stdout=f,
-                        stderr=subprocess.STDOUT,
-                        timeout=timeout
-                    )
-                exit_code = result.returncode
+                process.wait(timeout=2.0)  # Grace period
+                exit_code = process.returncode
             except subprocess.TimeoutExpired:
-                # Timeout occurred - QEMU was terminated
-                exit_code = 124  # Standard timeout exit code
+                process.kill()
+                exit_code = 124
 
-            # Read content before cleanup
-            content = output_file.read_text()
+        # CRITICAL: Wait for OS/file system to flush buffers before reading
+        # QEMU may have just closed the file, but OS may not have
+        # flushed all write buffers yet. Small delay ensures data is on disk.
+        time.sleep(0.1)
 
-            return content, exit_code
+        # Read serial output from file
+        try:
+            content = serial_file.read_text()
+        except Exception:
+            content = ""
+
+        return content, exit_code
 
     def run_qemu_direct(self, cpu_count: int, timeout: int) -> Tuple[str, int]:
         """Run QEMU directly (legacy method for compatibility).
 
         This method bypasses the Makefile and runs QEMU directly.
         Useful for testing or when Makefile integration is not desired.
+
+        Uses file-based serial output for reliable capture, eliminating
+        race conditions between QEMU shutdown and pipe buffer propagation.
 
         Args:
             cpu_count: Number of CPUs
@@ -180,37 +358,49 @@ class QEMURunner:
         Returns:
             Tuple of (output_content, exit_code)
         """
-        with self.capture_output("qemu") as output_file:
-            qemu_cmd = self._build_qemu_command(cpu_count)
+        # Debug mode: use interactive I/O with -nographic
+        if self.config.debug_mode:
+            qemu_cmd = self._build_qemu_command(cpu_count, serial_output_path=None)
 
             if self.config.verbose:
-                print(f"Running: {' '.join(qemu_cmd)}")
+                print(f"Running: {' '.join(qemu_cmd)}", file=sys.stderr)
 
-            # Use Python's built-in timeout instead of external timeout command
-            # to avoid buffering issues where output can be lost when timeout kills process
-            # Use bufsize=0 for unbuffered I/O to capture all output before exit
-            try:
-                with output_file.open('wb', buffering=0) as f:
-                    result = subprocess.run(
-                        qemu_cmd,
-                        stdout=f,
-                        stderr=subprocess.STDOUT,
-                        timeout=timeout
-                    )
-                exit_code = result.returncode
-            except subprocess.TimeoutExpired:
-                # Timeout occurred - QEMU was terminated
-                exit_code = 124  # Standard timeout exit code
+            callback = None
+            if hasattr(self.config, 'real_time_output') and self.config.real_time_output:
+                callback = lambda chunk: sys.stdout.buffer.write(chunk)
 
-            # Read content before cleanup
-            content = output_file.read_text()
+            executor = StreamingProcessExecutor(
+                command=qemu_cmd,
+                timeout=timeout,
+                output_callback=callback
+            )
+
+            content, exit_code = executor.run()
+
+            with self.capture_output("qemu") as output_file:
+                output_file.write_text(content)
 
             return content, exit_code
+
+        # Normal mode: use file-based serial output for reliable capture
+        serial_file = self.config.results_dir / f"serial_{os.getpid()}.txt"
+        self._temp_files.append(serial_file)
+
+        content, exit_code = self._run_qemu_with_file_serial(
+            cpu_count, timeout, serial_file
+        )
+
+        # Save to output file for record-keeping
+        with self.capture_output("qemu") as output_file:
+            output_file.write_text(content)
+
+        return content, exit_code
 
     def run_qemu_with_env(self, cpu_count: int, cmdline: str, timeout: int) -> Tuple[str, int]:
         """Run QEMU with custom kernel command line.
 
         Combines direct QEMU execution with a custom command line.
+        Uses file-based serial output for reliable capture.
 
         Args:
             cpu_count: Number of CPUs
@@ -220,35 +410,82 @@ class QEMURunner:
         Returns:
             Tuple of (output_content, exit_code)
         """
-        with self.capture_output("qemu") as output_file:
-            qemu_cmd = self._build_qemu_command(cpu_count)
+        # Debug mode: use interactive I/O with -nographic
+        if self.config.debug_mode:
+            qemu_cmd = self._build_qemu_command(cpu_count, serial_output_path=None)
 
             # Add kernel command line
             qemu_cmd.extend(["-append", cmdline])
 
             if self.config.verbose:
-                print(f"Running: {' '.join(qemu_cmd)}")
+                print(f"Running: {' '.join(qemu_cmd)}", file=sys.stderr)
 
-            # Use Python's built-in timeout instead of external timeout command
-            # to avoid buffering issues where output can be lost when timeout kills process
-            # Use bufsize=0 for unbuffered I/O to capture all output before exit
-            try:
-                with output_file.open('wb', buffering=0) as f:
-                    result = subprocess.run(
-                        qemu_cmd,
-                        stdout=f,
-                        stderr=subprocess.STDOUT,
-                        timeout=timeout
-                    )
-                exit_code = result.returncode
-            except subprocess.TimeoutExpired:
-                # Timeout occurred - QEMU was terminated
-                exit_code = 124  # Standard timeout exit code
+            callback = None
+            if hasattr(self.config, 'real_time_output') and self.config.real_time_output:
+                callback = lambda chunk: sys.stdout.buffer.write(chunk)
 
-            # Read content before cleanup
-            content = output_file.read_text()
+            executor = StreamingProcessExecutor(
+                command=qemu_cmd,
+                timeout=timeout,
+                output_callback=callback
+            )
+
+            content, exit_code = executor.run()
+
+            with self.capture_output("qemu") as output_file:
+                output_file.write_text(content)
 
             return content, exit_code
+
+        # Normal mode: use file-based serial output
+        serial_file = self.config.results_dir / f"serial_{os.getpid()}.txt"
+        self._temp_files.append(serial_file)
+
+        qemu_cmd = self._build_qemu_command(cpu_count, serial_output_path=serial_file)
+
+        # Add kernel command line
+        qemu_cmd.extend(["-append", cmdline])
+
+        if self.config.verbose:
+            print(f"Running: {' '.join(qemu_cmd)}", file=sys.stderr)
+
+        # Create empty serial file before QEMU starts
+        serial_file.touch()
+
+        try:
+            result = subprocess.run(
+                qemu_cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=timeout
+            )
+            exit_code = result.returncode
+        except subprocess.TimeoutExpired:
+            process = subprocess.Popen(
+                qemu_cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+            try:
+                process.wait(timeout=2.0)
+                exit_code = process.returncode
+            except subprocess.TimeoutExpired:
+                process.kill()
+                exit_code = 124
+
+        # CRITICAL: Wait for OS/file system to flush buffers before reading
+        time.sleep(0.1)
+
+        # Read serial output from file
+        try:
+            content = serial_file.read_text()
+        except Exception:
+            content = ""
+
+        with self.capture_output("qemu") as output_file:
+            output_file.write_text(content)
+
+        return content, exit_code
 
     def __enter__(self):
         """Enter context manager.

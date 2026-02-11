@@ -22,6 +22,15 @@ void system_shutdown(void) {
     /* Flush serial output to ensure all characters are transmitted */
     serial_flush();
 
+    /* Small delay for data propagation through buffers.
+     * This is a safety net for file-based serial output, giving the
+     * host OS time to flush its buffers before QEMU exits.
+     * With file-based serial output, this is typically not needed,
+     * but it provides extra reliability for edge cases. */
+    for (volatile int i = 0; i < 500000; i++) {
+        asm volatile("nop");
+    }
+
     /* Try QEMU/Bochs shutdown port first (8-bit write for predictable exit code) */
     outb(SHUTDOWN_PORT_QEMU, SHUTDOWN_CMD_QEMU);
 

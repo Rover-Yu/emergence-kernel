@@ -547,11 +547,14 @@ void monitor_init(void) {
         unpriv_pd[i] = boot_pd[i];
     }
 
-    /* CRITICAL: Make user stack region (0x200000-0x3FFFFF) user-accessible
+    /* CRITICAL: Make user stack region (4MB-6MB) user-accessible
      * This is where PMM allocates memory from, including user stacks
-     * unpriv_pd[1] maps the 2MB region at 0x200000 */
+     * unpriv_pd[1] maps the 2MB region at 0x200000
+     * Note: With kernel at 4MB, GRUB2 gap is 1MB-4MB
+     * PMM allocations start above 4MB, so we map 4MB-6MB region */
     unpriv_pd[1] |= X86_PTE_USER;
     serial_puts("MONITOR: User stack region (0x200000-0x3FFFFF) is now user-accessible\n");
+    /* TODO: After kernel moves to 4MB, update this to map region above kernel */
 
     /* Set up 4KB page tables for first 2MB region */
     /* Each 4KB page: PRESENT + WRITABLE for monitor */
@@ -584,7 +587,7 @@ void monitor_init(void) {
             /* This includes kernel code, kernel stack, and other kernel data */
             unpriv_pt_0_2mb[i] = phys_addr | X86_PTE_PRESENT | X86_PTE_WRITABLE | X86_PTE_USER;
             /* Debug: Print if this is the kernel code page */
-            if (phys_addr == 0x100000) {
+            if (phys_addr == 0x400000) {
                 serial_puts("MONITOR: Kernel code page at 0x");
                 serial_put_hex(phys_addr);
                 serial_puts(" marked user-accessible (PTE = 0x");
@@ -659,20 +662,16 @@ void monitor_init(void) {
 
     /* Debug: Check some critical PTEs */
     serial_puts("MONITOR: Critical PTEs in unpriv_pt_0_2mb:\n");
-    /* Kernel code starts at 0x100000 */
-    uint64_t kernel_code_pde = (0x100000 >> 12);
-    serial_puts("  Kernel code at 0x100000 (PTE ");
+    /* Kernel code starts at 0x400000 */
+    uint64_t kernel_code_pde = (0x400000 >> 12);
+    serial_puts("  Kernel code at 0x400000 (PTE ");
     serial_put_hex(kernel_code_pde);
     serial_puts("): 0x");
     serial_put_hex(unpriv_pt_0_2mb[kernel_code_pde]);
     serial_puts("\n");
-    /* Kernel stack at 0x110000 */
-    uint64_t kernel_stack_pde = (0x110000 >> 12);
-    serial_puts("  Kernel stack at 0x110000 (PTE ");
-    serial_put_hex(kernel_stack_pde);
-    serial_puts("): 0x");
-    serial_put_hex(unpriv_pt_0_2mb[kernel_stack_pde]);
-    serial_puts("\n");
+    /* Note: The kernel_code_pde is now 0x400 (1024), which is outside
+     * the range of unpriv_pt_0_2mb (which only covers first 2MB).
+     * This debug output will now show page 0 for the first 2MB region. */
 
     /* Debug: Verify boot_pml4 page table entry */
     uint64_t boot_pml4_phys = virt_to_phys(boot_pml4);

@@ -28,7 +28,9 @@ class TestConfig:
         cpu_count: Number of CPUs to use
         debug_mode: Enable QEMU debug mode (-s -S for GDB)
         verbose: Whether to show verbose output
+        quiet: Suppress output
         keep_output: Whether to keep test output files
+        real_time_output: Enable real-time output streaming (for debugging)
         results_dir: Directory for test results (auto-created)
     """
 
@@ -51,6 +53,7 @@ class TestConfig:
     verbose: bool = False
     quiet: bool = False
     keep_output: bool = False
+    real_time_output: bool = False
     results_dir: Path = field(init=False)
 
     def __post_init__(self):

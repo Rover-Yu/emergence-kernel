@@ -61,6 +61,11 @@ def main() -> int:
         action="store_true",
         help="Suppress output"
     )
+    parser.add_argument(
+        "--real-time",
+        action="store_true",
+        help="Enable real-time output streaming (for debugging)"
+    )
 
     args = parser.parse_args()
 
@@ -71,6 +76,7 @@ def main() -> int:
         debug_mode=args.debug,
         verbose=args.verbose,
         keep_output=False,
+        real_time_output=args.real_time,
     )
 
     # Create QEMU runner
@@ -94,7 +100,8 @@ def main() -> int:
 
     # Print output to stdout (since we captured it to file)
     if not args.quiet:
-        print(output, end="")
+        sys.stdout.write(output)
+        sys.stdout.flush()  # Ensure all output is written before exit
 
     # Return 0 for success (matching original Makefile behavior: || exit 0)
     # Exit code 124 indicates timeout (Python subprocess.TimeoutExpired)

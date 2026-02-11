@@ -435,10 +435,10 @@ $(ISO): $(KERNEL_ELF) always-rebuild-cmdline | $(ISO_DIR) .tmp
 	env TMPDIR=$(PWD)/.tmp $(GRUB_MKRESCUE) -o $@ $(ISO_DIR)
 
 run: $(ISO)
-	@python3 tests/run.py --timeout 8 || exit 0
+	PYTHONUNBUFFERED=1 python3 tests/run.py --timeout 8 || exit 0
 
 run-debug: $(ISO)
-	@python3 tests/run.py --debug || exit 0
+	PYTHONUNBUFFERED=1 python3 tests/run.py --debug || exit 0
 
 clean:
 	rm -rf $(BUILD_DIR) $(ISO_DIR) $(ISO)

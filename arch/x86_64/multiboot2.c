@@ -280,8 +280,8 @@ void multiboot2_parse(uint32_t mbi_addr) {
                 /* mem_lower is lower memory (first 640KB), mem_upper is extended memory */
                 uint64_t upper_mem = (uint64_t)meminfo->mem_upper * 1024;
                 if (upper_mem > 0) {
-                    /* Upper memory starts at 1MB */
-                    pmm_add_region(0x100000, upper_mem);
+                    /* Upper memory starts at 4MB (kernel load address) */
+                    pmm_add_region(0x400000, upper_mem);
                     found_memory = 1;
                 }
                 break;
@@ -323,9 +323,8 @@ use_default_cmdline:
     if (!found_memory) {
         serial_puts("PMM: No memory info found, using default map for QEMU\n");
         /* QEMU default: 128MB starting at 0 */
-        /* Actually, we should use memory above the kernel (which starts at 1MB) */
-        /* Add memory from 2MB to 128MB */
-        pmm_add_region(0x200000, 128 * 1024 * 1024 - 0x200000);
+        /* Kernel now starts at 4MB, add memory from 4MB to 128MB */
+        pmm_add_region(0x400000, 128 * 1024 * 1024 - 0x400000);
     }
 
     serial_puts("PMM: Multiboot2 parsing complete\n");

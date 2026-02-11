@@ -13,13 +13,14 @@ PHDRS
 SECTIONS
 {
     /* ============================================================
-     * Kernel code starts at 1MB
+     * Kernel code starts at 4MB
      * ============================================================
      * Multiboot2 header is placed at the beginning of .text section.
      * For ELF files, GRUB 2.06 can find the header beyond the first 8KB
      * by using ELF program headers.
+     * Moved from 1MB to 4MB to avoid GRUB2's reserved memory gap.
      */
-    . = 1M;
+    . = 4M;
     _kernel_start = .;
 
     /* Text section - multiboot header first, then code */

@@ -268,6 +268,11 @@ void pmm_init(uint32_t mbi_addr) {
     serial_puts("PMM: Reserving boot stacks, size 32768 bytes\n");
     pmm_reserve_region(kernel_end, 32768);
 
+    /* Reserve GRUB2 gap (1MB - 4MB) to prevent PMM allocation
+     * GRUB2 requires this region for its own use */
+    serial_puts("PMM: Reserving GRUB2 gap at 0x100000, size 3145728 bytes\n");
+    pmm_reserve_region(0x100000, 0x300000);
+
     serial_puts("PMM: Initialized with ");
     put_hex(pmm_state.total_pages * PAGE_SIZE);
     serial_puts(" bytes total, ");

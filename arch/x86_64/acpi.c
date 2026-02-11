@@ -83,7 +83,7 @@ madt_header_t *acpi_find_madt(void) {
     uint32_t rsdt_address = rsdp->rsdt_address;
 
     /* Validate RSDT address before dereferencing */
-    if (rsdt_address == 0 || rsdt_address < 0x100000) {
+    if (rsdt_address == 0 || rsdt_address < 0x400000) {
         serial_puts("ACPI: Invalid RSDT address\n");
         return NULL;
     }

@@ -18,7 +18,8 @@
 #define MAX_ORDER       9
 
 /* Maximum number of block descriptors for metadata */
-#define MAX_BLOCK_DESC  1024
+/* Increased to handle fragmented memory maps with many small regions */
+#define MAX_BLOCK_DESC  2048
 
 /* Forward declarations */
 typedef struct pmm_state pmm_state_t;
