@@ -10,6 +10,8 @@
 extern char _kernel_start[];
 extern char _kernel_end[];
 extern char _end[];
+extern uint8_t nk_boot_stack_bottom[];
+extern uint8_t nk_boot_stack_top[];
 
 /* PCD integration */
 extern bool pcd_is_initialized(void);
@@ -264,9 +266,12 @@ void pmm_init(uint32_t mbi_addr) {
     serial_puts("PMM: Reserving trampoline at 0x7000, size 12288 bytes\n");
     pmm_reserve_region(0x7000, 12288);
 
-    /* Reserve boot stack area */
-    serial_puts("PMM: Reserving boot stacks, size 32768 bytes\n");
-    pmm_reserve_region(kernel_end, 32768);
+    /* Reserve boot stack area
+     * The boot stack is defined in boot.S as nk_boot_stack_bottom to nk_boot_stack_top
+     * We must reserve exactly these pages, not kernel_end which comes after them
+     * Boot stack is 16KB (0x4000 bytes) starting at nk_boot_stack_bottom */
+    serial_puts("PMM: Reserving boot stacks at nk_boot_stack_bottom, size 16384 bytes\n");
+    pmm_reserve_region((uint64_t)nk_boot_stack_bottom, 16384);
 
     /* Reserve GRUB2 gap (1MB - 4MB) to prevent PMM allocation
      * GRUB2 requires this region for its own use */

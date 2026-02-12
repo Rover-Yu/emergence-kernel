@@ -31,9 +31,9 @@ cpu_boot_counter:
 
 /* Boot stack (temporary, for 32-bit code) */
 .section .bss
-.align 16
-.global nk_boot_stack_bottom
-.global nk_boot_stack_top
+    .align 4096
+    .global nk_boot_stack_bottom
+    .global nk_boot_stack_top
 nk_boot_stack_bottom:
     .skip 16384  /* 16 KiB stack */
 nk_boot_stack_top:
