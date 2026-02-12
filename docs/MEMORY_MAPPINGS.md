@@ -154,7 +154,9 @@ The nested kernel architecture maintains **two views** of memory:
 
 ## 4. Kernel Virtual Address Map
 
-### 4.1 Current Layout (Kernel at 1MB)
+### 4.1 Current Layout (Kernel at 4MB)
+
+**Status:** Kernel relocated to 4MB to avoid GRUB2 reserved memory gap (1MB-4MB).
 
 ```
 Virtual Address Space:
@@ -164,7 +166,8 @@ Virtual Address Space:
 │                                                             │
 │   Contains:                                                 │
 │   - AP Trampoline (0x7000 - 0x9FFF)                      │
-│   - Kernel Code/Data (0x100000+)                            │
+│   - GRUB2 Reserved Gap (0x100000 - 0x3FFFFF)            │
+│   - Kernel Code/Data (0x400000+)                            │
 │   - Stacks (at various addresses)                             │
 │   - Page Tables                                             │
 │   - APIC MMIO (high mapping)                               │
@@ -173,6 +176,12 @@ Virtual Address Space:
 │   Requires special PML4 entries for access                    │
 └────────────────────────────────────────────────────────────────┘
 ```
+
+**Rationale for 4MB Location:**
+- GRUB2 requires 1MB-4MB region for its own use during boot
+- Loading kernel above 4MB prevents PMM from allocating in GRUB2's reserved area
+- Multiboot2 info structure is still properly reserved and parsed
+- AP trampoline remains at fixed 0x7000 location (unchanged)
 
 ### 4.2 Special Symbol Locations (BSS Symbols)
 
@@ -219,7 +228,9 @@ Virtual Address Space:
 
 ---
 
-## 6. Proposed Layout After Kernel Relocation
+## 6. Current Layout After Kernel Relocation
+
+**Status:** ✅ **COMPLETE** - Kernel successfully relocated to 4MB (as of commit `00e55a1`)
 
 ### 6.1 Physical Memory (Kernel at 4MB)
 
@@ -232,7 +243,7 @@ Virtual Address Space:
 
 ### 6.2 Page Table Placement
 
-**Critical: Page Tables Move with Kernel**
+**Page Tables Have Moved with Kernel:**
 
 Page tables (boot_pml4, boot_pdpt, boot_pd, etc.) are defined in `.bss` section:
 
@@ -241,37 +252,41 @@ Linker Script Section Order:
 .text → .rodata → .data → .bss
 
 When . = 1M:  .bss ends at ~0x140000 (within 1-4MB)
-When . = 4M:  .bss ends at ~0x440000 (above 4MB)
+When . = 4M:  .bss ends at ~0x440000 (above 4MB) ✅ CURRENT
 ```
 
-**Page Table Symbols in .bss:**
-| Symbol | Size | Section | New Address (est.) |
-|---------|-------|----------|-------------------|
+**Page Table Symbols in .bss (at 4MB kernel base):**
+| Symbol | Size | Section | Address (est.) |
+|---------|-------|----------|---------------|
 | boot_pml4 | 4 KB | .bss | ~0x440000 |
 | boot_pdpt | 4 KB | .bss | ~0x441000 |
 | boot_pd | 4 KB | .bss | ~0x442000 |
 | boot_pd_apic | 4 KB | .bss | ~0x443000 |
 | boot_pt_apic | 4 KB | .bss | ~0x444000 |
 
-**All page tables automatically move above 4MB when kernel base changes.**
+✅ **All page tables now located above 4MB automatically** (when kernel base changed to 4MB).
 
 ### 6.3 GRUB2 Gap Reservation
 
-**New Requirement:** Reserve 1MB-4MB gap in PMM
+**Status:** ✅ **IMPLEMENTED** - PMM reserves 1MB-4MB gap at init
+
+The PMM now reserves the GRUB2 gap during initialization:
 
 ```c
-// kernel/pmm.c: pmm_init() - add after kernel reservation
-/* Reserve GRUB2 gap (1MB - 4MB) to prevent PMM allocation */
-serial_puts("PMM: Reserving GRUB2 gap at 0x100000, size 0x300000 bytes\n");
-pmm_reserve_region(0x100000, 0x300000);  // 3MB gap
+// kernel/pmm.c:278-279
+serial_puts("PMM: Reserving GRUB2 gap at 0x100000, size 3145728 bytes\n");
+pmm_reserve_region(0x100000, 0x300000);  // 3MB gap (1MB-4MB)
 ```
 
-**Reservations After Change:**
-1. Multiboot Info (runtime address)
-2. **GRUB2 Gap** (0x100000 - 0x3FFFFF) - NEW
-3. Kernel (0x400000 - kernel_end)
-4. AP Trampoline (0x7000 - 0x9FFF)
-5. Boot Stacks (after kernel_end)
+**Current PMM Reservation Order (from `pmm_init()`):**
+
+1. **Multiboot Info** (runtime address from MBI) - Reserved after parsing
+2. **Kernel** (0x400000 - kernel_end) - Reserved using linker symbols
+3. **AP Trampoline** (0x7000 - 0x9FFF, 12KB) - Reserved at fixed location
+4. **Boot Stacks** (nk_boot_stack_bottom, 16KB) - Reserved after kernel
+5. **GRUB2 Gap** (0x100000 - 0x3FFFFF, 3MB) - Reserved for bootloader
+
+**Note:** This order matches the `pmm_init()` sequence in `kernel/pmm.c:213-279`.
 
 ---
 
@@ -383,7 +398,16 @@ typedef struct {
 
 - `docs/monitor_trampoline.md` - Nested kernel trampoline details
 - `docs/monitor_api.md` - Monitor API documentation
-- `CLAUDE.md` - Build system overview
+- `CLAUDE.md` - Build system overview (project root)
+
+---
+
+## Changelog
+
+| Version | Date | Changes |
+|---------|--------|---------|
+| 1.1 | 2025-02-12 | Updated to reflect completed kernel relocation to 4MB (was "proposed", now implemented) |
+| 1.0 | 2025-01-XX | Initial documentation |
 
 ---
 

@@ -4,6 +4,27 @@ This document tracks significant changes and milestones in the Emergence Kernel 
 
 ## [Unreleased]
 
+## [0.2.1] - 2025-02-12
+
+### Documentation Reorganization
+
+**Moved Project Documentation to docs/:**
+- `ARCH_SYSCALL_STATUS.md` - Syscall implementation status
+- `CHANGELOG.md` - This changelog (moved to docs/)
+- `MEMORY_MAPPINGS.md` - Updated to v1.1 (kernel relocation complete)
+
+**Fixed Directory Naming:**
+- Renamed `skills/archiecture/` → `skills/architecture/` (typo fix)
+
+**Updated README.md:**
+- Condensed "Recent Developments" to show only latest highlights
+- Added reference to docs/CHANGELOG.md for full history
+
+**Skills Enhanced:**
+- Added QEMU Launch Guidelines to `skills/build/skill.md`
+- "Only use testing framework to launch QEMU" (no direct QEMU commands)
+- Fixed `CONFIG_TESTS_NK_TRAMPOLINE` default value in `kernel.config`
+
 ## [0.2.0] - 2025-02-08
 
 ### Added - Minilibc Implementation

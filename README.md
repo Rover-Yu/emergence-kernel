@@ -10,23 +10,12 @@ This is a research kernel project aimed at exploring the boundaries of LLM capab
 
 ## Recent Developments
 
-**Minilibc (February 2025)**
+**Latest: Minilibc & Kernel Relocation (February 2025)**
 - Minimal C library for essential string and memory operations
-- Implements strlen, strcpy, strcmp, strncmp, memset, memcpy
-- 37 comprehensive kernel tests with edge case coverage
-- Python integration tests with QEMU automation
-- Zero external dependencies, kernel-safe implementation
+- Kernel relocated to 4MB to avoid GRUB2 reserved memory gap
+- 37 comprehensive minilibc tests with Python QEMU automation
 
-**Nested Kernel Isolation**
-- PCD (Page Control Data) system tracks page types for fine-grained protection
-- Separation of privileged monitor mode and unprivileged kernel mode
-- Read-only mappings allow outer kernel to inspect nested kernel state safely
-- Page fault tests verify write protection invariants
-
-**Test Framework**
-- Unified test suite with runtime selection via kernel command line
-- Tests for PMM, slab allocator, APIC timer, minilibc, and nested kernel invariants
-- Python-based integration tests with QEMU automation
+See [docs/CHANGELOG.md](docs/CHANGELOG.md) for complete history.
 
 ---
 
@@ -67,11 +56,14 @@ Emergence Kernel is pursuing several ambitious goals to explore novel kernel arc
 # Build kernel and ISO (with default configuration)
 make
 
-# Run (2 CPUs)
+# Run with 2 CPUs (uses Python test framework)
 make run
 
-# Run (4 CPUs)
-./run-qemu.sh
+# Run with 4 CPUs
+make run CPUS=4
+
+# Run specific test
+make run KERNEL_CMDLINE='test=timer'
 
 # Clean build artifacts
 make clean
@@ -104,20 +96,17 @@ See [tests/README.md](tests/README.md) for detailed testing documentation.
 
 ```
 Emergence-Kernel/
-├── arch/x86_64/          # Architecture-specific code (boot, APIC, paging)
-├── kernel/               # Core kernel (SMP, devices, monitor, PCD)
-├── lib/                  # Libraries
-│   └── minilibc/        # Minimal C library (string & memory functions)
-├── tests/                # Integration tests and test framework
-│   └── minilibc/        # Minilibc Python integration tests
-├── docs/                 # Documentation (ROADMAP.md, design docs)
-│   └── minilibc.md      # Minilibc library documentation
-├── include/              # Public headers
-│   └── string.h         # Minilibc string library API
-├── Makefile              # Build system
-├── kernel.config         # Default configuration
-├── CHANGELOG.md          # Project changelog
-└── CLAUDE.md             # Project guide for Claude Code
+├── arch/x86_64/       # Architecture-specific code (boot, APIC, paging, SMP)
+├── kernel/              # Architecture-independent kernel (SMP, devices, monitor, PCD)
+├── lib/                 # Kernel libraries (minilibc for strings/memory)
+├── tests/               # Integration tests and test framework (Python-based QEMU automation)
+├── skills/              # Development skills (architecture, build, coding, tests)
+├── docs/               # Project documentation (CHANGELOG, design docs, ROADMAP)
+├── include/            # Public API headers (string.h, etc.)
+├── Makefile            # Build system
+├── kernel.config       # Kernel configuration (test/debug features)
+├── CLAUDE.md          # Project guide for Claude Code
+└── README.md          # This file
 ```
 
 ---

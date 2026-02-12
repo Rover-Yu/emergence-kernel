@@ -2,6 +2,23 @@
 
 This directory contains the test suite for Emergence Kernel, organized by component.
 
+## Recent Updates (February 2025)
+
+**Framework Enhancements:**
+- Upgraded to **Python 3** with modern type hints and context managers
+- **8-second QEMU timeout** with automatic cleanup via isa-debug-exit I/O port
+- Named pipe serial output capture for reliable test result parsing
+- Clean temporary test output files automatically (unless `--keep-output` specified)
+
+**Test Organization:**
+- Documentation moved to `docs/` (CHANGELOG.md, ARCH_SYSCALL_STATUS.md, etc.)
+- Skills directory structure updated (typo fix: archiecture → architecture)
+- Build skill enhanced with QEMU launch guidelines
+
+**Kernel Updates:**
+- Kernel relocated to **4MB** to avoid GRUB2 reserved memory gap (1MB-4MB)
+- Page tables and all kernel structures automatically relocated above 4MB
+
 ## Directory Structure
 
 ```
@@ -39,7 +56,7 @@ tests/
 
 ## Test Framework
 
-The test suite uses **Python 3** with a modular framework architecture:
+The test suite uses **Python 3.8+** with a modular framework architecture:
 
 ### Core Modules
 
@@ -365,7 +382,9 @@ if __name__ == "__main__":
     main()
 ```
 
-3. Add the test to `run_all_tests.py` TESTS list
+3. Add your test to `run_all_tests.py` TESTS list
+
+**Important:** Always use `#!/usr/bin/env python3` for Python 3.8+ compatibility.
 4. Add a Makefile target in the root Makefile
 
 ## Verification

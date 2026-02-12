@@ -71,6 +71,33 @@ When adding new configuration options:
 - **Test source files** in `tests/<test_name>/` - Python test scripts and C test code
 - **Test registry** in `kernel/test.c` - maps test names to run functions
 
+## QEMU Launch Guidelines
+
+**Always use the testing framework to launch QEMU:**
+
+- **DO** use `make run` or `make test-*` targets which use the Python test framework
+- **DO NOT** launch QEMU directly in Makefiles or scripts
+- The Python framework (`tests/run.py`) provides:
+  - Consistent 8-second timeout to prevent hanging
+  - Proper serial output capture via named pipes
+  - Automatic test result verification
+  - Clean termination via isa-debug-exit
+
+**Correct pattern:**
+```makefile
+# Run a test with the framework
+make run KERNEL_CMDLINE='test=boot'
+
+# NOT this:
+qemu-system-x86_64 ... -serial file:/tmp/...
+```
+
+**Reason:** Direct QEMU launches may:
+- Miss timeout handling (QEMU runs forever)
+- Lose serial output (buffering issues)
+- Skip test result verification
+- Leave orphan QEMU processes on failure
+
 ## Configuration Value Types
 
 - **Boolean flags**: `?=` allows make command line override
