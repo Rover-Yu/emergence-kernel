@@ -124,8 +124,9 @@ void kernel_main(uint32_t multiboot_info_addr) {
         serial_puts("BSP: Initializing...\n");
         idt_init();
         lapic_init();
-        smp_init();
-        serial_puts("BSP: Initialization complete\n");
+        /* smp_init() calls smp_start_all_aps() which starts APs
+         * This is WRONG - smp_init should only be called at top level, not here
+         * Remove smp_init() call from BSP block - APs will be started by main() */        serial_puts("BSP: Initialization complete\n");
     }
 
     /* Print CPU boot message in English */
