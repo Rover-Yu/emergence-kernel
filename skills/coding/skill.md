@@ -91,6 +91,15 @@ description: Requirements for source code
    - Use `$(Q)` prefix on commands: `$(Q)$(CC) $(CFLAGS)...`
    - Run `make V=1` to see full compiler commands
 
+2. **Zero warnings before committing**
+   - All compiler warnings must be fixed before any commit
+   - Run `make 2>&1 | grep -E "(warning|error)"` to check for warnings
+   - Common warning types to fix:
+     - Implicit function declarations → add proper declarations/headers
+     - Cast to pointer from integer of different size → use `uintptr_t` intermediate cast
+     - Unused variables → remove or mark with `__attribute__((unused))`
+     - Signed/unsigned comparison → use matching types or explicit casts
+
 # Source Organization
 
 1. Architecture-specific sources are in folder `arch/${ARCH}`.
