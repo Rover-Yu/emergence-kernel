@@ -26,7 +26,12 @@ struct arch_rwlock {
 #define RW_LOCK_UNLOCKED    __RW_LOCK_UNLOCKED
 #define DEFINE_RWLOCK(x)    struct arch_rwlock x = __RW_LOCK_UNLOCKED
 
-/* Flags type for interrupt state saving */
+/* Flags type for interrupt state saving
+ *
+ * Stores the RFLAGS register value. Bit 9 (IF flag) indicates whether
+ * interrupts were enabled when the flags were saved. This allows conditional restore
+ * of interrupt state in irqrestore operations.
+ */
 typedef unsigned long irq_flags_t;
 
 /* Include interrupt control functions */
@@ -103,8 +108,8 @@ static inline int arch_spin_trylock(struct arch_spinlock *lock) {
  * Use this when the lock could be accessed from interrupt context.
  */
 static inline void arch_spin_lock_irqsave(struct arch_spinlock *lock, irq_flags_t *flags) {
-    /* Save interrupt flags (pushf/popf) */
-    asm volatile("pushf\npop %0" : "=rm"(*flags) :: "memory");
+    /* Save interrupt flags using helper from idt.h */
+    save_interrupt_flags(flags);
     disable_interrupts();
     arch_spin_lock(lock);
 }
@@ -118,10 +123,8 @@ static inline void arch_spin_lock_irqsave(struct arch_spinlock *lock, irq_flags_
  */
 static inline void arch_spin_unlock_irqrestore(struct arch_spinlock *lock, irq_flags_t *flags) {
     arch_spin_unlock(lock);
-    /* Check IF flag (bit 9) - restore interrupts only if they were enabled */
-    if (*flags & (1 << 9)) {
-        enable_interrupts();
-    }
+    /* Restore interrupt state using helper from idt.h */
+    restore_interrupt_flags(flags);
 }
 
 /**

@@ -43,12 +43,63 @@ void idt_init(void);
 void idt_set_gate(uint8_t num, uint64_t handler, uint16_t selector, uint8_t type);
 
 /* Enable/disable interrupts */
+
+/**
+ * interrupts_enabled - Check if interrupts are currently enabled
+ *
+ * Returns: 1 if interrupts enabled (IF flag clear), 0 if disabled (IF flag set)
+ *
+ * The IF (Interrupt Flag) is bit 9 of RFLAGS. When set, interrupts are masked.
+ * This function allows querying interrupt state without modifying it.
+ */
+static inline int interrupts_enabled(void) {
+    uint64_t rflags;
+    asm volatile ("pushf; pop %0" : "=r"(rflags) :: "memory");
+    return (rflags & (1UL << 9)) ? 0 : 1;
+}
+
+/**
+ * enable_interrupts - Enable interrupts
+ *
+ * Executes STI instruction to set IF flag, allowing maskable interrupts to fire.
+ */
 static inline void enable_interrupts(void) {
     asm volatile ("sti");
 }
 
+/**
+ * disable_interrupts - Disable interrupts
+ *
+ * Executes CLI instruction to clear IF flag, masking all maskable interrupts.
+ */
 static inline void disable_interrupts(void) {
     asm volatile ("cli");
+}
+
+/**
+ * save_interrupt_flags - Save RFLAGS to memory
+ * @flags: Pointer to store RFLAGS
+ *
+ * Saves complete RFLAGS register using PUSHF. Use with restore_interrupt_flags().
+ * The IF flag (bit 9) indicates interrupt state for conditional restoration.
+ */
+static inline void save_interrupt_flags(irq_flags_t *flags) {
+    asm volatile ("pushf; pop %0" : "=rm"(*flags) :: "memory");
+}
+
+/**
+ * restore_interrupt_flags - Restore RFLAGS from memory if interrupts were enabled
+ * @flags: Previously saved RFLAGS
+ *
+ * Restores RFLAGS using POPF. Only enables interrupts if they were enabled when saved.
+ * Uses the IF flag (bit 9) to determine previous interrupt state.
+ */
+static inline void restore_interrupt_flags(irq_flags_t *flags) {
+    /* Check IF flag (bit 9) - restore interrupts only if they were enabled */
+    if (*flags & (1UL << 9)) {
+        enable_interrupts();
+    }
+    asm volatile ("push %0; popf" : : "rm"(*flags) :: "memory");
 }
 
 /* Timer handler (called from ISR) */
