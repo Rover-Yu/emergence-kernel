@@ -46,10 +46,23 @@ description: Requirements for source code
    - Always acquire locks in consistent order
    - Document lock hierarchy if multiple locks exist
 
+# Architecture-Specific Code
+
+1. **Wrap inline assembly in arch-specific functions**
+   - Create typed wrapper functions in `arch/x86_64/*.h` headers
+   - Never use raw `asm volatile()` in C code (except in wrappers themselves)
+   - Benefits: type safety, portability, documentation, maintainability
+   - Examples:
+     - MSR access: `arch_msr_read(msr)`, `arch_msr_write(msr, val)` in `msr.h`
+     - Control regs: `arch_cr0_read()`, `arch_cr3_write(val)` in `cr.h`
+     - CPU ops: `arch_halt()`, `arch_cpuid(leaf, ...)` in `cpu.h`
+     - TLB ops: `arch_tlb_invalidate_page(addr)` in `paging.h`
+
+
 # Memory Management
 
 1. **TLB invalidation after page table updates**
-   - Use `invlpg` after modifying PTEs: `asm volatile ("invlpg (%0)" : : "r"(addr));`
+   - Use wrapper function: `arch_tlb_invalidate_page(addr)` from `arch/x86_64/paging.h`
    - Required for both kernel and user mappings
 
 2. **Check allocation failure** (pmm_alloc, slab_alloc, etc.)
