@@ -8,6 +8,12 @@
 #include "kernel/pcd.h"
 #include "kernel/pmm.h"
 
+/* Page table index extraction macros */
+#define PML4_INDEX(vaddr) (((vaddr) >> 39) & 0x1FF)
+#define PDPT_INDEX(vaddr) (((vaddr) >> 30) & 0x1FF)
+#define PD_INDEX(vaddr)   (((vaddr) >> 21) & 0x1FF)
+#define PT_INDEX(vaddr)   (((vaddr) >> 12) & 0x1FF)
+
 /* External functions */
 extern void *pmm_alloc(uint8_t order);
 extern void pmm_free(void *addr, uint8_t order);
@@ -980,6 +986,24 @@ uint8_t monitor_pcd_get_type(uint64_t phys_addr) {
     return pcd_get_type(phys_addr);
 }
 
+/* Get or create a page table at the given entry
+ * Returns pointer to the table, or NULL on allocation failure */
+static uint64_t *get_or_create_table(uint64_t *entry) {
+    if (*entry & X86_PTE_PRESENT) {
+        return (uint64_t*)(*entry & ~0xFFF);
+    }
+
+    /* Allocate new page table */
+    uint64_t *table = monitor_alloc_pgtable(0);
+    if (!table) {
+        return NULL;
+    }
+
+    /* Link the entry to the new table */
+    *entry = virt_to_phys(table) | X86_PTE_PRESENT | X86_PTE_WRITABLE;
+    return table;
+}
+
 /* ============================================================================
  * Mapping Functions with PCD Validation
  * ============================================================================ */
@@ -1035,12 +1059,31 @@ int monitor_map_page(uint64_t phys_addr, uint64_t virt_addr, uint64_t flags) {
     }
 
     /* Create the mapping in unprivileged page tables */
-    /* Note: This is a simplified implementation that updates the
-     * unprivileged view. A full implementation would walk the page
-     * table hierarchy and create entries as needed. */
+    /* Walk the 4-level page table hierarchy */
 
-    /* For now, we just validate the type - actual mapping would
-     * require walking the page table hierarchy */
+    int pml4_idx = PML4_INDEX(virt_addr);
+    int pdpt_idx = PDPT_INDEX(virt_addr);
+    int pd_idx = PD_INDEX(virt_addr);
+    int pt_idx = PT_INDEX(virt_addr);
+
+    /* Get or create PDPT */
+    uint64_t *pdpt = get_or_create_table(&unpriv_pml4[pml4_idx]);
+    if (!pdpt) return -1;
+
+    /* Get or create PD */
+    uint64_t *pd = get_or_create_table(&pdpt[pdpt_idx]);
+    if (!pd) return -1;
+
+    /* Get or create PT */
+    uint64_t *pt = get_or_create_table(&pd[pd_idx]);
+    if (!pt) return -1;
+
+    /* Set the PTE */
+    pt[pt_idx] = phys_addr | flags | X86_PTE_PRESENT;
+
+    /* Invalidate TLB for this virtual address */
+    monitor_invalidate_page((void*)virt_addr);
+
     return 0;
 }
 
