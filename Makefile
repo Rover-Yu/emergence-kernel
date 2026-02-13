@@ -131,6 +131,10 @@ USERMODE_TEST_OBJ := $(BUILD_DIR)/kernel_usermode_test.o
 MONITOR_TRAMPOLINE_TEST_SRC := tests/monitor_trampoline/monitor_trampoline_test.c
 MONITOR_TRAMPOLINE_TEST_OBJ := $(BUILD_DIR)/monitor_trampoline_test.o
 
+# SMP monitor stress test sources (conditionally compiled)
+SMP_MONITOR_STRESS_TEST_SRC := tests/smp_monitor_stress/smp_monitor_stress_test.c
+SMP_MONITOR_STRESS_TEST_OBJ := $(BUILD_DIR)/smp_monitor_stress_test.o
+
 # Test sources (reference only, not compiled into kernel)
 # These test files are kept for documentation purposes
 TESTS_DIR := tests
@@ -184,6 +188,9 @@ TESTS_OBJS += $(READONLY_VISIBILITY_TEST_OBJ)
 endif
 ifeq ($(CONFIG_TESTS_USERMODE),1)
 TESTS_OBJS += $(USERMODE_TEST_OBJ)
+endif
+ifeq ($(CONFIG_TESTS_SMP_MONITOR_STRESS),1)
+TESTS_OBJS += $(SMP_MONITOR_STRESS_TEST_OBJ)
 endif
 
 # Generated command line object (embedded fallback)
@@ -379,6 +386,13 @@ endif
 # Compile usermode test (from tests/usermode/) - only if enabled
 ifeq ($(CONFIG_TESTS_USERMODE),1)
 $(USERMODE_TEST_OBJ): $(USERMODE_TEST_SRC) | $(BUILD_DIR)
+	@echo "  CC      $<"
+	$(Q)$(CC) $(CFLAGS) -c $< -o $@
+endif
+
+# Compile SMP monitor stress test (from tests/smp_monitor_stress/) - only if enabled
+ifeq ($(CONFIG_TESTS_SMP_MONITOR_STRESS),1)
+$(SMP_MONITOR_STRESS_TEST_OBJ): $(SMP_MONITOR_STRESS_TEST_SRC) | $(BUILD_DIR)
 	@echo "  CC      $<"
 	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 endif

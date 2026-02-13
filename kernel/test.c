@@ -576,6 +576,7 @@ extern int run_pcd_tests(void);
 extern int run_nested_kernel_invariants_tests(void);
 extern int run_readonly_visibility_tests(void);
 extern int run_usermode_tests(void);
+extern int run_smp_monitor_stress_tests(void);
 
 /* Test registry array */
 const test_case_t test_registry[] = {
@@ -685,6 +686,15 @@ const test_case_t test_registry[] = {
         .run_func = run_usermode_tests,
         .enabled = 1,
         .auto_run = 0  /* Manual only */
+    },
+#endif
+#if CONFIG_TESTS_SMP_MONITOR_STRESS
+    {
+        .name = "smp_monitor_stress",
+        .description = "SMP monitor stress test - concurrent monitor calls from multiple CPUs",
+        .run_func = run_smp_monitor_stress_tests,
+        .enabled = 1,
+        .auto_run = 0  /* Manual only (requires multi-CPU) */
     },
 #endif
     { .name = NULL }  /* Sentinel */

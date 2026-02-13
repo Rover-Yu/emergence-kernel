@@ -379,6 +379,18 @@ void ap_start(void) {
     spinlock_test_ap_entry();
 #endif
 
+#if CONFIG_TESTS_SMP_MONITOR_STRESS
+    /* Poll for SMP monitor stress test mode */
+    extern volatile int smp_monitor_stress_test_start;
+    extern void smp_monitor_stress_ap_entry(void);
+    while (!smp_monitor_stress_test_start) {
+        asm volatile("pause");
+    }
+
+    /* Enter stress test mode */
+    smp_monitor_stress_ap_entry();
+#endif
+
     /* Halt */
     while (1) { arch_halt(); }
 }
