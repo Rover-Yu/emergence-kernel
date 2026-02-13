@@ -108,9 +108,8 @@ static inline int arch_spin_trylock(struct arch_spinlock *lock) {
  * Use this when the lock could be accessed from interrupt context.
  */
 static inline void arch_spin_lock_irqsave(struct arch_spinlock *lock, irq_flags_t *flags) {
-    /* Save interrupt flags using helper from idt.h */
-    save_interrupt_flags(flags);
-    disable_interrupts();
+    /* Save interrupt flags and disable using unified API */
+    *flags = irq_save(1);
     arch_spin_lock(lock);
 }
 
@@ -123,8 +122,8 @@ static inline void arch_spin_lock_irqsave(struct arch_spinlock *lock, irq_flags_
  */
 static inline void arch_spin_unlock_irqrestore(struct arch_spinlock *lock, irq_flags_t *flags) {
     arch_spin_unlock(lock);
-    /* Restore interrupt state using helper from idt.h */
-    restore_interrupt_flags(flags);
+    /* Restore interrupt state using unified API */
+    irq_restore(flags);
 }
 
 /**

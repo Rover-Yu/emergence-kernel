@@ -45,18 +45,40 @@ void idt_set_gate(uint8_t num, uint64_t handler, uint16_t selector, uint8_t type
 /* Enable/disable interrupts */
 
 /**
- * interrupts_enabled - Check if interrupts are currently enabled
+ * irq_save - Save interrupt flags and optionally disable interrupts
+ * @flags: Pointer to store RFLAGS
+ * @disable: 0 to save only, 1 to also disable interrupts
  *
- * Returns: 1 if interrupts enabled (IF flag clear), 0 if disabled (IF flag set)
+ * Saves RFLAGS register to memory. If disable is true, interrupts are disabled
+ * after saving. Use with irq_restore() to restore state later.
  *
- * The IF (Interrupt Flag) is bit 9 of RFLAGS. When set, interrupts are masked.
- * This function allows querying interrupt state without modifying it.
+ * Returns: The saved RFLAGS value with IF flag indicating interrupt state.
  */
-static inline int interrupts_enabled(void) {
-    uint64_t rflags;
-    asm volatile ("pushf; pop %0" : "=r"(rflags) :: "memory");
-    return (rflags & (1UL << 9)) ? 0 : 1;
+static inline irq_flags_t irq_save(int disable) {
+    irq_flags_t flags;
+    asm volatile ("pushf; pop %0" : "=rm"(flags) :: "memory");
+    if (disable) {
+        asm volatile ("cli");
+    }
+    return flags;
 }
+
+/**
+ * irq_restore - Restore RFLAGS from memory
+ * @flags: Previously saved RFLAGS
+ *
+ * Restores RFLAGS using POPF. Enables interrupts only if IF was clear when saved.
+ * Uses the IF flag (bit 9) to determine previous interrupt state.
+ */
+static inline void irq_restore(irq_flags_t *flags) {
+    /* Check IF flag (bit 9) - restore interrupts only if they were enabled */
+    if (*flags & (1UL << 9)) {
+        enable_interrupts();
+    }
+    asm volatile ("push %0; popf" : : "rm"(*flags) :: "memory");
+}
+
+/* Enable/disable interrupts (legacy wrappers - use irq_save/irq_restore instead) */
 
 /**
  * enable_interrupts - Enable interrupts
@@ -71,31 +93,45 @@ static inline void enable_interrupts(void) {
  * disable_interrupts - Disable interrupts
  *
  * Executes CLI instruction to clear IF flag, masking all maskable interrupts.
+ * NOTE: Use irq_save(1) to both save and disable in one operation.
  */
 static inline void disable_interrupts(void) {
     asm volatile ("cli");
 }
 
 /**
- * save_interrupt_flags - Save RFLAGS to memory
- * @flags: Pointer to store RFLAGS
+ * interrupts_enabled - Check if interrupts are currently enabled
  *
- * Saves complete RFLAGS register using PUSHF. Use with restore_interrupt_flags().
- * The IF flag (bit 9) indicates interrupt state for conditional restoration.
+ * Returns: 1 if interrupts enabled (IF flag clear), 0 if disabled (IF flag set)
+ *
+ * The IF (Interrupt Flag) is bit 9 of RFLAGS. When set, interrupts are masked.
+ * This function allows querying interrupt state without modifying it.
  */
+static inline int interrupts_enabled(void) {
+    uint64_t rflags;
+    asm volatile ("pushf; pop %0" : "=r"(rflags) :: "memory");
+    return (rflags & (1UL << 9)) ? 0 : 1;
+}
+
+/**
+ * save_interrupt_flags - DEPRECATED: Use irq_save(0) instead
+ *
+ * This function is kept for compatibility. Prefer irq_save() which
+ * clearly documents intent to save without disabling interrupts.
+ */
+__attribute__((deprecated))
 static inline void save_interrupt_flags(irq_flags_t *flags) {
     asm volatile ("pushf; pop %0" : "=rm"(*flags) :: "memory");
 }
 
 /**
- * restore_interrupt_flags - Restore RFLAGS from memory if interrupts were enabled
- * @flags: Previously saved RFLAGS
+ * restore_interrupt_flags - DEPRECATED: Use irq_restore() instead
  *
- * Restores RFLAGS using POPF. Only enables interrupts if they were enabled when saved.
- * Uses the IF flag (bit 9) to determine previous interrupt state.
+ * This function is kept for compatibility. Prefer irq_restore() which
+ * handles conditional interrupt enable and is more explicit.
  */
+__attribute__((deprecated))
 static inline void restore_interrupt_flags(irq_flags_t *flags) {
-    /* Check IF flag (bit 9) - restore interrupts only if they were enabled */
     if (*flags & (1UL << 9)) {
         enable_interrupts();
     }
