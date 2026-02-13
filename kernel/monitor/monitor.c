@@ -967,12 +967,24 @@ monitor_ret_t monitor_call(monitor_call_t call, uint64_t arg1,
 
 /* PMM monitor call wrappers */
 void *monitor_pmm_alloc(uint8_t order) {
-    /* Pass PCD type as arg2: OK_NORMAL for outer kernel use */
+    /* If monitor not initialized, fall back to direct pmm_alloc
+     * This handles early boot allocations (e.g., slab_init) before monitor_init() */
+    if (!monitor_pml4_phys) {
+        return pmm_alloc(order);
+    }
+
+    /* Normal path: route through monitor for PCD tracking */
     monitor_ret_t ret = monitor_call(MONITOR_CALL_ALLOC_PHYS, order, PCD_TYPE_OK_NORMAL, 0);
     return (void *)ret.result;
 }
 
 void monitor_pmm_free(void *addr, uint8_t order) {
+    /* If monitor not initialized, fall back to direct pmm_free */
+    if (!monitor_pml4_phys) {
+        pmm_free(addr, order);
+        return;
+    }
+
     monitor_call(MONITOR_CALL_FREE_PHYS, (uint64_t)addr, order, 0);
 }
 

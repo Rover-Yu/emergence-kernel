@@ -5,6 +5,10 @@
 #include "kernel/pmm.h"
 #include "arch/x86_64/serial.h"
 
+/* External monitor function for PCD-tracked allocations */
+extern void *monitor_pmm_alloc(uint8_t order);
+extern void monitor_pmm_free(void *addr, uint8_t order);
+
 /* ============================================================================
  * Global State
  * ============================================================================ */
@@ -62,8 +66,9 @@ static slab_t *slab_new(slab_cache_t *cache) {
     char *obj_ptr;
     size_t i;
 
-    /* Allocate a page from PMM (order 0 = 1 page) */
-    page_addr = pmm_alloc(0);
+    /* Allocate a page via monitor for PCD tracking
+     * Falls back to pmm_alloc if monitor not initialized (early boot) */
+    page_addr = monitor_pmm_alloc(0);
     if (page_addr == NULL) {
         serial_puts("SLAB: Failed to allocate page from PMM\n");
         return NULL;
