@@ -100,17 +100,22 @@ static inline void disable_interrupts(void) {
 }
 
 /**
- * interrupts_enabled - Check if interrupts are currently enabled
+ * arch_irq_save - Save interrupt flags and optionally disable interrupts
+ * @disable: 0 to save only, 1 to also disable interrupts
  *
- * Returns: 1 if interrupts enabled (IF flag clear), 0 if disabled (IF flag set)
+ * Saves RFLAGS register to memory. If disable is true, clears IF flag
+ * to mask all maskable interrupts.
  *
- * The IF (Interrupt Flag) is bit 9 of RFLAGS. When set, interrupts are masked.
- * This function allows querying interrupt state without modifying it.
+ * Returns: The saved RFLAGS value with IF flag (bit 9) indicating
+ * whether interrupts were enabled when saved.
  */
-static inline int interrupts_enabled(void) {
-    uint64_t rflags;
-    asm volatile ("pushf; pop %0" : "=r"(rflags) :: "memory");
-    return (rflags & (1UL << 9)) ? 0 : 1;
+static inline irq_flags_t arch_irq_save(int disable) {
+    irq_flags_t flags;
+    asm volatile ("pushf; pop %0" : "=rm"(*flags) :: "memory");
+    if (disable) {
+        asm volatile ("cli");
+    }
+    return flags;
 }
 
 /**
