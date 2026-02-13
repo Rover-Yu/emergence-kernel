@@ -331,6 +331,10 @@ void ap_start(void) {
     /* Initialize interrupt nesting depth */
     cpu_info[my_index].irq_nest_depth = 0;
 
+    /* Set GS base to point to this CPU's per_cpu_data
+     * This enables the monitor trampoline to use GS-relative addressing */
+    smp_set_gs_base(&per_cpu_data[my_index]);)
+
     /* Switch to unprivileged page tables */
     uint64_t unpriv_cr3 = monitor_get_unpriv_cr3();
     if (unpriv_cr3 != 0) {
