@@ -194,7 +194,7 @@ void kernel_main(uint32_t multiboot_info_addr) {
         /* TEMPORARY: Skip CR3 switch to test ring 3 with boot page tables (full access)
          * This tests whether the triple fault is caused by nested kernel page tables
          * or by something else (GDT, TSS, syscall mechanism, etc.) */
-#if 0
+#if !defined(CONFIG_TESTS_USERMODE) || !CONFIG_TESTS_USERMODE
         /* Switch to unprivileged page tables */
         uint64_t unpriv_cr3 = monitor_get_unpriv_cr3();
         if (unpriv_cr3 != 0) {
@@ -299,9 +299,8 @@ void kernel_main(uint32_t multiboot_info_addr) {
             serial_puts("KERNEL: Monitor initialization failed\n");
         }
 #else
-        /* SKIPPING CR3 switch for ring 3 test with boot page tables (full access) */
-        serial_puts("KERNEL: TEMPORARY - Skipping CR3 switch, using boot page tables for ring 3 test\n");
-        serial_puts("KERNEL: This tests if ring 3 transition works with full page table access\n");
+        /* Usermode tests need full access for ring 3 transition testing */
+        serial_puts("KERNEL: Skipping CR3 switch for usermode tests\n");
 #endif
 
         /* Enable interrupts */
