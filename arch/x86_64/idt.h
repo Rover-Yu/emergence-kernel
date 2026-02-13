@@ -54,4 +54,13 @@ static inline void disable_interrupts(void) {
 /* Timer handler (called from ISR) */
 void timer_handler(void);
 
+/* Load IDT register - wrapper for LIDT instruction
+ * @idt_ptr: Pointer to IDT descriptor (base + limit)
+ *
+ * Programs the CPU interrupt descriptor table. Must be done once during boot.
+ */
+static inline void arch_idt_load(const idt_ptr_t *idt_ptr) {
+    asm volatile ("lidt %0" : : "m"(*idt_ptr));
+}
+
 #endif /* EMERGENCE_ARCH_X86_64_IDT_H */

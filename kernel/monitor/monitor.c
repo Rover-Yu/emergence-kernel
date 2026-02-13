@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include "monitor.h"
 #include "arch/x86_64/paging.h"
+#include "arch/x86_64/cr.h"
 #include "arch/x86_64/serial.h"
 #include "kernel/pcd.h"
 #include "kernel/pmm.h"
@@ -51,7 +52,7 @@ static inline uint64_t virt_to_phys(void *virt) {
 /* Helper: Invalidate TLB for a specific virtual address
  * Required after modifying PTE to ensure Invariant 2 enforcement */
 static void monitor_invalidate_page(void *addr) {
-    asm volatile ("invlpg (%0)" : : "r"(addr) : "memory");
+    arch_tlb_invalidate_page(addr);
 }
 
 /* Helper: Find PD entry covering a physical address
@@ -175,8 +176,7 @@ void monitor_verify_invariants(void) {
 
     /* === Invariant 2: Write-protection permissions enforced === */
     {
-        uint64_t cr0;
-        asm volatile ("mov %%cr0, %0" : "=r"(cr0));
+        uint64_t cr0 = arch_cr0_read();
         cr0_wp_enabled = (cr0 & (1 << 16));
     }
 
@@ -264,7 +264,7 @@ void monitor_verify_invariants(void) {
 
     /* === Invariant 6: CR3 only loaded with pre-declared PTP === */
     /* Check that current CR3 is one of the two pre-declared PTPs */
-    asm volatile ("mov %%cr3, %0" : "=r"(current_cr3));
+    current_cr3 = arch_cr3_read();
     cr3_is_predeclared = (current_cr3 == monitor_pml4_phys) ||
                          (current_cr3 == unpriv_pml4_phys);
 
@@ -460,7 +460,7 @@ static int create_ro_mapping(uint64_t phys_addr, uint64_t virt_addr) {
     /* Step 4: Create final PTE - read-only (PRESENT only, no WRITABLE) */
     pt[pt_idx] = phys_addr | X86_PTE_PRESENT;
     /* Invalidate TLB for this page after PTE update */
-    asm volatile ("invlpg (%0)" : : "r"(pt_idx << 12) : "memory");
+    arch_tlb_invalidate_page((void *)(pt_idx << 12));
 
     return 0;
 }
@@ -802,8 +802,7 @@ uint64_t monitor_get_unpriv_cr3(void) {
 
 /* Check if running in privileged (monitor) mode */
 bool monitor_is_privileged(void) {
-    uint64_t cr3;
-    asm volatile ("mov %%cr3, %0" : "=r"(cr3));
+    uint64_t cr3 = arch_cr3_read();
     return cr3 == monitor_pml4_phys;
 }
 
@@ -814,8 +813,7 @@ monitor_ret_t monitor_call_handler(monitor_call_t call, uint64_t arg1,
 
     /* Debug: Verify we're in privileged mode */
     extern uint64_t monitor_pml4_phys;
-    uint64_t current_cr3;
-    asm volatile ("mov %%cr3, %0" : "=r"(current_cr3));
+    uint64_t current_cr3 = arch_cr3_read();
     serial_puts("MONITOR_HANDLER: CR3 = 0x");
     serial_put_hex(current_cr3);
     serial_puts(", expected = 0x");

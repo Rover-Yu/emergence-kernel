@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include "arch/x86_64/apic.h"
 #include "arch/x86_64/io.h"
+#include "arch/x86_64/msr.h"
 
 /* APIC version register */
 #define LAPIC_VER 0x030
@@ -21,19 +22,6 @@ static volatile uint32_t *lapic_base = (volatile uint32_t *)LAPIC_DEFAULT_BASE;
 #define IA32_APIC_BASE_ENABLED  (1 << 11)  /* APIC global enable */
 #define IA32_APIC_BASE_EXTD     (1 << 10)  /* x2APIC enable */
 #define IA32_APIC_BASE_BSP      (1 << 8)   /* BSP flag */
-
-/* MSR read/write functions */
-static inline uint64_t rdmsr(uint32_t msr) {
-    uint32_t low, high;
-    asm volatile ("rdmsr" : "=a"(low), "=d"(high) : "c"(msr));
-    return ((uint64_t)high << 32) | low;
-}
-
-static inline void wrmsr(uint32_t msr, uint64_t value) {
-    uint32_t low = value & 0xFFFFFFFF;
-    uint32_t high = value >> 32;
-    asm volatile ("wrmsr" : : "c"(msr), "a"(low), "d"(high));
-}
 
 /**
  * lapic_read - Read Local APIC register
@@ -95,7 +83,7 @@ void lapic_write(uint32_t offset, uint32_t value) {
  * Returns: Local APIC base address
  */
 uint64_t lapic_get_base(void) {
-    uint64_t apic_base = rdmsr(IA32_APIC_BASE_MSR);
+    uint64_t apic_base = arch_msr_read(IA32_APIC_BASE_MSR);
 
     /* Extract base address (bits 12-35) and align to page boundary */
     apic_base &= 0xFFFFF000;
@@ -111,16 +99,16 @@ void lapic_init(void) {
     uint32_t ver;
 
     /* Read the IA32_APIC_BASE MSR to get actual APIC configuration */
-    apic_base_msr = rdmsr(IA32_APIC_BASE_MSR);
+    apic_base_msr = arch_msr_read(IA32_APIC_BASE_MSR);
 
     /* Check if APIC is enabled, enable it if not */
     if (!(apic_base_msr & IA32_APIC_BASE_ENABLED)) {
         apic_base_msr |= IA32_APIC_BASE_ENABLED;
-        wrmsr(IA32_APIC_BASE_MSR, apic_base_msr);
+        arch_msr_write(IA32_APIC_BASE_MSR, apic_base_msr);
     }
 
     /* Re-read MSR after potential modification */
-    apic_base_msr = rdmsr(IA32_APIC_BASE_MSR);
+    apic_base_msr = arch_msr_read(IA32_APIC_BASE_MSR);
 
     /* Use the actual APIC base address from MSR
      * Note: We're in long mode with paging enabled
@@ -355,7 +343,7 @@ int ap_startup(uint8_t apic_id, uint32_t startup_addr) {
  * Returns: 1 if BSP, 0 if AP
  */
 int is_bsp(void) {
-    uint64_t apic_base = rdmsr(IA32_APIC_BASE_MSR);
+    uint64_t apic_base = arch_msr_read(IA32_APIC_BASE_MSR);
     /* Bit 8 of IA32_APIC_BASE_MSR is set for BSP */
     return (apic_base & (1 << 8)) ? 1 : 0;
 }

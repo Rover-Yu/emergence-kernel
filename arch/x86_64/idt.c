@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include "arch/x86_64/idt.h"
 #include "arch/x86_64/io.h"
+#include "arch/x86_64/cpu.h"
 #include "arch/x86_64/serial.h"
 #include "kernel/monitor/monitor.h"
 #include "arch/x86_64/power.h"
@@ -164,7 +165,7 @@ void idt_init(void) {
     idt_ptr.base = (uint64_t)&idt;
 
     /* Load IDT using lidt instruction */
-    asm volatile ("lidt %0" : : "m"(idt_ptr));
+    arch_idt_load(&idt_ptr);
 }
 
 /* External monitor variable - used to verify unprivileged mode */
@@ -193,6 +194,7 @@ void page_fault_handler(uint64_t fault_addr, uint64_t error_code, uint64_t fault
     system_shutdown();
 
     /* Should never reach here */
-    asm volatile ("cli; hlt");
-    while (1) asm volatile ("hlt");
+    disable_interrupts();
+    arch_halt();
+    while (1) arch_halt();
 }

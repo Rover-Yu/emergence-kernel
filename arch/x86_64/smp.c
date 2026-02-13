@@ -7,6 +7,9 @@
 #include "include/atomic.h"
 #include "include/barrier.h"
 #include "arch/x86_64/apic.h"
+#include "arch/x86_64/cpu.h"
+#include "arch/x86_64/cr.h"
+#include "arch/x86_64/idt.h"
 
 /* External ACPI functions for getting APIC information */
 extern int acpi_get_apic_count(void);
@@ -167,7 +170,7 @@ void smp_start_all_aps(void) {
 #endif
 
     /* Disable interrupts during AP startup to avoid interference */
-    asm volatile ("cli");
+    disable_interrupts();
 
     /* Signal APs that BSP initialization is complete BEFORE starting APs
      * This prevents deadlock where:
@@ -211,7 +214,7 @@ void smp_start_all_aps(void) {
             if (cpu_info[i].state == CPU_READY) {
                 break;
             }
-            asm volatile ("pause");  /* Reduce power consumption during busy-wait */
+            cpu_relax();  /* Reduce power consumption during busy-wait */
             timeout--;
         }
 
@@ -219,7 +222,7 @@ void smp_start_all_aps(void) {
          * This ensures the previous AP has completed all initialization and is
          * in a stable halt state before the next AP begins booting */
         for (volatile int j = 0; j < SMP_AP_SETTLE_DELAY; j++) {
-            asm volatile ("pause");
+            cpu_relax();
         }
     }
 
@@ -259,7 +262,7 @@ void ap_start(void) {
 
     if (my_index <= 0 || my_index >= SMP_MAX_CPUS) {
         serial_puts("[AP] ERROR: Invalid CPU index!\n");
-        while (1) { asm volatile ("hlt"); }
+        while (1) { arch_halt(); }
     }
 
     /* Set current CPU index with memory barrier to ensure visibility */
@@ -275,12 +278,11 @@ void ap_start(void) {
     if (unpriv_cr3 != 0) {
         /* Enable write protection enforcement for AP */
         /* Set CR0.WP=1 so outer kernel cannot modify read-only PTEs */
-        uint64_t cr0;
-        asm volatile ("mov %%cr0, %0" : "=r"(cr0));
+        uint64_t cr0 = arch_cr0_read();
         cr0 |= (1 << 16);  /* Set CR0.WP bit */
-        asm volatile ("mov %0, %%cr0" : : "r"(cr0) : "memory");
+        arch_cr0_write(cr0);
 
-        asm volatile ("mov %0, %%cr3" : : "r"(unpriv_cr3));
+        arch_cr3_write(unpriv_cr3);
         serial_puts("[AP] CPU");
         serial_putc('0' + my_index);
         serial_puts(" switched to unprivileged mode\n");
@@ -316,7 +318,7 @@ void ap_start(void) {
 #endif
 
     /* Halt */
-    while (1) { asm volatile ("hlt"); }
+    while (1) { arch_halt(); }
 }
 
 /* patch_ap_trampoline removed - trampoline now works without runtime patching

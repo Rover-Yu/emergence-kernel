@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include "arch/x86_64/acpi.h"
 #include "arch/x86_64/io.h"
+#include "arch/x86_64/cpu.h"
 
 /* External serial output functions */
 extern void serial_puts(const char *str);
@@ -184,9 +185,7 @@ static int get_cpu_count_cpuid(void) {
 
     /* CPUID leaf 0x01: Processor Info and Feature Bits
      * EBX[23:16] contains the maximum number of addressable IDs for logical processors */
-    asm volatile ("cpuid"
-                  : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx)
-                  : "a"(0x01));
+    arch_cpuid(0x01, &eax, &ebx, &ecx, &edx);
 
     /* Extract logical processor count from EBX bits 16-23 */
     int count = (ebx >> 16) & 0xFF;

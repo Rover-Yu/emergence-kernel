@@ -3,6 +3,7 @@
 #include "arch/x86_64/power.h"
 #include "arch/x86_64/io.h"
 #include "arch/x86_64/serial.h"
+#include "arch/x86_64/cpu.h"
 
 /* Shutdown port addresses for various platforms */
 #define SHUTDOWN_PORT_QEMU   0xB004  /* QEMU, Bochs */
@@ -28,7 +29,7 @@ void system_shutdown(void) {
      * With file-based serial output, this is typically not needed,
      * but it provides extra reliability for edge cases. */
     for (volatile int i = 0; i < 500000; i++) {
-        asm volatile("nop");
+        arch_nop();
     }
 
     /* Try QEMU/Bochs shutdown port first (8-bit write for predictable exit code) */
@@ -37,7 +38,7 @@ void system_shutdown(void) {
     /* Halt immediately - QEMU should have exited above.
      * If execution reaches here, QEMU shutdown failed. Continue to fallback below. */
     while (1) {
-        asm volatile ("hlt");
+        arch_halt();
     }
 
     /* The code below should never execute in QEMU. It's only for other environments. */
@@ -46,6 +47,6 @@ void system_shutdown(void) {
 
     /* If still here, halt forever */
     while (1) {
-        asm volatile ("hlt");
+        arch_halt();
     }
 }

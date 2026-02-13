@@ -8,6 +8,7 @@
 #include "arch/x86_64/apic.h"
 #include "arch/x86_64/acpi.h"
 #include "arch/x86_64/idt.h"
+#include "arch/x86_64/cr.h"
 #include "arch/x86_64/timer.h"
 #include "arch/x86_64/ipi.h"
 #include "arch/x86_64/serial.h"
@@ -195,16 +196,15 @@ void kernel_main(uint32_t multiboot_info_addr) {
 
             /* Enable write protection enforcement */
             /* Set CR0.WP=1 so outer kernel cannot modify read-only PTEs */
-            uint64_t cr0;
-            asm volatile ("mov %%cr0, %0" : "=r"(cr0));
+            uint64_t cr0 = arch_cr0_read();
             cr0 |= (1 << 16);  /* Set CR0.WP bit */
-            asm volatile ("mov %0, %%cr0" : : "r"(cr0) : "memory");
+            arch_cr0_write(cr0);
             serial_puts("KERNEL: CR0.WP enabled (write protection enforced)\n");
 
             /* Switch to unprivileged page tables
              * The monitor has set up these tables with proper U/S bits
              * User code pages are marked as user-accessible (U/S=1) */
-            asm volatile ("mov %0, %%cr3" : : "r"(unpriv_cr3) : "memory");
+            arch_cr3_write(unpriv_cr3);
             serial_puts("KERNEL: Page table switch complete\n");
 
             /* Debug: Verify user program page is accessible after CR3 switch */

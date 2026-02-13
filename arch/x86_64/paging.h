@@ -21,4 +21,15 @@
  * This implements Invariant 1: protected data is read-only while outer kernel executes */
 #define X86_PD_FLAGS_2MB_RO (X86_PTE_PRESENT | X86_PTE_PS)
 
+/**
+ * arch_tlb_invalidate_page - Invalidate TLB entry for a specific page
+ * @addr: Virtual address to invalidate
+ *
+ * Uses INVLPG instruction to invalidate TLB entries for the specified page.
+ * Required after modifying page table entries to ensure the changes take effect.
+ */
+static inline void arch_tlb_invalidate_page(void *addr) {
+    asm volatile ("invlpg (%0)" : : "r"(addr) : "memory");
+}
+
 #endif /* ARCH_X86_64_PAGING_H */
