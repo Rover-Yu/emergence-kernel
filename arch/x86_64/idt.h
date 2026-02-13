@@ -34,13 +34,11 @@ typedef struct {
 #define TIMER_VECTOR       32      /* Timer interrupt vector */
 #define IPI_VECTOR         33      /* IPI interrupt vector */
 
-/* Interrupt flags type for saving/restoring interrupt state
- *
- * Stores the RFLAGS register value. Bit 9 (IF flag) indicates whether
- * interrupts were enabled when the flags were saved. This allows conditional restore
- * of interrupt state in irqrestore operations.
- */
+/* Interrupt flags type for saving/restoring interrupt state */
 typedef unsigned long irq_flags_t;
+
+/* External SMP function for getting interrupt nesting depth */
+extern int* smp_get_irq_nest_depth_ptr(void);
 
 /* Function prototypes */
 
@@ -50,31 +48,42 @@ void idt_init(void);
 /* Set an IDT gate entry */
 void idt_set_gate(uint8_t num, uint64_t handler, uint16_t selector, uint8_t type);
 
-/* External SMP function for getting interrupt nesting depth */
-extern int* smp_get_irq_nest_depth_ptr(void);
+/* Load IDT pointer (lidt instruction) */
+static inline void arch_idt_load(idt_ptr_t *ptr) {
+    asm volatile ("lidt %0" : : "m"(*ptr));
+}
 
 /* ============================================================================
- * Raw Hardware Operations (use irq_disable/irq_enable for nested-safe)
+ * Raw Interrupt Control (No Nesting Tracking)
  * ============================================================================ */
 
 /**
- * enable_interrupts_raw - Enable interrupts (raw hardware operation)
+ * disable_interrupts_raw - Disable interrupts (raw, no nesting tracking)
  *
- * Executes STI instruction to set IF flag, allowing maskable interrupts to fire.
- * This is the raw hardware operation - use irq_enable() for nested-safe behavior.
+ * Executes CLI instruction to clear IF flag in RFLAGS.
+ * Use only in early boot or when you know nesting is not active.
  */
-static inline void enable_interrupts_raw(void) {
-    asm volatile ("sti");
+static inline void disable_interrupts_raw(void) {
+    asm volatile ("cli" : : : "memory");
 }
 
 /**
- * disable_interrupts_raw - Disable interrupts (raw hardware operation)
+ * enable_interrupts_raw - Enable interrupts (raw, no nesting tracking)
  *
- * Executes CLI instruction to clear IF flag, masking all maskable interrupts.
- * This is the raw hardware operation - use irq_disable() for nested-safe behavior.
+ * Executes STI instruction to set IF flag in RFLAGS.
+ * Use only in early boot or when you know nesting is not active.
  */
-static inline void disable_interrupts_raw(void) {
-    asm volatile ("cli");
+static inline void enable_interrupts_raw(void) {
+    asm volatile ("sti" : : : "memory");
+}
+
+/* Convenience aliases (kept for compatibility during transition) */
+static inline void disable_interrupts(void) {
+    disable_interrupts_raw();
+}
+
+static inline void enable_interrupts(void) {
+    enable_interrupts_raw();
 }
 
 /* ============================================================================
@@ -84,47 +93,46 @@ static inline void disable_interrupts_raw(void) {
 /**
  * irq_disable - Disable interrupts with nesting support
  *
- * Increments per-CPU nesting counter. Disables interrupts on first call.
- * Safe to call multiple times - must be matched with irq_enable().
+ * Increments nesting counter and disables interrupts.
+ * Nested calls are safe - interrupts only re-enabled when
+ * nesting depth returns to zero.
  */
 static inline void irq_disable(void) {
-    int *depth_ptr = smp_get_irq_nest_depth_ptr();
-    if (depth_ptr && (*depth_ptr)++ == 0) {
-        disable_interrupts_raw();
+    int *depth = smp_get_irq_nest_depth_ptr();
+    (*depth)++;
+    if (*depth == 1) {
+        asm volatile ("cli" : : : "memory");
     }
 }
 
 /**
  * irq_enable - Enable interrupts with nesting support
  *
- * Decrements per-CPU nesting counter. Enables interrupts only when
- * counter reaches zero (all nested disables matched).
+ * Decrements nesting counter and enables interrupts if depth reaches zero.
+ * Safe for nested calls - only actually enables at outermost level.
  */
 static inline void irq_enable(void) {
-    int *depth_ptr = smp_get_irq_nest_depth_ptr();
-    if (depth_ptr && --(*depth_ptr) == 0) {
-        enable_interrupts_raw();
+    int *depth = smp_get_irq_nest_depth_ptr();
+    (*depth)--;
+    if (*depth == 0) {
+        asm volatile ("sti" : : : "memory");
     }
 }
 
-/* ============================================================================
- * Interrupt Save/Restore (Scalar Flags API)
- * ============================================================================ */
-
 /**
  * irq_save - Save interrupt flags and optionally disable interrupts
- * @disable: 0 to save only, 1 to also disable interrupts
+ * @disable: Non-zero to disable interrupts, zero to only save
  *
- * Saves RFLAGS register to memory. If disable is true, interrupts are disabled
- * after saving. Use with irq_restore() to restore state later.
+ * Returns: Current RFLAGS value (scalar)
  *
- * Returns: The saved RFLAGS value with IF flag indicating interrupt state.
+ * Saves RFLAGS using PUSHF. If @disable is non-zero, also
+ * disables interrupts with nesting support.
  */
 static inline irq_flags_t irq_save(int disable) {
     irq_flags_t flags;
-    asm volatile ("pushf; pop %0" : "=rm"(flags) :: "memory");
+    asm volatile ("pushf; pop %0" : "=rm"(flags) : : "memory");
     if (disable) {
-        disable_interrupts_raw();
+        irq_disable();
     }
     return flags;
 }
@@ -142,92 +150,9 @@ static inline irq_flags_t irq_save(int disable) {
 static inline void irq_restore(irq_flags_t flags) {
     /* Only enable interrupts if they were enabled when saved AND no nesting remains */
     if ((flags & (1UL << 9)) && (*smp_get_irq_nest_depth_ptr() == 0)) {
-        enable_interrupts_raw();
+        irq_enable();
     }
     asm volatile ("push %0; popf" : : "rm"(flags) : "memory");
-}
-
-/* ============================================================================
- * Legacy Wrappers (Deprecated)
- * ============================================================================ */
-
-__attribute__((deprecated("Use irq_disable() for nested-safe operation")))
-static inline void disable_interrupts(void) {
-    disable_interrupts_raw();
-}
-
-__attribute__((deprecated("Use irq_enable() for nested-safe operation")))
-static inline void enable_interrupts(void) {
-    enable_interrupts_raw();
-}
-
-__attribute__((deprecated("Use irq_save() instead")))
-static inline void save_interrupt_flags(irq_flags_t *flags) {
-    asm volatile ("pushf; pop %0" : "=rm"(*flags) :: "memory");
-}
-
-__attribute__((deprecated("Use irq_restore() with scalar value instead")))
-static inline void restore_interrupt_flags(irq_flags_t *flags) {
-    asm volatile ("push %0; popf" : : "rm"(*flags) : "memory");
-}
-
-/* ============================================================================
- * Architecture-Specific Aliases (Raw Operations)
- * ============================================================================ */
-
-/**
- * arch_irq_save_raw - Save interrupt flags and optionally disable (raw)
- * @disable: 0 to save only, 1 to also disable interrupts
- *
- * Raw hardware operation without nesting support.
- */
-static inline irq_flags_t arch_irq_save_raw(int disable) {
-    irq_flags_t flags;
-    asm volatile ("pushf; pop %0" : "=rm"(flags) :: "memory");
-    if (disable) {
-        disable_interrupts_raw();
-    }
-    return flags;
-}
-
-/**
- * arch_irq_restore_raw - Restore interrupt flags (raw operation)
- * @flags: Previously saved RFLAGS
- *
- * Raw hardware operation without nesting awareness.
- * Use irq_restore() for nested-safe behavior.
- */
-static inline void arch_irq_restore_raw(irq_flags_t flags) {
-    asm volatile ("push %0; popf" : : "rm"(flags) : "memory");
-}
-
-/* ============================================================================
- * Legacy Architecture-Specific (Deprecated)
- * ============================================================================ */
-
-__attribute__((deprecated("Use irq_save() instead")))
-static inline irq_flags_t arch_irq_save(int disable) {
-    return arch_irq_save_raw(disable);
-}
-
-__attribute__((deprecated("Use irq_restore() with scalar value instead")))
-static inline void arch_irq_restore(irq_flags_t *flags) {
-    if (*flags & (1UL << 9)) {
-        enable_interrupts_raw();
-    }
-    asm volatile ("push %0; popf" : : "rm"(*flags) : "memory");
-}
-
-/* Timer handler (called from ISR) */
-void timer_handler(void);
-
-/* Load IDT register - wrapper for LIDT instruction
- * @idt_ptr: Pointer to IDT descriptor (base + limit)
- *
- * Programs the CPU interrupt descriptor table. Must be done once during boot.
- */
-static inline void arch_idt_load(const idt_ptr_t *idt_ptr) {
-    asm volatile ("lidt %0" : : "m"(*idt_ptr));
 }
 
 #endif /* EMERGENCE_ARCH_X86_64_IDT_H */

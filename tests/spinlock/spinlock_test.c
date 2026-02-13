@@ -615,7 +615,7 @@ static int test8_rwlock_readers(int num_cpus) {
     /* Phase 2: All CPUs acquire read lock (interrupt-safe) */
     irq_flags_t flags;
     asm volatile("pushf\npop %0" : "=rm"(flags));
-    disable_interrupts_raw();
+    irq_disable();
 
     spin_read_lock(&test_rwlock);
 
@@ -635,7 +635,7 @@ static int test8_rwlock_readers(int num_cpus) {
 
     /* Restore interrupt state */
     if (flags & (1 << 9)) {
-        enable_interrupts_raw();
+        irq_enable();
     }
 
     /* Phase 3: Synchronize and verify */
@@ -686,7 +686,7 @@ static int test9_rwlock_writer(int num_cpus) {
     /* Phase 2: BSP acquires write lock, APs try read lock (interrupt-safe) */
     irq_flags_t flags;
     asm volatile("pushf\npop %0" : "=rm"(flags));
-    disable_interrupts_raw();
+    irq_disable();
 
     if (test_is_bsp()) {
         /* BSP: Acquire write lock */
@@ -696,7 +696,7 @@ static int test9_rwlock_writer(int num_cpus) {
         if (atomic_load_explicit(&test_rwlock.counter, memory_order_relaxed) != -1) {
             test_puts("  FAIL: Writer counter not -1\n");
             spin_write_unlock(&test_rwlock);
-            enable_interrupts_raw();
+            irq_enable();
             return -1;
         }
 
@@ -724,7 +724,7 @@ static int test9_rwlock_writer(int num_cpus) {
 
     /* Restore interrupt state */
     if (flags & (1 << 9)) {
-        enable_interrupts_raw();
+        irq_enable();
     }
 
     /* Phase 3: Synchronize and verify */
