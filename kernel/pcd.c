@@ -85,8 +85,6 @@ static inline bool pcd_is_managed(uint64_t phys_addr) {
  * for outer kernel use.
  */
 void pcd_init(void) {
-    irq_flags_t flags;
-
     serial_puts("PCD: Initializing Page Control Data system\n");
 
     /* Initialize lock */
@@ -123,12 +121,12 @@ void pcd_init(void) {
     serial_puts(")\n");
 
     /* Allocate PCD array from PMM (chicken-and-egg solved!) */
-    spin_lock_irqsave(&pcd_state.lock, &flags);
+    irq_flags_t flags = spin_lock_irqsave(&pcd_state.lock);
 
     pcd_state.pages = (pcd_t *)pmm_alloc(pcd_order);
     if (!pcd_state.pages) {
         serial_puts("PCD: ERROR - Failed to allocate PCD array\n");
-        spin_unlock_irqrestore(&pcd_state.lock, &flags);
+        spin_unlock_irqrestore(&pcd_state.lock, flags);
         return;
     }
 
@@ -145,7 +143,7 @@ void pcd_init(void) {
     }
 
     pcd_state.initialized = true;
-    spin_unlock_irqrestore(&pcd_state.lock, &flags);
+    spin_unlock_irqrestore(&pcd_state.lock, flags);
 
     serial_puts("PCD: Managing ");
     serial_put_hex(total_pages);
@@ -193,8 +191,6 @@ void pcd_init(void) {
  * call this function - the outer kernel cannot change page types.
  */
 void pcd_set_type(uint64_t phys_addr, uint8_t type) {
-    irq_flags_t flags;
-
     if (!pcd_state.initialized) {
         return;
     }
@@ -210,17 +206,17 @@ void pcd_set_type(uint64_t phys_addr, uint8_t type) {
     /* Align to page boundary */
     phys_addr = phys_addr & ~(PAGE_SIZE - 1);
 
-    spin_lock_irqsave(&pcd_state.lock, &flags);
+    irq_flags_t flags = spin_lock_irqsave(&pcd_state.lock);
 
     if (!pcd_is_managed(phys_addr)) {
-        spin_unlock_irqrestore(&pcd_state.lock, &flags);
+        spin_unlock_irqrestore(&pcd_state.lock, flags);
         return;
     }
 
     uint64_t index = pcd_get_index(phys_addr);
     pcd_state.pages[index].type = type;
 
-    spin_unlock_irqrestore(&pcd_state.lock, &flags);
+    spin_unlock_irqrestore(&pcd_state.lock, flags);
 }
 
 /**
@@ -230,7 +226,6 @@ void pcd_set_type(uint64_t phys_addr, uint8_t type) {
  * Returns: Page type (PCD_TYPE_*), or PCD_TYPE_NK_NORMAL if not managed
  */
 uint8_t pcd_get_type(uint64_t phys_addr) {
-    irq_flags_t flags;
     uint8_t type;
 
     if (!pcd_state.initialized) {
@@ -240,7 +235,7 @@ uint8_t pcd_get_type(uint64_t phys_addr) {
     /* Align to page boundary */
     phys_addr = phys_addr & ~(PAGE_SIZE - 1);
 
-    spin_lock_irqsave(&pcd_state.lock, &flags);
+    irq_flags_t flags = spin_lock_irqsave(&pcd_state.lock);
 
     if (!pcd_is_managed(phys_addr)) {
         type = PCD_TYPE_NK_NORMAL;  /* Default for unmanaged pages */
@@ -249,7 +244,7 @@ uint8_t pcd_get_type(uint64_t phys_addr) {
         type = pcd_state.pages[index].type;
     }
 
-    spin_unlock_irqrestore(&pcd_state.lock, &flags);
+    spin_unlock_irqrestore(&pcd_state.lock, flags);
 
     return type;
 }
@@ -266,7 +261,6 @@ uint8_t pcd_get_type(uint64_t phys_addr) {
 void pcd_mark_region(uint64_t base, uint64_t size, uint8_t type) {
     uint64_t addr;
     uint64_t end;
-    irq_flags_t flags;
 
     if (!pcd_state.initialized) {
         return;
@@ -280,7 +274,7 @@ void pcd_mark_region(uint64_t base, uint64_t size, uint8_t type) {
         return;
     }
 
-    spin_lock_irqsave(&pcd_state.lock, &flags);
+    irq_flags_t flags = spin_lock_irqsave(&pcd_state.lock);
 
     /* Mark each page in the region */
     for (uint64_t page = addr; page < end; page += PAGE_SIZE) {
@@ -290,7 +284,7 @@ void pcd_mark_region(uint64_t base, uint64_t size, uint8_t type) {
         }
     }
 
-    spin_unlock_irqrestore(&pcd_state.lock, &flags);
+    spin_unlock_irqrestore(&pcd_state.lock, flags);
 }
 
 /**
@@ -317,7 +311,6 @@ uint64_t pcd_get_max_pages(void) {
  * Prints count of each page type for diagnostic purposes.
  */
 void pcd_dump_stats(void) {
-    irq_flags_t flags;
     uint64_t counts[4] = {0, 0, 0, 0};
 
     if (!pcd_state.initialized) {
@@ -325,7 +318,7 @@ void pcd_dump_stats(void) {
         return;
     }
 
-    spin_lock_irqsave(&pcd_state.lock, &flags);
+    irq_flags_t flags = spin_lock_irqsave(&pcd_state.lock);
 
     /* Count pages by type */
     for (uint64_t i = 0; i < pcd_state.max_pages; i++) {
@@ -335,7 +328,7 @@ void pcd_dump_stats(void) {
         }
     }
 
-    spin_unlock_irqrestore(&pcd_state.lock, &flags);
+    spin_unlock_irqrestore(&pcd_state.lock, flags);
 
     /* Print statistics */
     serial_puts("PCD: Page type statistics:\n");

@@ -97,29 +97,31 @@ static inline int arch_spin_trylock(struct arch_spinlock *lock) {
 /**
  * arch_spin_lock_irqsave - Acquire lock and disable interrupts
  * @lock: Lock to acquire
- * @flags: Pointer to store interrupt flags
  *
  * Saves current interrupt state and disables interrupts before acquiring lock.
  * Use this when lock could be accessed from interrupt context.
  * Interrupt state will be restored only if it was enabled when saved.
+ *
+ * Returns: Saved interrupt flags value (scalar)
  */
-static inline void arch_spin_lock_irqsave(struct arch_spinlock *lock, irq_flags_t *flags) {
+static inline irq_flags_t arch_spin_lock_irqsave(struct arch_spinlock *lock) {
     /* Save interrupt flags and disable using unified API */
-    *flags = arch_irq_save(1);
+    irq_flags_t flags = irq_save(1);
     arch_spin_lock(lock);
+    return flags;
 }
 
 /**
  * arch_spin_unlock_irqrestore - Release lock and restore interrupt state
  * @lock: Lock to release
- * @flags: Previously saved interrupt flags
+ * @flags: Previously saved interrupt flags (scalar value)
  *
  * Releases the lock and restores interrupts to their previous state.
  */
-static inline void arch_spin_unlock_irqrestore(struct arch_spinlock *lock, irq_flags_t *flags) {
+static inline void arch_spin_unlock_irqrestore(struct arch_spinlock *lock, irq_flags_t flags) {
     arch_spin_unlock(lock);
     /* Restore interrupt state using unified API */
-    arch_irq_restore(flags);
+    irq_restore(flags);
 }
 
 /**

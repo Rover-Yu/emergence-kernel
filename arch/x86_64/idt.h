@@ -50,15 +50,69 @@ void idt_init(void);
 /* Set an IDT gate entry */
 void idt_set_gate(uint8_t num, uint64_t handler, uint16_t selector, uint8_t type);
 
-/* Enable/disable interrupts */
+/* External SMP function for getting interrupt nesting depth */
+extern int* smp_get_irq_nest_depth_ptr(void);
 
-/* Forward declarations */
-static inline void enable_interrupts(void);
-static inline void disable_interrupts(void);
+/* ============================================================================
+ * Raw Hardware Operations (use irq_disable/irq_enable for nested-safe)
+ * ============================================================================ */
+
+/**
+ * enable_interrupts_raw - Enable interrupts (raw hardware operation)
+ *
+ * Executes STI instruction to set IF flag, allowing maskable interrupts to fire.
+ * This is the raw hardware operation - use irq_enable() for nested-safe behavior.
+ */
+static inline void enable_interrupts_raw(void) {
+    asm volatile ("sti");
+}
+
+/**
+ * disable_interrupts_raw - Disable interrupts (raw hardware operation)
+ *
+ * Executes CLI instruction to clear IF flag, masking all maskable interrupts.
+ * This is the raw hardware operation - use irq_disable() for nested-safe behavior.
+ */
+static inline void disable_interrupts_raw(void) {
+    asm volatile ("cli");
+}
+
+/* ============================================================================
+ * Nested-Safe Interrupt Control
+ * ============================================================================ */
+
+/**
+ * irq_disable - Disable interrupts with nesting support
+ *
+ * Increments per-CPU nesting counter. Disables interrupts on first call.
+ * Safe to call multiple times - must be matched with irq_enable().
+ */
+static inline void irq_disable(void) {
+    int *depth_ptr = smp_get_irq_nest_depth_ptr();
+    if (depth_ptr && (*depth_ptr)++ == 0) {
+        disable_interrupts_raw();
+    }
+}
+
+/**
+ * irq_enable - Enable interrupts with nesting support
+ *
+ * Decrements per-CPU nesting counter. Enables interrupts only when
+ * counter reaches zero (all nested disables matched).
+ */
+static inline void irq_enable(void) {
+    int *depth_ptr = smp_get_irq_nest_depth_ptr();
+    if (depth_ptr && --(*depth_ptr) == 0) {
+        enable_interrupts_raw();
+    }
+}
+
+/* ============================================================================
+ * Interrupt Save/Restore (Scalar Flags API)
+ * ============================================================================ */
 
 /**
  * irq_save - Save interrupt flags and optionally disable interrupts
- * @flags: Pointer to store RFLAGS
  * @disable: 0 to save only, 1 to also disable interrupts
  *
  * Saves RFLAGS register to memory. If disable is true, interrupts are disabled
@@ -70,102 +124,96 @@ static inline irq_flags_t irq_save(int disable) {
     irq_flags_t flags;
     asm volatile ("pushf; pop %0" : "=rm"(flags) :: "memory");
     if (disable) {
-        asm volatile ("cli");
+        disable_interrupts_raw();
     }
     return flags;
 }
 
 /**
- * irq_restore - Restore RFLAGS from memory
- * @flags: Previously saved RFLAGS
+ * irq_restore - Restore interrupt flags from saved value
+ * @flags: Previously saved RFLAGS (scalar value, not pointer)
  *
- * Restores RFLAGS using POPF. Enables interrupts only if IF was clear when saved.
- * Uses the IF flag (bit 9) to determine previous interrupt state.
+ * Restores RFLAGS using POPF. Enables interrupts only if:
+ * 1) IF was set when saved (bit 9 of flags)
+ * 2) No nested interrupt disables remain active
+ *
+ * Nesting-aware: Only enables interrupts when nesting depth is zero.
  */
-static inline void irq_restore(irq_flags_t *flags) {
-    /* Check IF flag (bit 9) - restore interrupts only if they were enabled */
-    if (*flags & (1UL << 9)) {
-        enable_interrupts();
+static inline void irq_restore(irq_flags_t flags) {
+    /* Only enable interrupts if they were enabled when saved AND no nesting remains */
+    if ((flags & (1UL << 9)) && (*smp_get_irq_nest_depth_ptr() == 0)) {
+        enable_interrupts_raw();
     }
-    asm volatile ("push %0; popf" : : "rm"(*flags) : "memory");
+    asm volatile ("push %0; popf" : : "rm"(flags) : "memory");
 }
 
-/* Enable/disable interrupts (legacy wrappers - use irq_save/irq_restore instead) */
+/* ============================================================================
+ * Legacy Wrappers (Deprecated)
+ * ============================================================================ */
 
-/**
- * enable_interrupts - Enable interrupts
- *
- * Executes STI instruction to set IF flag, allowing maskable interrupts to fire.
- */
-static inline void enable_interrupts(void) {
-    asm volatile ("sti");
-}
-
-/**
- * disable_interrupts - Disable interrupts
- *
- * Executes CLI instruction to clear IF flag, masking all maskable interrupts.
- * NOTE: Use irq_save(1) to both save and disable in one operation.
- */
+__attribute__((deprecated("Use irq_disable() for nested-safe operation")))
 static inline void disable_interrupts(void) {
-    asm volatile ("cli");
+    disable_interrupts_raw();
 }
 
-/**
- * arch_irq_save - Save interrupt flags and optionally disable interrupts
- * @disable: 0 to save only, 1 to also disable interrupts
- *
- * Saves RFLAGS register to memory. If disable is true, clears IF flag
- * to mask all maskable interrupts.
- *
- * Returns: The saved RFLAGS value with IF flag (bit 9) indicating
- * whether interrupts were enabled when saved.
- */
-static inline irq_flags_t arch_irq_save(int disable) {
-    irq_flags_t flags;
-    asm volatile ("pushf; pop %0" : "=rm"(flags) :: "memory");
-    if (disable) {
-        asm volatile ("cli");
-    }
-    return flags;
+__attribute__((deprecated("Use irq_enable() for nested-safe operation")))
+static inline void enable_interrupts(void) {
+    enable_interrupts_raw();
 }
 
-/**
- * save_interrupt_flags - DEPRECATED: Use irq_save(0) instead
- *
- * This function is kept for compatibility. Prefer irq_save() which
- * clearly documents intent to save without disabling interrupts.
- */
-__attribute__((deprecated))
+__attribute__((deprecated("Use irq_save() instead")))
 static inline void save_interrupt_flags(irq_flags_t *flags) {
     asm volatile ("pushf; pop %0" : "=rm"(*flags) :: "memory");
 }
 
-/**
- * restore_interrupt_flags - DEPRECATED: Use irq_restore() instead
- *
- * This function is kept for compatibility. Prefer irq_restore() which
- * handles conditional interrupt enable and is more explicit.
- */
-__attribute__((deprecated))
+__attribute__((deprecated("Use irq_restore() with scalar value instead")))
 static inline void restore_interrupt_flags(irq_flags_t *flags) {
-    if (*flags & (1UL << 9)) {
-        enable_interrupts();
-    }
     asm volatile ("push %0; popf" : : "rm"(*flags) : "memory");
 }
 
+/* ============================================================================
+ * Architecture-Specific Aliases (Raw Operations)
+ * ============================================================================ */
+
 /**
- * arch_irq_restore - Restore interrupt flags from saved value
- * @flags: Pointer to saved RFLAGS
+ * arch_irq_save_raw - Save interrupt flags and optionally disable (raw)
+ * @disable: 0 to save only, 1 to also disable interrupts
  *
- * Restores RFLAGS using POPF. Enables interrupts only if IF was set when saved.
- * Uses the IF flag (bit 9) to determine previous interrupt state.
+ * Raw hardware operation without nesting support.
  */
+static inline irq_flags_t arch_irq_save_raw(int disable) {
+    irq_flags_t flags;
+    asm volatile ("pushf; pop %0" : "=rm"(flags) :: "memory");
+    if (disable) {
+        disable_interrupts_raw();
+    }
+    return flags;
+}
+
+/**
+ * arch_irq_restore_raw - Restore interrupt flags (raw operation)
+ * @flags: Previously saved RFLAGS
+ *
+ * Raw hardware operation without nesting awareness.
+ * Use irq_restore() for nested-safe behavior.
+ */
+static inline void arch_irq_restore_raw(irq_flags_t flags) {
+    asm volatile ("push %0; popf" : : "rm"(flags) : "memory");
+}
+
+/* ============================================================================
+ * Legacy Architecture-Specific (Deprecated)
+ * ============================================================================ */
+
+__attribute__((deprecated("Use irq_save() instead")))
+static inline irq_flags_t arch_irq_save(int disable) {
+    return arch_irq_save_raw(disable);
+}
+
+__attribute__((deprecated("Use irq_restore() with scalar value instead")))
 static inline void arch_irq_restore(irq_flags_t *flags) {
-    /* Check IF flag (bit 9) - restore interrupts only if they were enabled */
     if (*flags & (1UL << 9)) {
-        enable_interrupts();
+        enable_interrupts_raw();
     }
     asm volatile ("push %0; popf" : : "rm"(*flags) : "memory");
 }

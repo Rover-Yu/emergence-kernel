@@ -64,30 +64,30 @@ static inline int spin_trylock(spinlock_t *lock) {
 /**
  * spin_lock_irqsave - Acquire lock and save/disable interrupts
  * @lock: Lock to acquire
- * @flags: Pointer to store interrupt flags
  *
  * Saves the current interrupt state and disables interrupts before
  * acquiring the lock. Use this when the lock could be accessed from
  * interrupt context to prevent deadlocks.
  *
+ * Returns: Saved interrupt flags (scalar value)
+ *
  * Example:
- *   irq_flags_t flags;
- *   spin_lock_irqsave(&my_lock, &flags);
+ *   irq_flags_t flags = spin_lock_irqsave(&my_lock);
  *   // ... critical section ...
- *   spin_unlock_irqrestore(&my_lock, &flags);
+ *   spin_unlock_irqrestore(&my_lock, flags);
  */
-static inline void spin_lock_irqsave(spinlock_t *lock, irq_flags_t *flags) {
-    arch_spin_lock_irqsave(lock, flags);
+static inline irq_flags_t spin_lock_irqsave(spinlock_t *lock) {
+    return arch_spin_lock_irqsave(lock);
 }
 
 /**
  * spin_unlock_irqrestore - Release lock and restore interrupt state
  * @lock: Lock to release
- * @flags: Previously saved interrupt flags
+ * @flags: Previously saved interrupt flags (scalar value)
  *
  * Releases the lock and restores interrupts to their previous state.
  */
-static inline void spin_unlock_irqrestore(spinlock_t *lock, irq_flags_t *flags) {
+static inline void spin_unlock_irqrestore(spinlock_t *lock, irq_flags_t flags) {
     arch_spin_unlock_irqrestore(lock, flags);
 }
 

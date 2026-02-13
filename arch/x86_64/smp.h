@@ -30,6 +30,7 @@ typedef struct {
     uint8_t cpu_index;         /* CPU index (0, 1, 2, 3) */
     smp_cpu_state_t state;     /* Current state */
     void *stack_top;           /* Top of this CPU's stack */
+    int irq_nest_depth;        /* Interrupt disable nesting depth */
 } smp_cpu_info_t;
 
 /* SMP function prototypes */
@@ -48,6 +49,9 @@ uint8_t smp_get_apic_id_by_index(int cpu_index);
 
 /* Get actual number of CPUs in the system */
 int smp_get_cpu_count(void);
+
+/* Get current CPU's interrupt nesting depth */
+int* smp_get_irq_nest_depth_ptr(void);
 
 /* Mark CPU as ready */
 void smp_mark_cpu_ready(int cpu_index);

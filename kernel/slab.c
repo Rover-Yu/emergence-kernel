@@ -177,14 +177,13 @@ int slab_cache_create(slab_cache_t *cache, size_t object_size) {
 void *slab_alloc(slab_cache_t *cache) {
     slab_t *slab;
     slab_obj_t *obj;
-    irq_flags_t flags;
 
     if (cache == NULL) {
         return NULL;
     }
 
     /* Lock the cache */
-    spin_lock_irqsave(&cache->lock, &flags);
+    irq_flags_t flags = spin_lock_irqsave(&cache->lock);
 
     /* Try partial slabs first */
     if (!list_empty(&cache->slabs_partial)) {
@@ -225,7 +224,7 @@ void *slab_alloc(slab_cache_t *cache) {
     }
 
     /* Need to allocate new slab */
-    spin_unlock_irqrestore(&cache->lock, &flags);
+    spin_unlock_irqrestore(&cache->lock, flags);
 
     slab = slab_new(cache);
     if (slab == NULL) {
@@ -233,7 +232,7 @@ void *slab_alloc(slab_cache_t *cache) {
     }
 
     /* Re-lock and add slab to partial list */
-    spin_lock_irqsave(&cache->lock, &flags);
+    flags = spin_lock_irqsave(&cache->lock);
 
     /* Get first free object */
     obj = list_entry(slab->free_list.next, slab_obj_t, list);
@@ -244,7 +243,7 @@ void *slab_alloc(slab_cache_t *cache) {
     /* Add to partial list */
     list_push_front(&cache->slabs_partial, &slab->list);
 
-    spin_unlock_irqrestore(&cache->lock, &flags);
+    spin_unlock_irqrestore(&cache->lock, flags);
 
     return (void *)obj;
 }
@@ -255,7 +254,6 @@ void *slab_alloc(slab_cache_t *cache) {
 void slab_free(slab_cache_t *cache, void *obj_ptr) {
     slab_t *slab;
     slab_obj_t *obj;
-    irq_flags_t flags;
     void *page_base;
 
     if (cache == NULL || obj_ptr == NULL) {
@@ -274,7 +272,8 @@ void slab_free(slab_cache_t *cache, void *obj_ptr) {
 
     obj = (slab_obj_t *)obj_ptr;
 
-    spin_lock_irqsave(&cache->lock, &flags);
+    /* Lock the cache */
+    irq_flags_t flags = spin_lock_irqsave(&cache->lock);
 
     /* Determine which list slab is on */
     int was_full = !list_empty(&slab->list) &&
@@ -297,7 +296,7 @@ void slab_free(slab_cache_t *cache, void *obj_ptr) {
         list_push_front(&cache->slabs_free, &slab->list);
     }
 
-    spin_unlock_irqrestore(&cache->lock, &flags);
+    spin_unlock_irqrestore(&cache->lock, flags);
 }
 
 /**

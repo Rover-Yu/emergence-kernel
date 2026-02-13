@@ -421,25 +421,24 @@ void pmm_reserve_region(uint64_t base, uint64_t size) {
  */
 void *pmm_alloc(uint8_t order) {
     block_info_t *block;
-    irq_flags_t flags;
 
     if (order > MAX_ORDER) {
         return 0;
     }
 
     /* Protect PMM operation with interrupt-safe lock */
-    spin_lock_irqsave(&pmm_state.lock, &flags);
+    irq_flags_t flags = spin_lock_irqsave(&pmm_state.lock);
 
     block = find_free_block(order);
     if (!block) {
-        spin_unlock_irqrestore(&pmm_state.lock, &flags);
+        spin_unlock_irqrestore(&pmm_state.lock, flags);
         serial_puts("PMM: Out of memory for order ");
         put_hex(order);
         serial_puts("\n");
         return 0;
     }
 
-    spin_unlock_irqrestore(&pmm_state.lock, &flags);
+    spin_unlock_irqrestore(&pmm_state.lock, flags);
 
     /* Initialize PCD for allocated pages (if PCD is ready) */
     if (pcd_is_initialized()) {
@@ -461,19 +460,18 @@ void *pmm_alloc(uint8_t order) {
 void pmm_free(void *phys_addr, uint8_t order) {
     block_info_t *block;
     uint64_t addr = (uint64_t)phys_addr;
-    irq_flags_t flags;
 
     if (order > MAX_ORDER) {
         return;
     }
 
     /* Protect PMM operation with interrupt-safe lock */
-    spin_lock_irqsave(&pmm_state.lock, &flags);
+    irq_flags_t flags = spin_lock_irqsave(&pmm_state.lock);
 
     /* Find block in allocated list */
     block = find_allocated_block(addr);
     if (!block) {
-        spin_unlock_irqrestore(&pmm_state.lock, &flags);
+        spin_unlock_irqrestore(&pmm_state.lock, flags);
         serial_puts("PMM: WARNING - Freeing unallocated block at 0x");
         put_hex(addr);
         serial_puts("\n");
@@ -486,7 +484,7 @@ void pmm_free(void *phys_addr, uint8_t order) {
     /* Coalesce with buddies and add to free list */
     coalesce_block(block);
 
-    spin_unlock_irqrestore(&pmm_state.lock, &flags);
+    spin_unlock_irqrestore(&pmm_state.lock, flags);
 }
 
 /**

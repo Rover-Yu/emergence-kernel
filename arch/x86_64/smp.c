@@ -100,19 +100,30 @@ int smp_get_cpu_count(void) {
 }
 
 /**
+ * smp_get_irq_nest_depth_ptr - Get pointer to current CPU's interrupt nesting depth
+ *
+ * Returns: Pointer to irq_nest_depth for current CPU
+ */
+int* smp_get_irq_nest_depth_ptr(void) {
+    int idx = smp_get_cpu_index();
+    if (idx >= 0 && idx < SMP_MAX_CPUS) {
+        return &cpu_info[idx].irq_nest_depth;
+    }
+    return NULL;
+}
+
+/**
  * smp_mark_cpu_ready - Mark CPU as ready
  * @cpu_index: CPU index
  */
 void smp_mark_cpu_ready(int cpu_index) {
-    irq_flags_t flags;
-
     if (cpu_index >= 0 && cpu_index < SMP_MAX_CPUS) {
         cpu_info[cpu_index].state = CPU_READY;
 
         /* Use interrupt-safe lock to prevent deadlock in IPI handler */
-        spin_lock_irqsave(&ready_cpus_lock, &flags);
+        irq_flags_t flags = spin_lock_irqsave(&ready_cpus_lock);
         ready_cpus++;
-        spin_unlock_irqrestore(&ready_cpus_lock, &flags);
+        spin_unlock_irqrestore(&ready_cpus_lock, flags);
     }
 }
 
@@ -138,12 +149,14 @@ void smp_init(void) {
         cpu_info[i].apic_id = acpi_get_apic_id_by_index(i);
         cpu_info[i].state = (i == 0) ? CPU_ONLINE : CPU_OFFLINE;
         cpu_info[i].stack_top = NULL;
+        cpu_info[i].irq_nest_depth = 0;
     }
 
     /* Fallback: if ACPI didn't provide APIC IDs, use CPU indices */
     if (cpu_info[0].apic_id == 0 && acpi_get_apic_count() == 0) {
         for (int i = 0; i < SMP_MAX_CPUS; i++) {
             cpu_info[i].apic_id = i;
+            cpu_info[i].irq_nest_depth = 0;
         }
     }
 }
@@ -272,6 +285,9 @@ void ap_start(void) {
     /* Set up stack */
     cpu_info[my_index].stack_top = &ok_cpu_stacks[my_index][CPU_STACK_SIZE];
     asm volatile ("mov %0, %%rsp" : : "r"(cpu_info[my_index].stack_top));
+
+    /* Initialize interrupt nesting depth */
+    cpu_info[my_index].irq_nest_depth = 0;
 
     /* Switch to unprivileged page tables */
     uint64_t unpriv_cr3 = monitor_get_unpriv_cr3();
