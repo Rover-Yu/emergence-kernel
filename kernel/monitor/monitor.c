@@ -460,7 +460,7 @@ static int create_ro_mapping(uint64_t phys_addr, uint64_t virt_addr) {
     /* Step 4: Create final PTE - read-only (PRESENT only, no WRITABLE) */
     pt[pt_idx] = phys_addr | X86_PTE_PRESENT;
     /* Invalidate TLB for this page after PTE update */
-    arch_tlb_invalidate_page((void *)(pt_idx << 12));
+    arch_tlb_invalidate_page((void *)(uintptr_t)(pt_idx << 12));
 
     return 0;
 }

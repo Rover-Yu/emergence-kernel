@@ -27,14 +27,6 @@ struct arch_rwlock {
 #define DEFINE_RWLOCK(x)    struct arch_rwlock x = __RW_LOCK_UNLOCKED
 #define SPINLOCK_IRQSAVE_DISABLED 0
 
-/* Flags type for interrupt state saving
- *
- * Stores the RFLAGS register value. Bit 9 (IF flag) indicates whether
- * interrupts were enabled when the flags were saved. This allows conditional restore
- * of interrupt state in irqrestore operations.
- */
-typedef unsigned long irq_flags_t;
-
 /* Include interrupt control functions */
 #include "arch/x86_64/idt.h"
 
@@ -93,6 +85,7 @@ static inline void arch_spin_unlock(struct arch_spinlock *lock) {
  * Returns: 1 if lock was acquired, 0 if lock is already held
  */
 static inline int arch_spin_trylock(struct arch_spinlock *lock) {
+    int expected = 0;
     return atomic_compare_exchange_strong_explicit(&lock->locked, &expected, 1,
                                                     memory_order_acquire, memory_order_relaxed);
 }
@@ -127,6 +120,29 @@ static inline void arch_spin_unlock_irqrestore(struct arch_spinlock *lock, irq_f
     arch_spin_unlock(lock);
     /* Restore interrupt state using unified API */
     arch_irq_restore(flags);
+}
+
+/**
+ * arch_spin_lock_irq - Acquire lock with interrupts disabled
+ * @lock: Lock to acquire
+ *
+ * Disables interrupts and acquires the lock.
+ * Does not save interrupt state - use when you know interrupts were enabled.
+ */
+static inline void arch_spin_lock_irq(struct arch_spinlock *lock) {
+    disable_interrupts();
+    arch_spin_lock(lock);
+}
+
+/**
+ * arch_spin_unlock_irq - Release lock and enable interrupts
+ * @lock: Lock to release
+ *
+ * Releases the lock and unconditionally enables interrupts.
+ */
+static inline void arch_spin_unlock_irq(struct arch_spinlock *lock) {
+    arch_spin_unlock(lock);
+    enable_interrupts();
 }
 
 /* ============================================================================
@@ -237,3 +253,5 @@ static inline void arch_spin_unlock_irqrestore_disabled(struct arch_spinlock *lo
     /* Atomic store with release semantics */
     atomic_store_explicit(&lock->locked, 0, memory_order_release);
 }
+
+#endif /* _ARCH_X86_64_SPINLOCK_H */

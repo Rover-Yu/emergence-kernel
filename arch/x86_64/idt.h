@@ -34,6 +34,14 @@ typedef struct {
 #define TIMER_VECTOR       32      /* Timer interrupt vector */
 #define IPI_VECTOR         33      /* IPI interrupt vector */
 
+/* Interrupt flags type for saving/restoring interrupt state
+ *
+ * Stores the RFLAGS register value. Bit 9 (IF flag) indicates whether
+ * interrupts were enabled when the flags were saved. This allows conditional restore
+ * of interrupt state in irqrestore operations.
+ */
+typedef unsigned long irq_flags_t;
+
 /* Function prototypes */
 
 /* Initialize IDT with default handlers */
@@ -43,6 +51,10 @@ void idt_init(void);
 void idt_set_gate(uint8_t num, uint64_t handler, uint16_t selector, uint8_t type);
 
 /* Enable/disable interrupts */
+
+/* Forward declarations */
+static inline void enable_interrupts(void);
+static inline void disable_interrupts(void);
 
 /**
  * irq_save - Save interrupt flags and optionally disable interrupts
@@ -75,7 +87,7 @@ static inline void irq_restore(irq_flags_t *flags) {
     if (*flags & (1UL << 9)) {
         enable_interrupts();
     }
-    asm volatile ("push %0; popf" : : "rm"(*flags) :: "memory");
+    asm volatile ("push %0; popf" : : "rm"(*flags) : "memory");
 }
 
 /* Enable/disable interrupts (legacy wrappers - use irq_save/irq_restore instead) */
@@ -111,7 +123,7 @@ static inline void disable_interrupts(void) {
  */
 static inline irq_flags_t arch_irq_save(int disable) {
     irq_flags_t flags;
-    asm volatile ("pushf; pop %0" : "=rm"(*flags) :: "memory");
+    asm volatile ("pushf; pop %0" : "=rm"(flags) :: "memory");
     if (disable) {
         asm volatile ("cli");
     }
@@ -140,7 +152,22 @@ static inline void restore_interrupt_flags(irq_flags_t *flags) {
     if (*flags & (1UL << 9)) {
         enable_interrupts();
     }
-    asm volatile ("push %0; popf" : : "rm"(*flags) :: "memory");
+    asm volatile ("push %0; popf" : : "rm"(*flags) : "memory");
+}
+
+/**
+ * arch_irq_restore - Restore interrupt flags from saved value
+ * @flags: Pointer to saved RFLAGS
+ *
+ * Restores RFLAGS using POPF. Enables interrupts only if IF was set when saved.
+ * Uses the IF flag (bit 9) to determine previous interrupt state.
+ */
+static inline void arch_irq_restore(irq_flags_t *flags) {
+    /* Check IF flag (bit 9) - restore interrupts only if they were enabled */
+    if (*flags & (1UL << 9)) {
+        enable_interrupts();
+    }
+    asm volatile ("push %0; popf" : : "rm"(*flags) : "memory");
 }
 
 /* Timer handler (called from ISR) */
