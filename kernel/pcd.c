@@ -139,7 +139,6 @@ void pcd_init(void) {
         pcd_state.pages[i].type = PCD_TYPE_NK_NORMAL;
         pcd_state.pages[i].flags = 0;
         pcd_state.pages[i].reserved = 0;
-        pcd_state.pages[i].refcount = 0;
     }
 
     pcd_state.initialized = true;

@@ -23,12 +23,12 @@
  * PCD Structure - Per-Page Metadata
  * ============================================================================ */
 
-/* PCD structure - packed to 8 bytes per page */
+/* PCD structure - packed to 4 bytes per page
+ * Saves 4 bytes per page (1MB per 1GB RAM) */
 typedef struct __attribute__((packed)) {
     uint8_t  type;           /* Page type (PCD_TYPE_*) */
     uint8_t  flags;          /* Additional flags (reserved for future use) */
     uint16_t reserved;       /* Future expansion */
-    uint32_t refcount;       /* Reference count for shared pages */
 } pcd_t;
 
 /* PCD flags */
