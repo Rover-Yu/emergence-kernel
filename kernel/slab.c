@@ -201,7 +201,7 @@ void *slab_alloc(slab_cache_t *cache) {
             list_push_front(&cache->slabs_full, &slab->list);
         }
 
-        spin_unlock_irqrestore(&cache->lock, &flags);
+        spin_unlock_irqrestore(&cache->lock, flags);
         return (void *)obj;
     }
 
@@ -219,7 +219,7 @@ void *slab_alloc(slab_cache_t *cache) {
         list_remove(&slab->list);
         list_push_front(&cache->slabs_partial, &slab->list);
 
-        spin_unlock_irqrestore(&cache->lock, &flags);
+        spin_unlock_irqrestore(&cache->lock, flags);
         return (void *)obj;
     }
 
