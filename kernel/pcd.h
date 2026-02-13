@@ -51,12 +51,12 @@ typedef struct {
 /* Initialization */
 void pcd_init(void);
 
-/* Type management */
-void pcd_set_type(uint64_t phys_addr, uint8_t type);
+/* Type management - returns 0 on success, -1 on error */
+int pcd_set_type(uint64_t phys_addr, uint8_t type);
 uint8_t pcd_get_type(uint64_t phys_addr);
 
-/* Region marking */
-void pcd_mark_region(uint64_t base, uint64_t size, uint8_t type);
+/* Region marking - returns count of pages marked */
+int pcd_mark_region(uint64_t base, uint64_t size, uint8_t type);
 
 /* Query functions */
 bool pcd_is_initialized(void);

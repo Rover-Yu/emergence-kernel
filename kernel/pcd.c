@@ -187,12 +187,12 @@ void pcd_init(void) {
  * @phys_addr: Physical address of page
  * @type: New page type (PCD_TYPE_*)
  *
- * Sets the type of a single physical page. Only the monitor should
- * call this function - the outer kernel cannot change page types.
+ * Returns: 0 on success, -1 on error
  */
-void pcd_set_type(uint64_t phys_addr, uint8_t type) {
+int pcd_set_type(uint64_t phys_addr, uint8_t type) {
     if (!pcd_state.initialized) {
-        return;
+        serial_puts("PCD: ERROR - pcd_set_type called before init\n");
+        return -1;
     }
 
     /* Validate type */
@@ -200,7 +200,7 @@ void pcd_set_type(uint64_t phys_addr, uint8_t type) {
         serial_puts("PCD: ERROR - Invalid page type: ");
         serial_putc('0' + type);
         serial_puts("\n");
-        return;
+        return -1;
     }
 
     /* Align to page boundary */
@@ -210,13 +210,18 @@ void pcd_set_type(uint64_t phys_addr, uint8_t type) {
 
     if (!pcd_is_managed(phys_addr)) {
         spin_unlock_irqrestore(&pcd_state.lock, flags);
-        return;
+        serial_puts("PCD: WARNING - Address not managed: 0x");
+        serial_put_hex(phys_addr);
+        serial_puts("\n");
+        return -1;
     }
 
     uint64_t index = pcd_get_index(phys_addr);
     pcd_state.pages[index].type = type;
 
     spin_unlock_irqrestore(&pcd_state.lock, flags);
+    return 0;
+}
 }
 
 /**
@@ -255,15 +260,16 @@ uint8_t pcd_get_type(uint64_t phys_addr) {
  * @size: Size of region in bytes
  * @type: Page type to assign (PCD_TYPE_*)
  *
- * Marks all pages in a region with the specified type. Useful for
- * marking kernel code, I/O regions, etc.
+ * Returns: Number of pages marked
  */
-void pcd_mark_region(uint64_t base, uint64_t size, uint8_t type) {
+int pcd_mark_region(uint64_t base, uint64_t size, uint8_t type) {
     uint64_t addr;
     uint64_t end;
+    irq_flags_t flags;
+    int count = 0;
 
     if (!pcd_state.initialized) {
-        return;
+        return 0;
     }
 
     /* Align to page boundaries */
@@ -271,20 +277,23 @@ void pcd_mark_region(uint64_t base, uint64_t size, uint8_t type) {
     end = (base + size) & ~(PAGE_SIZE - 1);
 
     if (addr >= end) {
-        return;
+        return 0;
     }
 
-    irq_flags_t flags = spin_lock_irqsave(&pcd_state.lock);
+    flags = spin_lock_irqsave(&pcd_state.lock);
 
     /* Mark each page in the region */
     for (uint64_t page = addr; page < end; page += PAGE_SIZE) {
         if (pcd_is_managed(page)) {
             uint64_t index = pcd_get_index(page);
             pcd_state.pages[index].type = type;
+            count++;
         }
     }
 
     spin_unlock_irqrestore(&pcd_state.lock, flags);
+    return count;
+}
 }
 
 /**
