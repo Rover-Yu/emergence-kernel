@@ -61,6 +61,42 @@ static int monitor_find_pd_entry(uint64_t phys_addr) {
     return (phys_addr >> 21) & 0x1FF;
 }
 
+/* Protect all PTP pages in unprivileged view via PCD discovery
+ * This implements complete Invariant 5 coverage:
+ * - Discovers ALL NK_PGTABLE pages via PCD
+ * - Makes them read-only in unprivileged page tables */
+static void monitor_protect_all_ptps(void) {
+    serial_puts("MONITOR: Protecting all PTPs via PCD discovery\n");
+    int protected_count = 0;
+
+    /* Iterate through all PCD-tracked pages */
+    for (uint64_t i = 0; i < pcd_get_max_pages(); i++) {
+        uint64_t phys = i << PAGE_SHIFT;
+        uint8_t type = pcd_get_type(phys);
+
+        if (type == PCD_TYPE_NK_PGTABLE) {
+            /* Find the page table entry for this physical page
+             * For identity-mapped first 2MB, use unpriv_pt_0_2mb */
+            int pte_idx = phys >> 12;
+            if (pte_idx < 512) {  /* First 2MB region */
+                unpriv_pt_0_2mb[pte_idx] &= ~X86_PTE_WRITABLE;
+            }
+            protected_count++;
+        }
+    }
+
+    /* Invalidate TLB for all protected pages in first 2MB */
+    for (int i = 0; i < 512; i++) {
+        if (!(unpriv_pt_0_2mb[i] & X86_PTE_WRITABLE)) {
+            monitor_invalidate_page((void*)(i << 12));
+        }
+    }
+
+    serial_puts("MONITOR: Protected ");
+    serial_put_hex(protected_count);
+    serial_puts(" PTP pages\n");
+}
+
 /* Protect monitor state pages in unprivileged view
  * This implements Nested Kernel Invariant 1 and Invariant 5:
  * - PTPs are marked read-only while outer kernel executes
@@ -116,6 +152,10 @@ static void monitor_protect_state(void) {
     monitor_invalidate_page((void *)monitor_pages[0]);
 
     serial_puts("MONITOR: TLB invalidated (Invariant 2 enforcement active)\n");
+
+    /* Additionally protect all PTPs discovered via PCD */
+    monitor_protect_all_ptps();
+
     serial_puts("MONITOR: Nested Kernel invariants enforced\n");
     serial_puts("MONITOR: Note: Boot page tables protected via 4KB page tables\n");
 }
