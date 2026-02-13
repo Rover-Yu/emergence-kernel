@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include "include/atomic.h"
 #include "include/barrier.h"
+#include "arch/x86_64/idt.h"
 
 /* Actual spin lock structure for x86_64 */
 struct arch_spinlock {
@@ -18,13 +19,13 @@ struct arch_rwlock {
 };
 
 /* Static initializers */
-#define __SPIN_LOCK_UNLOCKED  { .locked = 0 }
+#define __SPIN_LOCK_UNLOCKED { .locked = 0 }
 #define __RW_LOCK_UNLOCKED    { .counter = 0 }
-
 #define SPIN_LOCK_UNLOCKED  __SPIN_LOCK_UNLOCKED
 #define DEFINE_SPINLOCK(x)  struct arch_spinlock x = __SPIN_LOCK_UNLOCKED
 #define RW_LOCK_UNLOCKED    __RW_LOCK_UNLOCKED
 #define DEFINE_RWLOCK(x)    struct arch_rwlock x = __RW_LOCK_UNLOCKED
+#define SPINLOCK_IRQSAVE_DISABLED 0
 
 /* Flags type for interrupt state saving
  *
@@ -75,6 +76,8 @@ static inline void arch_spin_lock(struct arch_spinlock *lock) {
 /**
  * arch_spin_unlock - Release a spin lock
  * @lock: Lock to release
+ *
+ * Releases the lock with release semantics.
  */
 static inline void arch_spin_unlock(struct arch_spinlock *lock) {
     /* Release barrier ensures all memory operations complete before unlock */
@@ -90,7 +93,6 @@ static inline void arch_spin_unlock(struct arch_spinlock *lock) {
  * Returns: 1 if lock was acquired, 0 if lock is already held
  */
 static inline int arch_spin_trylock(struct arch_spinlock *lock) {
-    int expected = 0;
     return atomic_compare_exchange_strong_explicit(&lock->locked, &expected, 1,
                                                     memory_order_acquire, memory_order_relaxed);
 }
@@ -105,11 +107,12 @@ static inline int arch_spin_trylock(struct arch_spinlock *lock) {
  * @flags: Pointer to store interrupt flags
  *
  * Saves current interrupt state and disables interrupts before acquiring lock.
- * Use this when the lock could be accessed from interrupt context.
+ * Use this when lock could be accessed from interrupt context.
+ * Interrupt state will be restored only if it was enabled when saved.
  */
 static inline void arch_spin_lock_irqsave(struct arch_spinlock *lock, irq_flags_t *flags) {
     /* Save interrupt flags and disable using unified API */
-    *flags = irq_save(1);
+    *flags = arch_irq_save(1);
     arch_spin_lock(lock);
 }
 
@@ -123,30 +126,7 @@ static inline void arch_spin_lock_irqsave(struct arch_spinlock *lock, irq_flags_
 static inline void arch_spin_unlock_irqrestore(struct arch_spinlock *lock, irq_flags_t *flags) {
     arch_spin_unlock(lock);
     /* Restore interrupt state using unified API */
-    irq_restore(flags);
-}
-
-/**
- * arch_spin_lock_irq - Acquire lock with interrupts disabled
- * @lock: Lock to acquire
- *
- * Disables interrupts and acquires lock.
- * Does not save interrupt state - use when you know interrupts were enabled.
- */
-static inline void arch_spin_lock_irq(struct arch_spinlock *lock) {
-    disable_interrupts();
-    arch_spin_lock(lock);
-}
-
-/**
- * arch_spin_unlock_irq - Release lock and enable interrupts
- * @lock: Lock to release
- *
- * Releases the lock and unconditionally enables interrupts.
- */
-static inline void arch_spin_unlock_irq(struct arch_spinlock *lock) {
-    arch_spin_unlock(lock);
-    enable_interrupts();
+    arch_irq_restore(flags);
 }
 
 /* ============================================================================
@@ -165,27 +145,28 @@ static inline void arch_rwlock_init(struct arch_rwlock *lock) {
  * arch_spin_read_lock - Acquire lock for reading
  * @lock: Lock to acquire
  *
- * Multiple readers can hold the lock simultaneously.
- * Writers are excluded.
+ * Increments reader count. Blocks if a writer holds lock.
  */
 static inline void arch_spin_read_lock(struct arch_rwlock *lock) {
-    /* Increment counter - if negative, a writer has the lock */
+    /* Increment counter - if negative, a writer holds lock */
     while (atomic_fetch_add_explicit(&lock->counter, 1, memory_order_acquire) < 0) {
         /* Failed - writer holds lock, back off and retry */
-        atomic_fetch_sub_explicit(&lock->counter, 1, memory_order_relaxed);
-        while (atomic_load_explicit(&lock->counter, memory_order_relaxed) < 0) {
-            cpu_relax();
-        }
+    return;
     }
+    /* Acquire barrier ensures memory operations are not reordered */
     barrier();
 }
 
 /**
  * arch_spin_read_unlock - Release read lock
  * @lock: Lock to release
+ *
+ * Decrements reader count. Wakes writer if waiting.
  */
 static inline void arch_spin_read_unlock(struct arch_rwlock *lock) {
-    barrier();
+    /* Release barrier ensures all memory operations complete before unlock */
+    smp_mb();
+    /* Atomic decrement with release semantics */
     atomic_fetch_sub_explicit(&lock->counter, 1, memory_order_release);
 }
 
@@ -193,27 +174,66 @@ static inline void arch_spin_read_unlock(struct arch_rwlock *lock) {
  * arch_spin_write_lock - Acquire lock for writing
  * @lock: Lock to acquire
  *
- * Exclusive access - no readers or other writers allowed.
+ * Blocks readers and other writers. Only one writer at a time.
  */
 static inline void arch_spin_write_lock(struct arch_rwlock *lock) {
-    /* Decrement counter - must reach -1 (no readers or other writers) */
+    /* Decrement counter to negative (writer mode) */
     while (atomic_fetch_add_explicit(&lock->counter, -1, memory_order_acquire) != 0) {
-        /* Failed - others hold lock, back off and retry */
-        atomic_fetch_add_explicit(&lock->counter, 1, memory_order_relaxed);
-        while (atomic_load_explicit(&lock->counter, memory_order_relaxed) != 0) {
-            cpu_relax();
-        }
+        /* Another writer holds lock, back off and retry */
+        return;
     }
+    /* Acquire barrier ensures memory operations are not reordered */
     barrier();
 }
 
 /**
  * arch_spin_write_unlock - Release write lock
  * @lock: Lock to release
+ *
+ * Resets counter to zero (unlocked state). Wakes waiting readers/writer.
  */
 static inline void arch_spin_write_unlock(struct arch_rwlock *lock) {
-    barrier();
-    atomic_fetch_add_explicit(&lock->counter, 1, memory_order_release);
+    /* Release barrier ensures all memory operations complete before unlock */
+    smp_mb();
+    /* Atomic store with release semantics */
+    atomic_store_explicit(&lock->counter, 0, memory_order_release);
 }
 
-#endif /* _ARCH_X86_64_SPINLOCK_H */
+/* ============================================================================
+ * Read-Write Lock IRQ Save/Restore Operations
+ * ============================================================================ */
+
+/**
+ * arch_spin_lock_irqsave_disabled - Acquire lock without disabling interrupts
+ * @lock: Lock to acquire
+ *
+ * Does not save interrupt state - use when you know interrupts were enabled.
+ * Use this in early boot or interrupt context where interrupts are already disabled.
+ */
+static inline void arch_spin_lock_irqsave_disabled(struct arch_spinlock *lock) {
+    /* Spin with pause */
+    int expected = 0;
+    while (!atomic_compare_exchange_weak_explicit(&lock->locked, &expected, 1,
+                                                   memory_order_acquire, memory_order_relaxed)) {
+        expected = 0;
+        /* Spin with pause to reduce bus contention */
+        while (atomic_load_explicit(&lock->locked, memory_order_relaxed)) {
+            cpu_relax();
+        }
+    }
+    /* Acquire barrier ensures memory operations are not reordered */
+    barrier();
+}
+
+/**
+ * arch_spin_unlock_irqrestore_disabled - Release lock without enabling interrupts
+ * @lock: Lock to release
+ *
+ * Does not modify interrupt state - interrupts remain disabled.
+ */
+static inline void arch_spin_unlock_irqrestore_disabled(struct arch_spinlock *lock) {
+    /* Release barrier ensures all memory operations complete before unlock */
+    smp_mb();
+    /* Atomic store with release semantics */
+    atomic_store_explicit(&lock->locked, 0, memory_order_release);
+}
