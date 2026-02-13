@@ -29,6 +29,9 @@ uint8_t ok_cpu_stacks[SMP_MAX_CPUS][CPU_STACK_SIZE] __attribute__((aligned(16)))
 /* Per-CPU information */
 static smp_cpu_info_t cpu_info[SMP_MAX_CPUS];
 
+/* Per-CPU data for monitor trampoline (GS-base indexed) */
+per_cpu_data_t per_cpu_data[SMP_MAX_CPUS];
+
 /* Lock for ready_cpus counter - prevents race conditions during AP startup */
 static spinlock_t ready_cpus_lock = SPIN_LOCK_UNLOCKED;
 
@@ -159,6 +162,45 @@ void smp_init(void) {
             cpu_info[i].irq_nest_depth = 0;
         }
     }
+
+    /* Initialize per-CPU data for monitor trampoline */
+    for (int i = 0; i < SMP_MAX_CPUS; i++) {
+        per_cpu_data[i].saved_rsp = 0;
+        per_cpu_data[i].saved_cr3 = 0;
+        per_cpu_data[i].cpu_index = i;
+        per_cpu_data[i].reserved = 0;
+    }
+}
+
+/**
+ * smp_set_gs_base - Set GS segment base to per-CPU data
+ * @cpu_data: Pointer to this CPU's per_cpu_data
+ *
+ * Uses WRMSR to set IA32_GS_BASE MSR (0xC0000101).
+ * This allows assembly code to access per_cpu_data via %gs:offset.
+ */
+void smp_set_gs_base(per_cpu_data_t *cpu_data) {
+    uint64_t addr = (uint64_t)cpu_data;
+    uint32_t low = (uint32_t)(addr & 0xFFFFFFFF);
+    uint32_t high = (uint32_t)(addr >> 32);
+
+    asm volatile ("wrmsr" :
+        : "c"(0xC0000101),  /* IA32_GS_BASE MSR */
+          "a"(low),
+          "d"(high));
+}
+
+/**
+ * smp_get_per_cpu_data - Get current CPU's per_cpu_data
+ *
+ * Returns: Pointer to current CPU's per_cpu_data structure
+ */
+per_cpu_data_t *smp_get_per_cpu_data(void) {
+    int idx = smp_get_cpu_index();
+    if (idx >= 0 && idx < SMP_MAX_CPUS) {
+        return &per_cpu_data[idx];
+    }
+    return &per_cpu_data[0];  /* Fallback to BSP */
 }
 
 /**

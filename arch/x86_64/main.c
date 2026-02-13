@@ -27,6 +27,9 @@ extern uint64_t monitor_get_unpriv_cr3(void);
 extern uint64_t monitor_pml4_phys;
 extern void monitor_verify_invariants(void);
 
+/* External per-CPU data for GS-base setup */
+extern per_cpu_data_t per_cpu_data[];
+
 /* Architecture-independent halt function */
 void kernel_halt(void) {
     while (1) {
@@ -120,6 +123,9 @@ void kernel_main(uint32_t multiboot_info_addr) {
     /* BSP specific initialization - must complete BEFORE starting APs */
     /* Get CPU ID first to determine if we're BSP or AP */
     cpu_id = smp_get_cpu_index();
+
+    /* Set GS base for this CPU to point to per_cpu_data */
+    smp_set_gs_base(&per_cpu_data[cpu_id]);
 
     if (cpu_id == 0) {
         serial_puts("BSP: Initializing...\n");

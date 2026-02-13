@@ -24,6 +24,24 @@ typedef enum {
     CPU_READY         /* CPU completed initialization */
 } smp_cpu_state_t;
 
+/* Per-CPU data for monitor trampoline
+ * Must be at fixed offsets for assembly access via GS segment */
+typedef struct {
+    uint64_t saved_rsp;     /* Offset 0: Saved RSP during monitor call */
+    uint64_t saved_cr3;     /* Offset 8: Saved CR3 during monitor call */
+    int cpu_index;          /* Offset 16: CPU index for debugging */
+    uint64_t reserved;      /* Offset 24: Padding to 32 bytes (cache line alignment) */
+} per_cpu_data_t;
+
+/* Per-CPU data array - indexed by CPU index */
+extern per_cpu_data_t per_cpu_data[SMP_MAX_CPUS];
+
+/* Set GS base to point to current CPU's per_cpu_data */
+void smp_set_gs_base(per_cpu_data_t *cpu_data);
+
+/* Get current CPU's per_cpu_data via GS base */
+per_cpu_data_t *smp_get_per_cpu_data(void);
+
 /* Per-CPU information */
 typedef struct {
     uint8_t apic_id;           /* Local APIC ID */
