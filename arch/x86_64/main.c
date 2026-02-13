@@ -299,7 +299,7 @@ void kernel_main(uint32_t multiboot_info_addr) {
 #endif
 
         /* Enable interrupts */
-        enable_interrupts();
+        enable_interrupts_raw();
 
         /* Disable interrupts for AP startup */
         asm volatile ("cli");

@@ -194,7 +194,7 @@ void page_fault_handler(uint64_t fault_addr, uint64_t error_code, uint64_t fault
     system_shutdown();
 
     /* Should never reach here */
-    disable_interrupts();
+    disable_interrupts_raw();
     arch_halt();
     while (1) arch_halt();
 }
