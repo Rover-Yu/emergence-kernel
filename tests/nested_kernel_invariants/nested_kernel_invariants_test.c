@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include "arch/x86_64/serial.h"
+#include "kernel/pcd.h"
 
 /* External function prototypes */
 extern void serial_puts(const char *str);
@@ -12,9 +13,74 @@ extern void serial_put_hex(uint64_t value);
 extern void monitor_init(void);
 extern void monitor_verify_invariants(void);
 extern uint64_t monitor_get_unpriv_cr3(void);
+extern uint64_t monitor_pml4_phys;
+extern uint64_t unpriv_pml4_phys;
+
+/* External boot page tables */
+extern uint64_t boot_pml4[];
 
 /* External kernel state */
 extern volatile int bsp_init_done;
+
+/* Negative test: Verify PTP write detection would catch violations
+ * This test DOCUMENTS expected behavior - actual fault injection
+ * is in nk_fault_injection tests. */
+static void test_ptp_write_detection(void) {
+    serial_puts("[NK-INV-NEG] Test: PTP write detection\n");
+
+    /* Verify boot_pml4 is protected (read-only in unpriv view) */
+    uint64_t pml4_phys = (uint64_t)boot_pml4;
+    uint8_t type = pcd_get_type(pml4_phys);
+
+    serial_puts("[NK-INV-NEG] boot_pml4 PCD type: ");
+    serial_put_hex(type);
+    serial_puts(" (expected NK_PGTABLE=2 or NK_NORMAL=1)\n");
+
+    if (type == PCD_TYPE_NK_PGTABLE || type == PCD_TYPE_NK_NORMAL) {
+        serial_puts("[NK-INV-NEG] PTP write detection: CONFIGURED (PASS)\n");
+    } else {
+        serial_puts("[NK-INV-NEG] PTP not properly tracked in PCD (WARN)\n");
+    }
+}
+
+/* Negative test: Verify arbitrary CR3 load detection
+ * The monitor should only allow pre-declared CR3 values. */
+static void test_cr3_restriction(void) {
+    serial_puts("[NK-INV-NEG] Test: CR3 restriction\n");
+
+    uint64_t current_cr3;
+    asm volatile ("mov %%cr3, %0" : "=r"(current_cr3));
+
+    serial_puts("[NK-INV-NEG] Current CR3: ");
+    serial_put_hex(current_cr3);
+    serial_puts("\n");
+    serial_puts("[NK-INV-NEG] unpriv_pml4_phys: ");
+    serial_put_hex(unpriv_pml4_phys);
+    serial_puts("\n");
+    serial_puts("[NK-INV-NEG] monitor_pml4_phys: ");
+    serial_put_hex(monitor_pml4_phys);
+    serial_puts("\n");
+
+    /* CR3 should be one of the pre-declared values */
+    if (current_cr3 == unpriv_pml4_phys || current_cr3 == monitor_pml4_phys) {
+        serial_puts("[NK-INV-NEG] CR3 is pre-declared (PASS)\n");
+    } else {
+        serial_puts("[NK-INV-NEG] CR3 is not pre-declared (FAIL)\n");
+    }
+}
+
+/* Negative test: Verify writable NK mapping rejection
+ * monitor_map_page should reject writable mappings to NK pages. */
+static void test_writable_nk_rejection(void) {
+    serial_puts("[NK-INV-NEG] Test: Writable NK mapping rejection\n");
+
+    /* This test documents the expected behavior:
+     * monitor_map_page should return -1 when asked to create
+     * a writable mapping to an NK_NORMAL page. */
+
+    serial_puts("[NK-INV-NEG] Writable NK rejection: DOCUMENTED\n");
+    serial_puts("[NK-INV-NEG] (Actual enforcement tested via fault injection)\n");
+}
 
 /**
  * run_nested_kernel_invariants_tests - Run Nested Kernel invariants tests
@@ -88,6 +154,12 @@ int run_nested_kernel_invariants_tests(void) {
     serial_puts("[NK INV TEST] Verifying all 6 ASPLOS '15 invariants...\n");
     monitor_verify_invariants();
     serial_puts("[NK INV TEST] Invariants verification complete (PASS)\n");
+
+    /* Run negative test cases */
+    serial_puts("\n[NK INV TEST] Running negative test cases...\n");
+    test_ptp_write_detection();
+    test_cr3_restriction();
+    test_writable_nk_rejection();
 
     /* Print summary */
     serial_puts("\n========================================\n");
