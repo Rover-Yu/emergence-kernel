@@ -223,17 +223,19 @@ help:
 	@echo "  run-debug        - Run kernel in QEMU with GDB server on port 1234"
 	@echo ""
 	@echo "Test targets:"
-	@echo "  test             - Run all tests (test-all)"
-	@echo "  test-all         - Run complete test suite"
+	@echo "  test              - Run all tests (test-all)"
+	@echo "  test-all         - Run complete test suite (tests=all)"
 	@echo "  test-boot        - Basic kernel boot test (1 CPU)"
 	@echo "  test-apic-timer  - APIC timer interrupt test"
 	@echo "  test-smp         - SMP boot test (2 CPUs)"
 	@echo "  test-pcd         - Page Control Data test"
 	@echo "  test-slab        - Slab allocator test"
+	@echo "  test-minilibc    - Minilibc string library test"
 	@echo "  test-nested-kernel     - Nested Kernel invariants test"
 	@echo "  test-nk-fault-injection - Nested Kernel fault injection test"
 	@echo "  test-readonly-visibility - Read-only visibility test"
 	@echo "  test-usermode          - User mode syscall test (KVM enabled)"
+	@echo "  test-multiboot         - Multiboot2 header test"
 	@echo ""
 	@echo "Build options (override kernel.config):"
 	@echo "  make CONFIG_TESTS_SPINLOCK=1             - Enable spinlock tests"
@@ -466,51 +468,61 @@ test: test-all
 test-all:
 	@$(MAKE) all
 	@echo "Running Emergence Kernel test suite..."
-	@python3 tests/run_all_tests.py
+	@KERNEL_CMDLINE="tests=all" $(MAKE) run
 
 test-boot:
 	@$(MAKE) all
 	@echo "Running Basic Kernel Boot Test..."
-	@python3 tests/boot/boot_test.py
+	@KERNEL_CMDLINE="tests=boot" $(MAKE) run
 
 test-apic-timer:
 	@$(MAKE) all
 	@echo "Running APIC Timer Test..."
-	@python3 tests/timer/apic_timer_test.py
+	@KERNEL_CMDLINE="tests=timer" $(MAKE) run
 
 test-smp:
 	@$(MAKE) all
 	@echo "Running SMP Boot Test..."
-	@python3 tests/smp/smp_boot_test.py --cpus 4
+	@KERNEL_CMDLINE="tests=smp" $(MAKE) run
 
 test-pcd:
 	@$(MAKE) all
 	@echo "Running Page Control Data (PCD) Test..."
-	@python3 tests/pcd/pcd_test.py
+	@KERNEL_CMDLINE="tests=pcd" $(MAKE) run
 
 test-slab:
 	@$(MAKE) all
 	@echo "Running Slab Allocator Test..."
-	@python3 tests/slab/slab_test.py
+	@KERNEL_CMDLINE="tests=slab" $(MAKE) run
 
 test-nested-kernel:
+	@$(MAKE) all
 	@echo "Running Nested Kernel Invariants Test..."
-	@python3 tests/nested_kernel_invariants/nested_kernel_invariants_test.py
+	@KERNEL_CMDLINE="tests=nested_kernel_invariants" $(MAKE) run
 
 test-nk-fault-injection:
+	@$(MAKE) all
 	@echo "Running Nested Kernel Fault Injection Test..."
-	@python3 tests/nk_fault_injection/nk_fault_injection_test.py
+	@KERNEL_CMDLINE="tests=nk_fault_injection" $(MAKE) run
 
 test-readonly-visibility:
+	@$(MAKE) all
 	@echo "Running Read-Only Visibility Test..."
-	@python3 tests/readonly_visibility/readonly_visibility_test.py
+	@KERNEL_CMDLINE="tests=readonly_visibility" $(MAKE) run
 
 test-usermode:
-	@echo "Running User Mode Syscall Test..."
 	@$(MAKE) all
-	@python3 tests/usermode/usermode_test.py --kvm
+	@echo "Running User Mode Syscall Test..."
+	@KERNEL_CMDLINE="tests=usermode" $(MAKE) run --kvm
 
 test-multiboot:
 	@$(MAKE) all
 	@echo "Running Multiboot2 Header Test..."
-	@python3 tests/multiboot/multiboot_header_test.py
+	@KERNEL_CMDLINE="tests=multiboot" $(MAKE) run
+
+test-minilibc:
+	@$(MAKE) all
+	@echo "Running Minilibc String Library Test..."
+	@KERNEL_CMDLINE="tests=minilibc" $(MAKE) run
+
+

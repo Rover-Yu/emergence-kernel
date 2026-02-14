@@ -77,12 +77,12 @@ class TestConfig:
         """Get the kernel command line for a test.
 
         Args:
-            test_name: Name of the test
+            test_name: Name of the test (or CSV list like "slab,minilibc")
 
         Returns:
             Kernel command line string
         """
-        return f"test={test_name}"
+        return f"tests={test_name}"
 
     def get_output_path(self, test_name: str, pid: Optional[int] = None) -> Path:
         """Get the output file path for a test.

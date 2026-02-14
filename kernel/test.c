@@ -12,14 +12,16 @@ extern const char *cmdline_get_value(const char *key);
 
 /* Test selection state */
 static enum {
-    TEST_MODE_NONE,      /* No test= parameter (default) */
-    TEST_MODE_ALL,       /* test=all: Run all auto_run tests */
-    TEST_MODE_SPECIFIC,  /* test=<name>: Run specific test */
-    TEST_MODE_UNIFIED    /* test=unified: Run all selected at end */
+    TEST_MODE_NONE,      /* No tests= parameter (default) */
+    TEST_MODE_ALL,       /* tests=all: Run all auto_run tests */
+    TEST_MODE_UNIFIED    /* tests=unified: Run all selected at end */
+    /* Note: TEST_MODE_SPECIFIC removed - tests=NAME1,NAME2,... uses CSV parsing */
 } test_mode = TEST_MODE_NONE;
 
-/* Specific test name (for TEST_MODE_SPECIFIC) */
-static const char *selected_test_name = NULL;
+/* Selected test names (CSV list for tests=NAME1,NAME2,...) */
+#define MAX_SELECTED_TESTS 16
+static const char *selected_test_names[MAX_SELECTED_TESTS];
+static int selected_test_count = 0;
 
 /* Track which tests have already run (for unified mode) */
 #define MAX_TESTS 16
@@ -622,7 +624,7 @@ const test_case_t test_registry[] = {
         .description = "Nested kernel fault injection tests (destructive)",
         .run_func = run_nk_fault_injection_tests,
         .enabled = 1,
-        .auto_run = 0  /* Manual only (destructive test) */
+        .auto_run = 1  /* Auto-run in test-all */
     },
 #endif
 #if CONFIG_TESTS_BOOT
@@ -631,7 +633,7 @@ const test_case_t test_registry[] = {
         .description = "Basic kernel boot verification",
         .run_func = run_boot_tests,
         .enabled = 1,
-        .auto_run = 0  /* Manual only */
+        .auto_run = 1  /* Auto-run in test-all */
     },
 #endif
 #if CONFIG_TESTS_SMP
@@ -640,7 +642,7 @@ const test_case_t test_registry[] = {
         .description = "SMP startup and multi-CPU verification",
         .run_func = run_smp_tests,
         .enabled = 1,
-        .auto_run = 0  /* Manual only */
+        .auto_run = 1  /* Auto-run in test-all */
     },
 #endif
 #if CONFIG_TESTS_PCD
@@ -649,7 +651,7 @@ const test_case_t test_registry[] = {
         .description = "Page Control Data initialization and tracking",
         .run_func = run_pcd_tests,
         .enabled = 1,
-        .auto_run = 0  /* Manual only */
+        .auto_run = 1  /* Auto-run in test-all */
     },
 #endif
 #if CONFIG_TESTS_NK_INVARIANTS
@@ -658,7 +660,7 @@ const test_case_t test_registry[] = {
         .description = "Nested Kernel invariants (ASPLOS '15)",
         .run_func = run_nested_kernel_invariants_tests,
         .enabled = 1,
-        .auto_run = 0  /* Manual only */
+        .auto_run = 1  /* Auto-run in test-all */
     },
 #endif
 #if CONFIG_TESTS_NK_READONLY_VISIBILITY
@@ -667,7 +669,7 @@ const test_case_t test_registry[] = {
         .description = "Read-only mapping visibility for nested kernel",
         .run_func = run_readonly_visibility_tests,
         .enabled = 1,
-        .auto_run = 0  /* Manual only */
+        .auto_run = 1  /* Auto-run in test-all */
     },
 #endif
 #if CONFIG_TESTS_MINILIBC
@@ -685,7 +687,7 @@ const test_case_t test_registry[] = {
         .description = "User mode syscall and ring 3 execution tests",
         .run_func = run_usermode_tests,
         .enabled = 1,
-        .auto_run = 0  /* Manual only */
+        .auto_run = 1  /* Auto-run in test-all */
     },
 #endif
 #if CONFIG_TESTS_SMP_MONITOR_STRESS
@@ -694,7 +696,7 @@ const test_case_t test_registry[] = {
         .description = "SMP monitor stress test - concurrent monitor calls from multiple CPUs",
         .run_func = run_smp_monitor_stress_tests,
         .enabled = 1,
-        .auto_run = 0  /* Manual only (requires multi-CPU) */
+        .auto_run = 1  /* Auto-run in test-all */
     },
 #endif
     { .name = NULL }  /* Sentinel */
@@ -705,10 +707,48 @@ const test_case_t test_registry[] = {
  * ============================================================================ */
 
 /**
+ * parse_test_csv() - Parse CSV list of test names
+ * @csv_str: Comma-separated test names (e.g., "slab,minilibc,timer")
+ *
+ * Returns: Number of tests parsed
+ */
+static int parse_test_csv(const char *csv_str) {
+    const char *p = csv_str;
+    int count = 0;
+
+    while (*p && count < MAX_SELECTED_TESTS) {
+        /* Skip leading whitespace */
+        while (*p == ' ' || *p == '\t') {
+            p++;
+        }
+
+        if (*p == '\0') {
+            break;
+        }
+
+        /* Found test name start */
+        selected_test_names[count++] = p;
+
+        /* Find end of test name (comma or null terminator) */
+        while (*p && *p != ',') {
+            p++;
+        }
+
+        /* Null-terminate the test name */
+        if (*p == ',') {
+            *(char *)p = '\0';
+            p++;
+        }
+    }
+
+    return count;
+}
+
+/**
  * test_framework_init() - Initialize test framework from cmdline
  */
 void test_framework_init(void) {
-    const char *test_value;
+    const char *tests_value;
 
     serial_puts("[TEST] Initializing test framework...\n");
 
@@ -718,32 +758,52 @@ void test_framework_init(void) {
     }
     tests_run_count = 0;
 
-    /* Parse test= parameter from cmdline */
-    test_value = cmdline_get_value("test");
+    /* Initialize selected test names */
+    for (int i = 0; i < MAX_SELECTED_TESTS; i++) {
+        selected_test_names[i] = NULL;
+    }
+    selected_test_count = 0;
 
-    if (test_value == NULL) {
+    /* Parse tests= parameter from cmdline */
+    tests_value = cmdline_get_value("tests");
+
+    if (tests_value == NULL) {
         test_mode = TEST_MODE_NONE;
-        serial_puts("[TEST] No test= parameter (default: no tests run)\n");
+        serial_puts("[TEST] No tests= parameter (default: no tests run)\n");
         return;
     }
 
-    serial_puts("[TEST] test=");
-    serial_puts(test_value);
+    serial_puts("[TEST] tests=");
+    serial_puts(tests_value);
     serial_puts("\n");
 
     /* Determine test mode */
-    if (strcmp(test_value, "all") == 0) {
+    if (strcmp(tests_value, "all") == 0) {
         test_mode = TEST_MODE_ALL;
         serial_puts("[TEST] Mode: ALL (run all auto_run tests)\n");
-    } else if (strcmp(test_value, "unified") == 0) {
+    } else if (strcmp(tests_value, "unified") == 0) {
         test_mode = TEST_MODE_UNIFIED;
         serial_puts("[TEST] Mode: UNIFIED (run all selected tests at end)\n");
     } else {
-        test_mode = TEST_MODE_SPECIFIC;
-        selected_test_name = test_value;
-        serial_puts("[TEST] Mode: SPECIFIC (test=");
-        serial_puts(selected_test_name);
-        serial_puts(")\n");
+        /* Parse CSV list of test names */
+        selected_test_count = parse_test_csv(tests_value);
+        if (selected_test_count > 0) {
+            serial_puts("[TEST] Mode: CSV LIST (");
+            serial_put_hex(selected_test_count);
+            serial_puts(" test(s))\n");
+            for (int i = 0; i < selected_test_count; i++) {
+                serial_puts("[TEST]   [");
+                serial_put_hex(i + 1);
+                serial_puts("/");
+                serial_put_hex(selected_test_count);
+                serial_puts("] ");
+                serial_puts(selected_test_names[i]);
+                serial_puts("\n");
+            }
+        } else {
+            serial_puts("[TEST] ERROR: Empty or invalid CSV list\n");
+            test_mode = TEST_MODE_NONE;
+        }
     }
 }
 
@@ -754,7 +814,7 @@ void test_framework_init(void) {
  * Returns: 1 if test should run, 0 otherwise
  */
 int test_should_run(const char *name) {
-    /* No test= parameter: no tests run */
+    /* No tests= parameter: no tests run */
     if (test_mode == TEST_MODE_NONE) {
         return 0;
     }
@@ -764,7 +824,7 @@ int test_should_run(const char *name) {
         return 0;  /* Will be run by test_run_unified() */
     }
 
-    /* test=all: run all enabled tests with auto_run=1 */
+    /* tests=all: run all enabled tests with auto_run=1 */
     if (test_mode == TEST_MODE_ALL) {
         /* Find test in registry and check auto_run flag */
         for (int i = 0; test_registry[i].name != NULL; i++) {
@@ -775,9 +835,14 @@ int test_should_run(const char *name) {
         return 0;  /* Test not found */
     }
 
-    /* test=<name>: run only the specified test */
-    if (test_mode == TEST_MODE_SPECIFIC) {
-        return (strcmp(selected_test_name, name) == 0);
+    /* CSV mode: check if name is in selected_test_names */
+    if (selected_test_count > 0) {
+        for (int i = 0; i < selected_test_count; i++) {
+            if (strcmp(selected_test_names[i], name) == 0) {
+                return 1;
+            }
+        }
+        return 0;  /* Test name not in CSV list */
     }
 
     return 0;
@@ -791,10 +856,6 @@ int test_should_run(const char *name) {
  */
 int test_run_by_name(const char *name) {
     const test_case_t *test = NULL;
-
-    serial_puts("[TEST] Running test: ");
-    serial_puts(name);
-    serial_puts("\n");
 
     /* Find test in registry */
     for (int i = 0; test_registry[i].name != NULL; i++) {
@@ -824,10 +885,6 @@ int test_run_by_name(const char *name) {
     }
 
     /* Run test */
-    serial_puts("[TEST] Description: ");
-    serial_puts(test->description);
-    serial_puts("\n");
-
     int result = test->run_func();
 
     if (result == 0) {
@@ -856,61 +913,124 @@ int test_run_by_name(const char *name) {
 int test_run_unified(void) {
     int failures = 0;
 
-    /* Only run if in unified mode */
-    if (test_mode != TEST_MODE_UNIFIED) {
+    /* Only run if in unified mode or CSV mode with selected tests */
+    int should_run = 0;
+
+    if (test_mode == TEST_MODE_UNIFIED) {
+        should_run = 1;
+    } else if (selected_test_count > 0) {
+        /* CSV mode: run selected tests that haven't run yet */
+        should_run = 1;
+    }
+
+    if (!should_run) {
         return 0;
     }
 
     serial_puts("\n");
     serial_puts("========================================\n");
-    serial_puts("UNIFIED TEST EXECUTION\n");
+    if (test_mode == TEST_MODE_UNIFIED) {
+        serial_puts("UNIFIED TEST EXECUTION\n");
+    } else {
+        serial_puts("CSV TEST LIST EXECUTION\n");
+    }
     serial_puts("========================================\n");
     serial_puts("\n");
 
-    /* Run all enabled tests that haven't run yet */
-    for (int i = 0; test_registry[i].name != NULL; i++) {
-        const test_case_t *test = &test_registry[i];
+    /* Run tests based on mode */
+    if (test_mode == TEST_MODE_UNIFIED || test_mode == TEST_MODE_ALL) {
+        /* Run all enabled tests that haven't run yet */
+        for (int i = 0; test_registry[i].name != NULL; i++) {
+            const test_case_t *test = &test_registry[i];
 
-        if (!test->enabled) {
-            continue;  /* Skip disabled tests */
-        }
+            if (!test->enabled) {
+                continue;  /* Skip disabled tests */
+            }
 
-        /* Check if already run (shouldn't happen in unified mode, but be safe) */
-        int already_run = 0;
-        for (int j = 0; j < tests_run_count; j++) {
-            if (tests_run[j]) {
-                already_run = 1;
-                break;
+            /* Check if already run (shouldn't happen in unified mode, but be safe) */
+            int already_run = 0;
+            for (int j = 0; j < tests_run_count; j++) {
+                if (tests_run[j]) {
+                        already_run = 1;
+                        break;
+                }
+            }
+            if (already_run) {
+                continue;
+            }
+
+            /* Run the test */
+            int result = test->run_func();
+
+            if (result != 0) {
+                serial_puts("[TEST] FAILED: ");
+                serial_puts(test->name);
+                serial_puts("\n");
+                failures++;
+                /* Continue running other tests to see all failures */
+            } else {
+                serial_puts("[TEST] PASSED: ");
+                serial_puts(test->name);
+                serial_puts("\n");
             }
         }
-        if (already_run) {
-            continue;
+    } else {
+        /* CSV mode: run selected tests that haven't run yet */
+        for (int i = 0; i < selected_test_count; i++) {
+            const char *test_name = selected_test_names[i];
+            const test_case_t *test = NULL;
+
+            /* Find test in registry */
+            for (int j = 0; test_registry[j].name != NULL; j++) {
+                if (strcmp(test_registry[j].name, test_name) == 0) {
+                        test = &test_registry[j];
+                        break;
+                }
+            }
+
+            if (test == NULL) {
+                serial_puts("[TEST] ERROR: Test '");
+                serial_puts(test_name);
+                serial_puts("' not found in registry\n");
+                failures++;
+                continue;
+            }
+
+            if (!test->enabled) {
+                serial_puts("[TEST] ERROR: Test '");
+                serial_puts(test_name);
+                serial_puts("' is not enabled\n");
+                failures++;
+                continue;
+            }
+
+            /* Check if already run */
+            int already_run = 0;
+            for (int j = 0; j < tests_run_count; j++) {
+                if (tests_run[j]) {
+                        already_run = 1;
+                        break;
+                }
+            }
+            if (already_run) {
+                continue;
+            }
+
+            /* Run the test */
+            int result = test->run_func();
+
+            if (result != 0) {
+                serial_puts("[TEST] FAILED: ");
+                serial_puts(test_name);
+                serial_puts("\n");
+                failures++;
+                /* Continue running other tests to see all failures */
+            } else {
+                serial_puts("[TEST] PASSED: ");
+                serial_puts(test_name);
+                serial_puts("\n");
+            }
         }
-
-        /* Run the test */
-        serial_puts("[TEST] [");
-        serial_put_hex(i + 1);
-        serial_puts("/");
-        serial_put_hex(i + 1);  /* Will update after counting total */
-        serial_puts("] Running: ");
-        serial_puts(test->name);
-        serial_puts("\n");
-
-        int result = test->run_func();
-
-        if (result != 0) {
-            serial_puts("[TEST] FAILED: ");
-            serial_puts(test->name);
-            serial_puts("\n");
-            failures++;
-            /* Continue running other tests to see all failures */
-        } else {
-            serial_puts("[TEST] PASSED: ");
-            serial_puts(test->name);
-            serial_puts("\n");
-        }
-
-        serial_puts("\n");
     }
 
     /* Summary */

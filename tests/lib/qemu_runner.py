@@ -191,14 +191,7 @@ class QEMURunner:
                     self._temp_files.remove(output_file)
 
     def _build_qemu_command_base(self, cpu_count: int) -> List[str]:
-        """Build base QEMU command line.
-
-        Args:
-            cpu_count: Number of CPUs
-
-        Returns:
-            List of command arguments (without serial/debug flags)
-        """
+        """Build base QEMU command line."""
         cmd = ["qemu-system-x86_64"]
 
         # Add KVM acceleration if enabled
