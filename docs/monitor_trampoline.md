@@ -26,17 +26,16 @@ The trampoline provides a controlled entry point that:
 
 ### Identity Mapping Requirement
 
-The trampoline code and data must be identity-mapped in BOTH page table views:
+The trampoline code must be identity-mapped in BOTH page table views:
 
 ```
-Virtual Address  |  Monitor View      |  Unprivileged View
------------------|--------------------|----------------------
+Virtual Address  |  Monitor View         |  Unprivileged View
+-----------------|-----------------------|----------------------
 0x100000 + N     |  nk_entry_trampoline  |  nk_entry_trampoline
-saved_rsp        |  Per-CPU RSP         |  Per-CPU RSP
-nk_boot_stack_top|  Monitor stack       |  (inaccessible)
+nk_boot_stack_top|  Monitor stack        |  (inaccessible)
 ```
 
-**Critical Requirement:** The trampoline uses RIP-relative addressing to access `saved_rsp`, which means the address of `saved_rsp` is computed relative to `RIP`. Since `nk_entry_trampoline` is identity-mapped in both page tables, `saved_rsp(%rip)` resolves to the same physical location regardless of which CR3 is active.
+**Per-CPU Data Access:** The trampoline uses GS-relative addressing to access per-CPU data (`saved_rsp` at GS:0, `saved_cr3` at GS:8). The GS base is set during CPU initialization to point to that CPU's `per_cpu_data` structure.
 
 ### Stack Management
 
@@ -52,17 +51,41 @@ The trampoline uses two separate stacks:
 
 ### Per-CPU Data
 
-Current implementation uses a single `saved_rsp` variable shared by all CPUs:
+The trampoline uses per-CPU data accessed via GS segment base addressing. Each CPU has its own `saved_rsp` and `saved_cr3` storage:
 
-```assembly
-.section .bss
-.align 8
-.global saved_rsp
-saved_rsp:
-    .quad 0
+```c
+// In arch/x86_64/smp.h
+typedef struct {
+    uint64_t saved_rsp;     // Offset 0: Saved RSP during monitor call
+    uint64_t saved_cr3;     // Offset 8: Saved CR3 during monitor call
+    int cpu_index;          // Offset 16: CPU index for debugging
+    uint64_t reserved;      // Offset 24: Padding to 32 bytes
+} per_cpu_data_t;
+
+extern per_cpu_data_t per_cpu_data[SMP_MAX_CPUS];
 ```
 
-**Current Limitation:** This is NOT per-CPU. Concurrent monitor calls from multiple CPUs will corrupt `saved_rsp`. For multi-CPU systems, `saved_rsp` must be in a per-CPU data area (e.g., using GS-base addressing).
+**GS-Base Setup:**
+- BSP: Set in `kernel_main()` via `smp_set_gs_base(&per_cpu_data[0])`
+- APs: Set in `ap_start()` via `smp_set_gs_base(&per_cpu_data[cpu_index])`
+- Uses IA32_GS_BASE MSR (0xC0000101)
+
+**Assembly Access:**
+```assembly
+// Save RSP to per-CPU data (offset 0)
+mov %rsp, %gs:0
+
+// Save CR3 to per-CPU data (offset 8)
+mov %cr3, %rax
+mov %rax, %gs:8
+
+// Restore from per-CPU data
+mov %gs:8, %rax
+mov %rax, %cr3
+mov %gs:0, %rsp
+```
+
+This design ensures SMP-safe operation with no race conditions between CPUs.
 
 ## CR3 Switching Protocol
 

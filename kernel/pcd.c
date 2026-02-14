@@ -221,7 +221,6 @@ int pcd_set_type(uint64_t phys_addr, uint8_t type) {
     spin_unlock_irqrestore(&pcd_state.lock, flags);
     return 0;
 }
-}
 
 /**
  * pcd_get_type - Get page type for a physical page
@@ -292,7 +291,6 @@ int pcd_mark_region(uint64_t base, uint64_t size, uint8_t type) {
 
     spin_unlock_irqrestore(&pcd_state.lock, flags);
     return count;
-}
 }
 
 /**

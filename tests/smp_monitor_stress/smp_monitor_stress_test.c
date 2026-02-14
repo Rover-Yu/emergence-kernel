@@ -89,7 +89,7 @@ void smp_monitor_stress_ap_entry(void) {
 
     /* Report results */
     irq_flags_t flags;
-    spin_lock_irqsave(&stress_lock, &flags);
+    flags = spin_lock_irqsave(&stress_lock);
     serial_puts("[SMP-STRESS] CPU");
     serial_putc('0' + cpu_id);
     serial_puts(" complete: ");
@@ -101,7 +101,7 @@ void smp_monitor_stress_ap_entry(void) {
     serial_puts("/");
     serial_put_hex(STRESS_ITERATIONS);
     serial_puts(" frees\n");
-    spin_unlock_irqrestore(&stress_lock, &flags);
+    spin_unlock_irqrestore(&stress_lock, flags);
 
     ap_completions[cpu_id] = 1;
     smp_mb();

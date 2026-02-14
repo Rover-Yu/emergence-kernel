@@ -94,7 +94,7 @@ static void monitor_protect_all_ptps(void) {
     /* Invalidate TLB for all protected pages in first 2MB */
     for (int i = 0; i < 512; i++) {
         if (!(unpriv_pt_0_2mb[i] & X86_PTE_WRITABLE)) {
-            monitor_invalidate_page((void*)(i << 12));
+            monitor_invalidate_page((void*)(uintptr_t)(i << 12));
         }
     }
 
