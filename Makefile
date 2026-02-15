@@ -302,6 +302,10 @@ clean:
 	rm -f ./emergence_test_* 2>/dev/null || true
 	rm -f /tmp/emergence_* 2>/dev/null || true
 	rm -f *.bin *.elf 2>/dev/null || true
+	find . -type d -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true
+	find . -type f -name '*.pyc' -delete 2>/dev/null || true
+	find . -type f -name '*.pyo' -delete 2>/dev/null || true
+	rm -rf tests/test_results 2>/dev/null || true
 
 # Include test targets from tests/Makefile
 include tests/Makefile

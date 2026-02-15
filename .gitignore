@@ -3,11 +3,6 @@ build/
 isodir/
 *.iso
 
-# Multiboot header build artifacts
-build/multiboot_header.bin
-build/multiboot_header.bin.o
-build/multiboot_header.o
-
 # Editor and IDE files
 .vscode/
 .idea/
@@ -33,4 +28,10 @@ tags
 # Temporary build files and logs
 .tmp/
 *.log
-tests/lib/__pycache__/
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache/
+tests/test_results
+*.o
+*.bin
