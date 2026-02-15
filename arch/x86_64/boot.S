@@ -94,8 +94,8 @@ gdt64:
     .quad 0                                        /* Null descriptor */
     .quad 0x00209A0000000000                       /* Kernel code (DPL=0) */
     .quad 0x0000920000000000                       /* Kernel data (DPL=0) */
-    .quad 0x00CFFA000000FFFF                       /* User code (DPL=3, long, flat 4GB) - FIXED: was 0x9A (DPL=0) */
-    .quad 0x00CFF2000000FFFF                       /* User data (DPL=3, flat 4GB) - FIXED: was 0x92 (DPL=0) */
+    .quad 0x00AFFA000000FFFF                       /* User code (DPL=3, L=1, G=1, non-conforming) */
+    .quad 0x00CFF2000000FFFF                       /* User data (DPL=3, G=1, 32-bit expand-up) */
 
 /* TSS descriptor (filled in at runtime) */
 .global tss_desc
@@ -213,7 +213,7 @@ boot_is_bsp:
 
     /* Set up PML4 entry 0 -> points to PDPT */
     movl $boot_pdpt, %eax
-    orl $0x3, %eax              /* Set Present (bit 0) and Writable (bit 1) */
+    orl $0x7, %eax              /* Present + Writable + User (for ring 3 access) */
     movl %eax, boot_pml4
     movl $0, boot_pml4 + 4      /* High 32 bits */
 
@@ -223,13 +223,13 @@ boot_is_bsp:
      * PML4 index = bits 39-47 = 0x1FD
      * This allows APIC at 0xFEE00000 to be accessed */
     movl $boot_pdpt, %eax
-    orl $0x3, %eax              /* Present + Writable */
+    orl $0x7, %eax              /* Present + Writable + User */
     movl %eax, boot_pml4 + 0x1FD*8  /* PML4[0x1FD] */
     movl $0, boot_pml4 + 0x1FD*8 + 4  /* High 32 bits */
 
     /* Set up PDPT entry 0 -> points to Page Directory */
     movl $boot_pd, %eax
-    orl $0x3, %eax              /* Present + Writable */
+    orl $0x7, %eax              /* Present + Writable + User (for ring 3 access) */
     movl %eax, boot_pdpt
 
     /* ============================================================
@@ -250,7 +250,7 @@ boot_is_bsp:
 
     /* Set up PDPT[3] -> boot_pd for APIC access */
     movl $boot_pd, %eax
-    orl $0x3, %eax              /* Present + Writable */
+    orl $0x7, %eax              /* Present + Writable + User (for ring 3 access) */
     movl %eax, boot_pdpt + 3*8  /* PDPT[3] */
     movl $0, boot_pdpt + 3*8 + 4  /* High 32 bits */
 
