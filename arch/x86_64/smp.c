@@ -12,9 +12,7 @@
 #include "arch/x86_64/idt.h"
 
 /* Test wrapper headers */
-#include "tests/spinlock/test_spinlock.h"
-#include "tests/nested-kernel/test_nk_smp_monitor_stress.h"
-#include "tests/nested-kernel/test_nk_invariants_verify.h"
+#include "tests/testcases.h"
 
 /* External ACPI functions for getting APIC information */
 extern int acpi_get_apic_count(void);

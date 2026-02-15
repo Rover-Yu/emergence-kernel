@@ -19,20 +19,7 @@
 #include "arch/x86_64/include/syscall.h"
 
 /* Test wrapper headers */
-#include "tests/pmm/test_pmm.h"
-#include "tests/slab/test_slab.h"
-#include "tests/spinlock/test_spinlock.h"
-#include "tests/timer/test_timer.h"
-#include "tests/boot/test_boot.h"
-#include "tests/smp/test_smp.h"
-#include "tests/pcd/test_pcd.h"
-#include "tests/minilibc/test_minilibc.h"
-#include "tests/usermode/test_usermode.h"
-#include "tests/nested-kernel/test_nk_invariants.h"
-#include "tests/nested-kernel/test_nk_readonly_visibility.h"
-#include "tests/nested-kernel/test_nk_fault_injection.h"
-#include "tests/nested-kernel/test_nk_monitor_trampoline.h"
-#include "tests/nested-kernel/test_nk_invariants_verify.h"
+#include "tests/testcases.h"
 
 /* External driver initialization functions */
 extern int serial_driver_init(void);
