@@ -103,70 +103,8 @@ MINILIBC_C_SRCS := lib/minilibc/string.c \
                    lib/minilibc/printf.c
 MINILIBC_OBJS := $(patsubst lib/minilibc/%.c,$(BUILD_DIR)/minilibc_%.o,$(MINILIBC_C_SRCS))
 
-# Spinlock test sources (conditionally compiled)
-SPINLOCK_TEST_SRC := tests/spinlock/spinlock_test.c
-SPINLOCK_TEST_OBJ := $(BUILD_DIR)/kernel_spinlock_test.o
-
-# Slab allocator test sources (conditionally compiled)
-SLAB_TEST_SRC := tests/slab/slab_test.c
-SLAB_TEST_OBJ := $(BUILD_DIR)/kernel_slab_test.o
-
-# PMM test sources (conditionally compiled)
-PMM_TEST_SRC := tests/pmm/pmm_test.c
-PMM_TEST_OBJ := $(BUILD_DIR)/kernel_pmm_test.o
-
-# APIC timer test sources (conditionally compiled)
-TIMER_TEST_SRC := tests/timer/timer_test.c
-TIMER_TEST_OBJ := $(BUILD_DIR)/kernel_timer_test.o
-
-# Nested kernel fault injection test sources (conditionally compiled)
-NK_PROTECTION_TEST_SRC := tests/nk_fault_injection/nk_fault_injection_test.c
-NK_PROTECTION_TEST_OBJ := $(BUILD_DIR)/nk_fault_injection_test.o
-
-# Boot test sources (conditionally compiled)
-BOOT_TEST_SRC := tests/boot/boot_test.c
-BOOT_TEST_OBJ := $(BUILD_DIR)/kernel_boot_test.o
-
-# SMP boot test sources (conditionally compiled)
-SMP_TEST_SRC := tests/smp/smp_boot_test.c
-SMP_TEST_OBJ := $(BUILD_DIR)/kernel_smp_test.o
-
-# PCD test sources (conditionally compiled)
-PCD_TEST_SRC := tests/pcd/pcd_test.c
-PCD_TEST_OBJ := $(BUILD_DIR)/kernel_pcd_test.o
-
-# Nested Kernel invariants test sources (conditionally compiled)
-NK_INVARIANTS_TEST_SRC := tests/nested_kernel_invariants/nested_kernel_invariants_test.c
-NK_INVARIANTS_TEST_OBJ := $(BUILD_DIR)/kernel_nk_invariants_test.o
-
-# Read-only visibility test sources (conditionally compiled)
-READONLY_VISIBILITY_TEST_SRC := tests/readonly_visibility/readonly_visibility_test.c
-READONLY_VISIBILITY_TEST_OBJ := $(BUILD_DIR)/kernel_readonly_visibility_test.o
-
-# User mode syscall test sources (conditionally compiled)
-USERMODE_TEST_SRC := tests/usermode/usermode_test.c
-USERMODE_TEST_OBJ := $(BUILD_DIR)/kernel_usermode_test.o
-
-# Monitor trampoline test sources (conditionally compiled)
-MONITOR_TRAMPOLINE_TEST_SRC := tests/monitor_trampoline/monitor_trampoline_test.c
-MONITOR_TRAMPOLINE_TEST_OBJ := $(BUILD_DIR)/monitor_trampoline_test.o
-
-# SMP monitor stress test sources (conditionally compiled)
-SMP_MONITOR_STRESS_TEST_SRC := tests/smp_monitor_stress/smp_monitor_stress_test.c
-SMP_MONITOR_STRESS_TEST_OBJ := $(BUILD_DIR)/smp_monitor_stress_test.o
-
-# NK invariants verify test sources (conditionally compiled)
-NK_INVARIANTS_VERIFY_TEST_SRC := tests/nk_invariants_verify/nk_invariants_verify_test.c
-NK_INVARIANTS_VERIFY_TEST_OBJ := $(BUILD_DIR)/nk_invariants_verify_test.o
-
-# Minilibc test sources (always compiled, provides stubs when disabled)
-MINILIBC_TEST_SRC := tests/minilibc/minilibc_test.c
-MINILIBC_TEST_OBJ := $(BUILD_DIR)/minilibc_test.o
-
-# Test sources (reference only, not compiled into kernel)
-# These test files are kept for documentation purposes
-TESTS_DIR := tests
-TESTS_C_SRCS :=  # Intentionally empty - test files are reference only
+# Include test build configuration (defines TESTS_OBJS)
+include tests/build.mk
 
 # All C sources
 C_SRCS := $(ARCH_C_SRCS) $(KERNEL_C_SRCS)
@@ -180,42 +118,6 @@ ARCH_BOOT_OBJ := $(patsubst $(ARCH_DIR)/%.S,$(BUILD_DIR)/boot_%.o,$(ARCH_DIR)/bo
 ARCH_OBJS := $(patsubst $(ARCH_DIR)/%.c,$(BUILD_DIR)/arch_%.o,$(ARCH_C_SRCS))
 KERNEL_OBJS := $(patsubst $(KERNEL_DIR)/%.c,$(BUILD_DIR)/kernel_%.o,$(KERNEL_C_SRCS))
 
-# Initialize TESTS_OBJS with reference test sources (currently empty)
-TESTS_OBJS := $(patsubst $(TESTS_DIR)/%.c,$(BUILD_DIR)/test_%.o,$(TESTS_C_SRCS))
-
-# Always compile tests that have wrappers called from kernel code (provides stubs when disabled)
-TESTS_OBJS += $(SPINLOCK_TEST_OBJ)
-TESTS_OBJS += $(SMP_MONITOR_STRESS_TEST_OBJ)
-TESTS_OBJS += $(NK_PROTECTION_TEST_OBJ)
-TESTS_OBJS += $(READONLY_VISIBILITY_TEST_OBJ)
-TESTS_OBJS += $(USERMODE_TEST_OBJ)
-TESTS_OBJS += $(NK_INVARIANTS_VERIFY_TEST_OBJ)
-TESTS_OBJS += $(MONITOR_TRAMPOLINE_TEST_OBJ)
-TESTS_OBJS += $(MINILIBC_TEST_OBJ)
-
-# Conditionally include test objects (must be BEFORE OBJS is defined)
-ifeq ($(CONFIG_TESTS_PMM),1)
-TESTS_OBJS += $(PMM_TEST_OBJ)
-endif
-ifeq ($(CONFIG_TESTS_SLAB),1)
-TESTS_OBJS += $(SLAB_TEST_OBJ)
-endif
-ifeq ($(CONFIG_TESTS_APIC_TIMER),1)
-TESTS_OBJS += $(TIMER_TEST_OBJ)
-endif
-ifeq ($(CONFIG_TESTS_BOOT),1)
-TESTS_OBJS += $(BOOT_TEST_OBJ)
-endif
-ifeq ($(CONFIG_TESTS_SMP),1)
-TESTS_OBJS += $(SMP_TEST_OBJ)
-endif
-ifeq ($(CONFIG_TESTS_PCD),1)
-TESTS_OBJS += $(PCD_TEST_OBJ)
-endif
-ifeq ($(CONFIG_TESTS_NK_INVARIANTS),1)
-TESTS_OBJS += $(NK_INVARIANTS_TEST_OBJ)
-endif
-
 # Generated command line object (embedded fallback)
 CMDLINE_OBJ := $(BUILD_DIR)/kernel_cmdline_source.o
 
@@ -225,7 +127,7 @@ OBJS := $(ARCH_BOOT_OBJ) $(ARCH_OBJS) $(KERNEL_OBJS) $(MINILIBC_OBJS) $(TESTS_OB
 KERNEL_ELF := $(BUILD_DIR)/$(KERNEL).elf
 KERNEL_BIN := $(BUILD_DIR)/$(KERNEL).bin
 
-.PHONY: all clean run run-debug test test-all test-boot test-apic-timer test-smp test-pcd test-slab test-nested-kernel test-nk-fault-injection test-readonly-visibility test-usermode test-multiboot help
+.PHONY: all clean run run-debug help
 
 all: $(ISO)
 
@@ -245,24 +147,27 @@ help:
 	@echo "  run              - Run kernel in QEMU (4 CPUs, 128M RAM, 8s timeout)"
 	@echo "  run-debug        - Run kernel in QEMU with GDB server on port 1234"
 	@echo ""
-	@echo "Test targets:"
-	@echo "  test              - Run all tests (test-all)"
-	@echo "  test-all         - Run complete test suite (tests=all)"
-	@echo "  test-boot        - Basic kernel boot test (1 CPU)"
-	@echo "  test-apic-timer  - APIC timer interrupt test"
-	@echo "  test-smp         - SMP boot test (2 CPUs)"
-	@echo "  test-pcd         - Page Control Data test"
-	@echo "  test-slab        - Slab allocator test"
-	@echo "  test-minilibc    - Minilibc string library test"
-	@echo "  test-nested-kernel     - Nested Kernel invariants test"
-	@echo "  test-nk-fault-injection - Nested Kernel fault injection test"
-	@echo "  test-readonly-visibility - Read-only visibility test"
-	@echo "  test-usermode          - User mode syscall test (KVM enabled)"
-	@echo "  test-multiboot         - Multiboot2 header test"
+	@echo "Test targets (see tests/Makefile):"
+	@echo "  tests            - Run all enabled tests"
+	@echo "  tests-boot       - Basic kernel boot test (1 CPU)"
+	@echo "  tests-apic-timer - APIC timer interrupt test"
+	@echo "  tests-smp        - SMP boot test (2 CPUs)"
+	@echo "  tests-pcd        - Page Control Data test"
+	@echo "  tests-slab       - Slab allocator test"
+	@echo "  tests-minilibc   - Minilibc string library test"
+	@echo "  tests-usermode   - User mode syscall test (KVM enabled)"
+	@echo "  tests-multiboot  - Multiboot2 header test"
+	@echo ""
+	@echo "Nested Kernel tests (tests-nk-*):"
+	@echo "  tests-nk                        - Run all NK tests"
+	@echo "  tests-nk-invariants             - NK invariants (ASPLOS '15)"
+	@echo "  tests-nk-fault-injection        - NK fault injection (destructive)"
+	@echo "  tests-nk-readonly-visibility    - Read-only mapping visibility"
+	@echo "  tests-nk-smp-monitor-stress     - SMP monitor stress test"
 	@echo ""
 	@echo "Build options (override kernel.config):"
-	@echo "  make CONFIG_TESTS_SPINLOCK=1             - Enable spinlock tests"
-	@echo "  make CONFIG_TESTS_PMM=1                  - Enable PMM tests"
+	@echo "  make CONFIG_TESTS_SPINLOCK=1              - Enable spinlock tests"
+	@echo "  make CONFIG_TESTS_PMM=1                   - Enable PMM tests"
 	@echo "  make CONFIG_TESTS_SLAB=1                  - Enable slab allocator tests"
 	@echo "  make CONFIG_TESTS_APIC_TIMER=1            - Enable APIC timer test"
 	@echo "  make CONFIG_TESTS_BOOT=1                  - Enable boot tests"
@@ -270,11 +175,11 @@ help:
 	@echo "  make CONFIG_TESTS_PCD=1                   - Enable PCD tests"
 	@echo "  make CONFIG_TESTS_MINILIBC=1              - Enable minilibc tests"
 	@echo "  make CONFIG_TESTS_USERMODE=1              - Enable user mode syscall tests"
-	@echo "  make CONFIG_TESTS_NK_INVARIANTS=1          - Enable NK invariants tests"
-	@echo "  make CONFIG_TESTS_NK_READONLY_VISIBILITY=1 - Enable NK read-only visibility tests"
+	@echo "  make CONFIG_TESTS_NK_INVARIANTS=1         - Enable NK invariants tests"
+	@echo "  make CONFIG_TESTS_NK_READONLY_VISIBILITY=1- Enable NK read-only visibility tests"
 	@echo "  make CONFIG_TESTS_NK_FAULT_INJECTION=1    - Enable NK fault injection tests"
 	@echo "  make CONFIG_TESTS_NK_TRAMPOLINE=1         - Enable NK trampoline test"
-	@echo "  make CONFIG_TESTS_NK_INVARIANTS_VERIFY=1 - Verify NK invariants write protection"
+	@echo "  make CONFIG_TESTS_NK_INVARIANTS_VERIFY=1  - Verify NK invariants write protection"
 	@echo ""
 	@echo "Debug options:"
 	@echo "  make CONFIG_DEBUG_SMP_AP=1                - Enable SMP AP debug marks"
@@ -338,101 +243,6 @@ $(BUILD_DIR)/minilibc_%.o: lib/minilibc/%.c $(CONFIG_DEP) | $(BUILD_DIR)
 	@echo "  CC      $<"
 	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 
-# Compile spinlock test (from tests/spinlock/) - only if enabled
-# Compile spinlock test (from tests/spinlock/) - ALWAYS compiled (provides stubs when disabled)
-$(SPINLOCK_TEST_OBJ): $(SPINLOCK_TEST_SRC) $(CONFIG_DEP) | $(BUILD_DIR)
-	@echo "  CC      $<"
-	$(Q)$(CC) $(CFLAGS) -c $< -o $@
-
-# Compile slab allocator test (from tests/slab/) - only if enabled
-ifeq ($(CONFIG_TESTS_SLAB),1)
-$(SLAB_TEST_OBJ): $(SLAB_TEST_SRC) $(CONFIG_DEP) | $(BUILD_DIR)
-	@echo "  CC      $<"
-	$(Q)$(CC) $(CFLAGS) -c $< -o $@
-endif
-
-# Compile PMM test (from tests/pmm/) - only if enabled
-ifeq ($(CONFIG_TESTS_PMM),1)
-$(PMM_TEST_OBJ): $(PMM_TEST_SRC) $(CONFIG_DEP) | $(BUILD_DIR)
-	@echo "  CC      $<"
-	$(Q)$(CC) $(CFLAGS) -c $< -o $@
-endif
-
-# Compile APIC timer test (from tests/timer/) - only if enabled
-ifeq ($(CONFIG_TESTS_APIC_TIMER),1)
-$(TIMER_TEST_OBJ): $(TIMER_TEST_SRC) $(CONFIG_DEP) | $(BUILD_DIR)
-	@echo "  CC      $<"
-	$(Q)$(CC) $(CFLAGS) -c $< -o $@
-endif
-
-# Compile nested kernel fault injection test (from tests/nk_fault_injection/) - ALWAYS compiled (provides stubs when disabled)
-$(NK_PROTECTION_TEST_OBJ): $(NK_PROTECTION_TEST_SRC) $(CONFIG_DEP) | $(BUILD_DIR)
-	@echo "  CC      $<"
-	$(Q)$(CC) $(CFLAGS) -c $< -o $@
-
-# Compile boot test (from tests/boot/) - only if enabled
-ifeq ($(CONFIG_TESTS_BOOT),1)
-$(BOOT_TEST_OBJ): $(BOOT_TEST_SRC) $(CONFIG_DEP) | $(BUILD_DIR)
-	@echo "  CC      $<"
-	$(Q)$(CC) $(CFLAGS) -c $< -o $@
-endif
-
-# Compile SMP boot test (from tests/smp/) - only if enabled
-ifeq ($(CONFIG_TESTS_SMP),1)
-$(SMP_TEST_OBJ): $(SMP_TEST_SRC) $(CONFIG_DEP) | $(BUILD_DIR)
-	@echo "  CC      $<"
-	$(Q)$(CC) $(CFLAGS) -c $< -o $@
-endif
-
-# Compile PCD test (from tests/pcd/) - only if enabled
-ifeq ($(CONFIG_TESTS_PCD),1)
-$(PCD_TEST_OBJ): $(PCD_TEST_SRC) $(CONFIG_DEP) | $(BUILD_DIR)
-	@echo "  CC      $<"
-	$(Q)$(CC) $(CFLAGS) -c $< -o $@
-endif
-
-# Compile nested kernel invariants test (from tests/nested_kernel_invariants/) - only if enabled
-ifeq ($(CONFIG_TESTS_NK_INVARIANTS),1)
-$(NK_INVARIANTS_TEST_OBJ): $(NK_INVARIANTS_TEST_SRC) $(CONFIG_DEP) | $(BUILD_DIR)
-	@echo "  CC      $<"
-	$(Q)$(CC) $(CFLAGS) -c $< -o $@
-endif
-
-# Compile read-only visibility test (from tests/readonly_visibility/) - ALWAYS compiled (provides stubs when disabled)
-$(READONLY_VISIBILITY_TEST_OBJ): $(READONLY_VISIBILITY_TEST_SRC) $(CONFIG_DEP) | $(BUILD_DIR)
-	@echo "  CC      $<"
-	$(Q)$(CC) $(CFLAGS) -c $< -o $@
-
-# Compile usermode test (from tests/usermode/) - ALWAYS compiled (provides stubs when disabled)
-$(USERMODE_TEST_OBJ): $(USERMODE_TEST_SRC) $(CONFIG_DEP) | $(BUILD_DIR)
-	@echo "  CC      $<"
-	$(Q)$(CC) $(CFLAGS) -c $< -o $@
-
-# Compile SMP monitor stress test (from tests/smp_monitor_stress/) - ALWAYS compiled (provides stubs when disabled)
-$(SMP_MONITOR_STRESS_TEST_OBJ): $(SMP_MONITOR_STRESS_TEST_SRC) $(CONFIG_DEP) | $(BUILD_DIR)
-	@echo "  CC      $<"
-	$(Q)$(CC) $(CFLAGS) -c $< -o $@
-
-# Compile monitor trampoline test (from tests/monitor_trampoline/) - ALWAYS compiled (provides stubs when disabled)
-$(MONITOR_TRAMPOLINE_TEST_OBJ): $(MONITOR_TRAMPOLINE_TEST_SRC) $(CONFIG_DEP) | $(BUILD_DIR)
-	@echo "  CC      $<"
-	$(Q)$(CC) $(CFLAGS) -c $< -o $@
-
-# Compile NK invariants verify test (from tests/nk_invariants_verify/) - ALWAYS compiled (provides stubs when disabled)
-$(NK_INVARIANTS_VERIFY_TEST_OBJ): $(NK_INVARIANTS_VERIFY_TEST_SRC) $(CONFIG_DEP) | $(BUILD_DIR)
-	@echo "  CC      $<"
-	$(Q)$(CC) $(CFLAGS) -c $< -o $@
-
-# Compile minilibc test (from tests/minilibc/) - ALWAYS compiled (provides stubs when disabled)
-$(MINILIBC_TEST_OBJ): $(MINILIBC_TEST_SRC) $(CONFIG_DEP) | $(BUILD_DIR)
-	@echo "  CC      $<"
-	$(Q)$(CC) $(CFLAGS) -c $< -o $@
-
-# Compile test C files
-$(BUILD_DIR)/test_%.o: $(TESTS_DIR)/%.c $(CONFIG_DEP) | $(BUILD_DIR)
-	@echo "  CC      $<"
-	$(Q)$(CC) $(CFLAGS) -c $< -o $@
-
 # Compile AP trampoline (as 64-bit assembly, uses PIC)
 # Use CC to get C preprocessor for conditional compilation
 $(TRAMPOLINE_OBJ): $(TRAMPOLINE_SRC) | $(BUILD_DIR)
@@ -491,56 +301,8 @@ clean:
 	rm -f /tmp/emergence_* 2>/dev/null || true
 	rm -f *.bin *.elf 2>/dev/null || true
 
-# Test targets (Python 3 only)
-# Use single make invocation to avoid double build when KERNEL_CMDLINE changes
-test: test-all
+# Include test targets from tests/Makefile
+include tests/Makefile
 
-test-all:
-	@echo "Running Emergence Kernel test suite..."
-	@$(MAKE) KERNEL_CMDLINE="test=all" all run
-
-test-boot:
-	@echo "Running Basic Kernel Boot Test..."
-	@$(MAKE) KERNEL_CMDLINE="test=boot" all run
-
-test-apic-timer:
-	@echo "Running APIC Timer Test..."
-	@$(MAKE) KERNEL_CMDLINE="test=timer" all run
-
-test-smp:
-	@echo "Running SMP Boot Test..."
-	@$(MAKE) KERNEL_CMDLINE="test=smp" all run
-
-test-pcd:
-	@echo "Running Page Control Data (PCD) Test..."
-	@$(MAKE) KERNEL_CMDLINE="test=pcd" all run
-
-test-slab:
-	@echo "Running Slab Allocator Test..."
-	@$(MAKE) KERNEL_CMDLINE="test=slab" all run
-
-test-nested-kernel:
-	@echo "Running Nested Kernel Invariants Test..."
-	@$(MAKE) KERNEL_CMDLINE="test=nested_kernel_invariants" all run
-
-test-nk-fault-injection:
-	@echo "Running Nested Kernel Fault Injection Test..."
-	@$(MAKE) KERNEL_CMDLINE="test=nk_fault_injection" all run
-
-test-readonly-visibility:
-	@echo "Running Read-Only Visibility Test..."
-	@$(MAKE) KERNEL_CMDLINE="test=readonly_visibility" all run
-
-test-usermode:
-	@echo "Running User Mode Syscall Test..."
-	@$(MAKE) KERNEL_CMDLINE="test=usermode" all run
-
-test-multiboot:
-	@echo "Running Multiboot2 Header Test..."
-	@$(MAKE) KERNEL_CMDLINE="test=multiboot" all run
-
-test-minilibc:
-	@echo "Running Minilibc String Library Test..."
-	@$(MAKE) KERNEL_CMDLINE="test=minilibc" all run
 
 

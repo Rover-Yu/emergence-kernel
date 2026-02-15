@@ -1,9 +1,9 @@
-/* SMP Monitor Stress Test
+/* NK SMP Monitor Stress Test
  * Verifies per-CPU trampoline data and GS-base setup work correctly */
 
 #include <stdint.h>
 #include <stddef.h>
-#include "test_smp_monitor_stress.h"
+#include "test_nk_smp_monitor_stress.h"
 #include "kernel/test.h"
 #include "arch/x86_64/serial.h"
 #include "arch/x86_64/smp.h"
@@ -20,7 +20,7 @@ static volatile int ap_completions[SMP_MAX_CPUS];
 static volatile int errors_detected = 0;
 
 /* Flag for AP polling (exported for smp.c) */
-volatile int smp_monitor_stress_test_start = 0;
+volatile int nk_smp_monitor_stress_test_start = 0;
 
 #if CONFIG_TESTS_SMP_MONITOR_STRESS
 
@@ -39,11 +39,11 @@ static inline uint64_t rdmsr_gs_base(void) {
 }
 
 /**
- * smp_monitor_stress_ap_entry - AP entry point for stress test
+ * nk_smp_monitor_stress_ap_entry - AP entry point for stress test
  *
  * Called by APs when stress test mode is active.
  */
-void smp_monitor_stress_ap_entry(void) {
+void nk_smp_monitor_stress_ap_entry(void) {
     int cpu_id = smp_get_cpu_index();
     int allocations_ok = 0;
     int frees_ok = 0;
@@ -119,11 +119,11 @@ void smp_monitor_stress_ap_entry(void) {
 }
 
 /**
- * run_smp_monitor_stress_tests - Main test entry point
+ * run_nk_smp_monitor_stress_tests - Main test entry point
  *
  * Returns: 0 on success, -1 on failure
  */
-int run_smp_monitor_stress_tests(void) {
+int run_nk_smp_monitor_stress_tests(void) {
     int cpu_count;
     int cpu_id;
     int timeout;
@@ -186,11 +186,11 @@ int run_smp_monitor_stress_tests(void) {
 
     /* Signal APs to start */
     stress_test_started = 1;
-    smp_monitor_stress_test_start = 1;
+    nk_smp_monitor_stress_test_start = 1;
     smp_mb();
 
     /* BSP also participates */
-    smp_monitor_stress_ap_entry();
+    nk_smp_monitor_stress_ap_entry();
 
     /* Wait for all APs to complete */
     timeout = 10000000;
@@ -248,15 +248,15 @@ int run_smp_monitor_stress_tests(void) {
  * ============================================================================ */
 
 #if CONFIG_TESTS_SMP_MONITOR_STRESS
-void test_smp_monitor_stress(void) {
-    if (test_should_run("smp_monitor_stress")) {
-        test_run_by_name("smp_monitor_stress");
+void test_nk_smp_monitor_stress(void) {
+    if (test_should_run("nk_smp_monitor_stress")) {
+        test_run_by_name("nk_smp_monitor_stress");
     }
 }
-/* Note: test_smp_monitor_stress_ap_entry is already defined above inside CONFIG_TESTS_SMP_MONITOR_STRESS block */
+/* Note: nk_smp_monitor_stress_ap_entry is already defined above inside CONFIG_TESTS_SMP_MONITOR_STRESS block */
 #else
-void test_smp_monitor_stress(void) { }
+void test_nk_smp_monitor_stress(void) { }
 
 /* Provide empty stub for AP entry when stress tests are disabled */
-void test_smp_monitor_stress_ap_entry(void) { }
+void nk_smp_monitor_stress_ap_entry(void) { }
 #endif

@@ -13,8 +13,8 @@
 
 /* Test wrapper headers */
 #include "tests/spinlock/test_spinlock.h"
-#include "tests/smp_monitor_stress/test_smp_monitor_stress.h"
-#include "tests/nk_invariants_verify/test_nk_invariants_verify.h"
+#include "tests/nested-kernel/test_nk_smp_monitor_stress.h"
+#include "tests/nested-kernel/test_nk_invariants_verify.h"
 
 /* External ACPI functions for getting APIC information */
 extern int acpi_get_apic_count(void);
@@ -384,14 +384,14 @@ void ap_start(void) {
 
     /* Poll for SMP monitor stress test mode
      * The wrapper handles the CONFIG guard internally */
-    extern volatile int smp_monitor_stress_test_start;
-    while (!smp_monitor_stress_test_start) {
+    extern volatile int nk_smp_monitor_stress_test_start;
+    while (!nk_smp_monitor_stress_test_start) {
         asm volatile("pause");
     }
 
     /* Enter stress test mode
      * The wrapper is an empty stub when CONFIG_TESTS_SMP_MONITOR_STRESS=0 */
-    test_smp_monitor_stress_ap_entry();
+    nk_smp_monitor_stress_ap_entry();
 
     /* Halt */
     while (1) { arch_halt(); }

@@ -85,7 +85,7 @@ static void test_writable_nk_rejection(void) {
 }
 
 /**
- * run_nested_kernel_invariants_tests - Run Nested Kernel invariants tests
+ * run_nk_invariants_tests - Run Nested Kernel invariants tests
  *
  * Verifies all 6 Nested Kernel invariants from the ASPLOS '15 paper:
  *
@@ -98,7 +98,7 @@ static void test_writable_nk_rejection(void) {
  *
  * Returns: 0 on success, -1 on failure
  */
-int run_nested_kernel_invariants_tests(void) {
+int run_nk_invariants_tests(void) {
     int failures = 0;
     uint64_t unpriv_cr3;
     int cpu_index;
@@ -184,8 +184,8 @@ int run_nested_kernel_invariants_tests(void) {
 
 #if CONFIG_TESTS_NK_INVARIANTS
 void test_nk_invariants(void) {
-    if (test_should_run("nested_kernel_invariants")) {
-        test_run_by_name("nested_kernel_invariants");
+    if (test_should_run("nk_invariants")) {
+        test_run_by_name("nk_invariants");
     }
 }
 #else

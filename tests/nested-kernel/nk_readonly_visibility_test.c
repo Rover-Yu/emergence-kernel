@@ -1,7 +1,7 @@
-/* Emergence Kernel - Read-Only Visibility Tests */
+/* Emergence Kernel - NK Read-Only Visibility Tests */
 
 #include <stdint.h>
-#include "test_readonly_visibility.h"
+#include "test_nk_readonly_visibility.h"
 #include "kernel/test.h"
 #include "arch/x86_64/serial.h"
 #include "kernel/pcd.h"
@@ -21,7 +21,7 @@ extern uint64_t monitor_get_unpriv_cr3(void);
 extern volatile int bsp_init_done;
 
 /**
- * run_readonly_visibility_tests - Run read-only visibility tests
+ * run_nk_readonly_visibility_tests - Run read-only visibility tests
  *
  * Verifies that the monitor creates read-only mappings for nested kernel
  * pages so the outer kernel can inspect but not modify them.
@@ -35,7 +35,7 @@ extern volatile int bsp_init_done;
  *
  * Returns: 0 on success, -1 on failure
  */
-int run_readonly_visibility_tests(void) {
+int run_nk_readonly_visibility_tests(void) {
     int failures = 0;
     uint64_t unpriv_cr3;
     uint64_t max_pages;
@@ -139,11 +139,11 @@ int run_readonly_visibility_tests(void) {
  * ============================================================================ */
 
 #if CONFIG_TESTS_NK_READONLY_VISIBILITY
-void test_readonly_visibility(void) {
-    if (test_should_run("readonly_visibility")) {
-        test_run_by_name("readonly_visibility");
+void test_nk_readonly_visibility(void) {
+    if (test_should_run("nk_readonly_visibility")) {
+        test_run_by_name("nk_readonly_visibility");
     }
 }
 #else
-void test_readonly_visibility(void) { }
+void test_nk_readonly_visibility(void) { }
 #endif

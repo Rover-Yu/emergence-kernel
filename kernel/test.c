@@ -43,10 +43,10 @@ extern int run_apic_timer_tests(void);
 extern int run_boot_tests(void);
 extern int run_smp_tests(void);
 extern int run_pcd_tests(void);
-extern int run_nested_kernel_invariants_tests(void);
-extern int run_readonly_visibility_tests(void);
+extern int run_nk_invariants_tests(void);
+extern int run_nk_readonly_visibility_tests(void);
 extern int run_usermode_tests(void);
-extern int run_smp_monitor_stress_tests(void);
+extern int run_nk_smp_monitor_stress_tests(void);
 extern int run_minilibc_tests(void);
 
 /* Test registry array */
@@ -125,18 +125,18 @@ const test_case_t test_registry[] = {
 #endif
 #if CONFIG_TESTS_NK_INVARIANTS
     {
-        .name = "nested_kernel_invariants",
+        .name = "nk_invariants",
         .description = "Nested Kernel invariants (ASPLOS '15)",
-        .run_func = run_nested_kernel_invariants_tests,
+        .run_func = run_nk_invariants_tests,
         .enabled = 1,
         .auto_run = 1  /* Auto-run in test-all */
     },
 #endif
 #if CONFIG_TESTS_NK_READONLY_VISIBILITY
     {
-        .name = "readonly_visibility",
+        .name = "nk_readonly_visibility",
         .description = "Read-only mapping visibility for nested kernel",
-        .run_func = run_readonly_visibility_tests,
+        .run_func = run_nk_readonly_visibility_tests,
         .enabled = 1,
         .auto_run = 1  /* Auto-run in test-all */
     },
@@ -161,9 +161,9 @@ const test_case_t test_registry[] = {
 #endif
 #if CONFIG_TESTS_SMP_MONITOR_STRESS
     {
-        .name = "smp_monitor_stress",
+        .name = "nk_smp_monitor_stress",
         .description = "SMP monitor stress test - concurrent monitor calls from multiple CPUs",
-        .run_func = run_smp_monitor_stress_tests,
+        .run_func = run_nk_smp_monitor_stress_tests,
         .enabled = 1,
         .auto_run = 1  /* Auto-run in test-all */
     },

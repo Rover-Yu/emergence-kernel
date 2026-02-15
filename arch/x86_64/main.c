@@ -28,11 +28,11 @@
 #include "tests/pcd/test_pcd.h"
 #include "tests/minilibc/test_minilibc.h"
 #include "tests/usermode/test_usermode.h"
-#include "tests/nested_kernel_invariants/test_nk_invariants.h"
-#include "tests/readonly_visibility/test_readonly_visibility.h"
-#include "tests/nk_fault_injection/test_nk_fault_injection.h"
-#include "tests/monitor_trampoline/test_monitor_trampoline.h"
-#include "tests/nk_invariants_verify/test_nk_invariants_verify.h"
+#include "tests/nested-kernel/test_nk_invariants.h"
+#include "tests/nested-kernel/test_nk_readonly_visibility.h"
+#include "tests/nested-kernel/test_nk_fault_injection.h"
+#include "tests/nested-kernel/test_nk_monitor_trampoline.h"
+#include "tests/nested-kernel/test_nk_invariants_verify.h"
 
 /* External driver initialization functions */
 extern int serial_driver_init(void);
@@ -197,7 +197,7 @@ void kernel_main(uint32_t multiboot_info_addr) {
                 test_pmm_via_monitor();
 
                 /* Monitor trampoline test */
-                test_monitor_trampoline();
+                test_nk_monitor_trampoline();
             } else {
                 serial_puts("KERNEL: Monitor initialization failed\n");
             }
@@ -246,7 +246,7 @@ void kernel_main(uint32_t multiboot_info_addr) {
         test_nk_invariants();
 
         /* Read-only visibility tests */
-        test_readonly_visibility();
+        test_nk_readonly_visibility();
 
         /* Minilibc string library tests */
         test_minilibc();

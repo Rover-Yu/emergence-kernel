@@ -138,8 +138,8 @@ int run_nk_fault_injection_tests(void) {
 
 #if CONFIG_TESTS_NK_FAULT_INJECTION
 void test_nk_fault_injection(void) {
-    if (test_should_run("nk_protection")) {
-        test_run_by_name("nk_protection");  /* Never returns */
+    if (test_should_run("nk_fault_injection")) {
+        test_run_by_name("nk_fault_injection");  /* Never returns */
     }
 }
 #else
