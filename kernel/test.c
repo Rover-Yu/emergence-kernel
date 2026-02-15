@@ -356,16 +356,22 @@ int test_run_by_name(const char *name) {
     /* Run test */
     int result = test->run_func();
 
+    /* Add separator for output clarity and ensure buffer sync */
+    serial_puts("\n");
+    serial_flush();
+
     if (result == 0) {
         serial_puts("[TEST] PASSED: ");
         serial_puts(name);
         serial_puts("\n");
+        serial_flush();
     } else {
         serial_puts("[TEST] FAILED: ");
         serial_puts(name);
         serial_puts(" (failures: ");
         serial_put_hex(result);
         serial_puts(")\n");
+        serial_flush();
         serial_puts("[TEST] FAILURE - System shutting down\n");
         system_shutdown();
         /* Never returns */
