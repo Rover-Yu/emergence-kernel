@@ -24,40 +24,24 @@ extern void *prealloc_user_stack(void);
 extern void kernel_halt(void);
 extern void serial_put_hex(uint64_t value);
 
-/* Test: Verify SYSCALL from ring 0 */
+/* Test: Verify syscall handler works (direct call from ring 0) */
 static int test_syscall_ring0(void) {
-    volatile int syscall_worked = 0;
+    serial_puts("[USERMODE] Testing syscall handler (direct call from ring 0)...\n");
 
-    serial_puts("[USERMODE] Testing SYSCALL from ring 0...\n");
+    /* Call syscall handler directly to test the C logic
+     * Note: We don't use SYSCALL instruction here because sysretq
+     * always returns to ring 3, which would break ring 0 execution. */
+    extern void syscall_handler(uint64_t nr, uint64_t a1, uint64_t a2, uint64_t a3);
 
-    /* Test: SYSCALL from ring 0 using a simple syscall number
-     * This verifies the SYSCALL mechanism works (MSR setup, entry, return) */
-    serial_puts("[USERMODE] Calling SYSCALL instruction...\n");
+    /* Test sys_write with minimal args */
+    syscall_handler(1, 0, 0, 0);
 
-    /* Use SYS_write with minimal arguments to test SYSCALL entry/exit */
-    __asm__ volatile (
-        "mov $1, %%rax\n"      /* SYS_write */
-        "mov $0, %%rdi\n"      /* fd = 0 */
-        "mov $0, %%rsi\n"      /* buf = NULL */
-        "mov $0, %%rdx\n"      /* count = 0 */
-        "syscall\n"
-        "movl $1, %0\n"        /* Mark that syscall returned */
-        : "=m"(syscall_worked)
-        :
-        : "rax", "rdi", "rsi", "rdx", "rcx", "r11", "memory"
-    );
-
-    if (syscall_worked) {
-        serial_puts("[USERMODE] SYSCALL from ring 0: PASSED\n");
-        return 0;
-    }
-
-    serial_puts("[USERMODE] ERROR: SYSCALL failed\n");
-    return -1;
+    serial_puts("[USERMODE] Syscall handler direct call: PASSED\n");
+    return 0;
 }
 
 /* Test: Ring 3 transition */
-static int __attribute__((unused)) test_ring3_transition(void) {
+static int test_ring3_transition(void) {
     void *user_stack;
     uint64_t user_rsp;
 
@@ -75,9 +59,7 @@ static int __attribute__((unused)) test_ring3_transition(void) {
     serial_put_hex(user_rsp);
     serial_puts("\n");
 
-    /* Note: ring 3 transition via sysretq has issues in QEMU TCG mode
-     * This is a known limitation and should work on real hardware/KVM */
-    serial_puts("[USERMODE] Entering ring 3 (may hang in QEMU TCG)...\n");
+    serial_puts("[USERMODE] Entering ring 3...\n");
 
     enter_user_mode();
 
@@ -108,12 +90,13 @@ int run_usermode_tests(void) {
         serial_puts("[USERMODE] Test 1 FAILED\n");
     }
 
-    /* Test 2: Ring 3 transition - SKIPPED for now
-     * The ring 3 transition enters user mode and never returns.
-     * This test should be run separately with KVM for proper testing.
-     */
-    serial_puts("[USERMODE] Test 2 (Ring 3 transition): SKIPPED\n");
-    serial_puts("[USERMODE] Note: Ring 3 test does not return and should be run separately\n");
+    /* Test 2: Ring 3 transition */
+    tests_run++;
+    serial_puts("[USERMODE] Testing ring 3 transition...\n");
+    test_ring3_transition();
+    /* Note: test_ring3_transition() should not return - user program calls sys_exit */
+    serial_puts("[USERMODE] ERROR: Returned from ring 3!\n");
+    tests_failed++;
 
     /* Print summary */
     serial_puts("\n");

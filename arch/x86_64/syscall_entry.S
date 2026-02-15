@@ -53,13 +53,14 @@ syscall_entry:
     pop %rbp
     pop %rbx
 
-    /* Return from syscall
-     * For ring 0 testing: jmp *%rcx (return address saved by SYSCALL)
-     * For ring 3 calls: sysretq (would switch to CPL 3)
-     *
-     * For now, use jmp *%rcx which works for ring 0 -> ring 0 syscalls
-     * TODO: Add CPL detection for proper ring 3 support */
-    jmp *%rcx
+    /* Return from syscall using sysretq
+     * sysretq returns to ring 3, loading:
+     *   RIP from RCX
+     *   RFLAGS from R11
+     *   CS from STAR[47:32] | 3
+     *   SS from STAR[47:32] + 8
+     */
+    sysretq
 
 /* Function to jump to user mode using sysretq
  * sysretq switches from ring 0 to ring 3 using STAR MSR.
