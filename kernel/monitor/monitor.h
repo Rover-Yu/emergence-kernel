@@ -61,4 +61,7 @@ int monitor_unmap_page(uint64_t virt_addr);
 /* Page table allocation (auto-marked as NK_PGTABLE) */
 void *monitor_alloc_pgtable(uint8_t order);
 
+/* Debug: Dump page table hierarchy */
+void monitor_dump_page_tables(void);
+
 #endif /* KERNEL_MONITOR_MONITOR_H */

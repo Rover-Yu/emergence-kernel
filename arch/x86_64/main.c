@@ -184,14 +184,6 @@ void kernel_main(uint32_t multiboot_info_addr) {
                 arch_cr3_write(unpriv_cr3);
                 serial_puts("KERNEL: Page table switch complete\n");
 
-                /* Debug: Verify user program page is accessible after CR3 switch */
-                extern void user_program_start(void);
-                uint64_t user_prog_addr = (uint64_t)user_program_start;
-                serial_puts("KERNEL: Verifying user program at 0x");
-                extern void serial_put_hex(uint64_t);
-                serial_put_hex(user_prog_addr);
-                serial_puts("\n");
-
                 /* Verify NK invariants after CR3 switch */
                 test_nk_invariants_verify();
 

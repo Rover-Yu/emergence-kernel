@@ -122,7 +122,6 @@ static void monitor_protect_state(void) {
         virt_to_phys(g_unpriv_pd_ptr)
     };
 
-    /* Protect monitor page tables (monitor PD entries) */
     /* Find the PD entry covering the first monitor page */
     int pd_index = monitor_find_pd_entry(monitor_pages[0]);
 
@@ -136,30 +135,24 @@ static void monitor_protect_state(void) {
         }
     }
 
-    /* Clear Writable bit in unpriv_pd entry for monitor region (make it read-only)
-     * This implements Invariant 1: protected data is read-only for outer kernel */
-    uint64_t *unpriv_pd_entry = &g_unpriv_pd_ptr[pd_index];
-    uint64_t original_entry = *unpriv_pd_entry;
+    /* NOTE: We do NOT protect the PD entry here because:
+     * 1. Monitor page tables are allocated in the same 2MB region as kernel code/data
+     * 2. Protecting unpriv_pd[pd_index] would make kernel code read-only → crash
+     * 3. Instead, we rely on 4KB PTE protection via monitor_protect_all_ptps()
+     *
+     * For proper Invariant 5 enforcement, we should create 4KB page tables for
+     * the kernel region (0x400000+) and mark individual PTP PTEs as read-only.
+     * This is tracked as TODO for future improvement.
+     */
+    serial_puts("MONITOR: Skipping PD entry protection (kernel region overlap)\n");
+    serial_puts("MONITOR: Relying on 4KB PTE protection via PCD discovery\n");
 
-    *unpriv_pd_entry = original_entry & ~X86_PTE_WRITABLE;
-
-    serial_puts("MONITOR: Protected PD entry at index ");
-    serial_putc('0' + pd_index);
-    serial_puts(" (monitor)\n");
-
-    /* Verify monitor_pd is still writable (nested kernel needs write access) */
-    uint64_t *monitor_pd_entry = &monitor_pd[pd_index];
-    if (!(*monitor_pd_entry & X86_PTE_WRITABLE)) {
-        serial_puts("MONITOR: ERROR: monitor_pd should remain writable!\n");
-    }
-
-    /* Invalidate TLB for the affected 2MB region
-     * This ensures Invariant 2: write-protection is enforced */
+    /* Invalidate TLB for the affected 2MB region */
     monitor_invalidate_page((void *)monitor_pages[0]);
 
     serial_puts("MONITOR: TLB invalidated (Invariant 2 enforcement active)\n");
 
-    /* Additionally protect all PTPs discovered via PCD */
+    /* Protect all PTPs discovered via PCD - this handles individual page protection */
     monitor_protect_all_ptps();
 
     serial_puts("MONITOR: Nested Kernel invariants enforced\n");
@@ -395,6 +388,20 @@ static uint64_t *create_or_get_table(uint64_t *phys_out) {
         return NULL;
     }
 
+    /* Debug: Check if we're allocating a page that's already used as a page table */
+    if ((uint64_t)table == (uint64_t)unpriv_pd ||
+        (uint64_t)table == (uint64_t)unpriv_pdpt ||
+        (uint64_t)table == (uint64_t)unpriv_pml4 ||
+        (uint64_t)table == (uint64_t)monitor_pd ||
+        (uint64_t)table == (uint64_t)monitor_pdpt ||
+        (uint64_t)table == (uint64_t)monitor_pml4) {
+        serial_puts("MONITOR: FATAL - PMM returned already-used page table page (0x");
+        serial_put_hex((uint64_t)table);
+        serial_puts(")! PMM corruption detected.\n");
+        /* Don't zero the page - it's already in use! */
+        return NULL;
+    }
+
     /* Clear the table */
     for (int i = 0; i < 512; i++) {
         table[i] = 0;
@@ -440,13 +447,29 @@ static int create_ro_mapping(uint64_t phys_addr, uint64_t virt_addr) {
         /* Set PML4 entry - writable so we can modify lower levels */
         unpriv_pml4[pml4_idx] = pdpt_phys | X86_PTE_PRESENT | X86_PTE_WRITABLE;
     } else {
-        /* Existing PDPT - validate address before use */
+        /* Existing PDPT - check if it's the identity-mapped PDPT
+         * For high addresses (pml4_idx != 0), we must NOT reuse the
+         * identity-mapped PDPT (unpriv_pdpt) as it would cause issues */
         uint64_t pdpt_addr = pml4_entry & ~0xFFF;
-        if (pdpt_addr == 0 || pdpt_addr < 0x100000) {
-            serial_puts("MONITOR: Invalid PDPT address\n");
-            return -1;
+
+        /* If pml4_idx != 0 (not first 512GB) and pdpt_addr is unpriv_pdpt,
+         * allocate a new PDPT to avoid corrupting identity mapping */
+        if (pml4_idx != 0 && pdpt_addr == virt_to_phys(unpriv_pdpt)) {
+            uint64_t pdpt_phys;
+            pdpt = create_or_get_table(&pdpt_phys);
+            if (!pdpt) {
+                return -1;
+            }
+            /* Update PML4 entry to point to new PDPT */
+            unpriv_pml4[pml4_idx] = pdpt_phys | X86_PTE_PRESENT | X86_PTE_WRITABLE;
+        } else {
+            /* Validate address before use */
+            if (pdpt_addr == 0 || pdpt_addr < 0x100000) {
+                serial_puts("MONITOR: Invalid PDPT address\n");
+                return -1;
+            }
+            pdpt = (uint64_t *)pdpt_addr;
         }
-        pdpt = (uint64_t *)pdpt_addr;
     }
 
     /* Step 2: Get or create PD entry from PDPT */
@@ -464,18 +487,43 @@ static int create_ro_mapping(uint64_t phys_addr, uint64_t virt_addr) {
         /* Set PDPT entry */
         pdpt[pdpt_idx] = pd_phys | X86_PTE_PRESENT | X86_PTE_WRITABLE;
     } else {
-        /* Existing PD - validate address before use */
+        /* Existing PD - check if it's the identity-mapped PD */
         uint64_t pd_addr = pdpt_entry & ~0xFFF;
-        if (pd_addr == 0 || pd_addr < 0x100000) {
-            serial_puts("MONITOR: Invalid PD address\n");
-            return -1;
+
+        /* CRITICAL: Never reuse unpriv_pd for non-identity-mapped addresses */
+        if (pd_addr == virt_to_phys(unpriv_pd)) {
+            uint64_t pd_phys;
+            pd = create_or_get_table(&pd_phys);
+            if (!pd) {
+                return -1;
+            }
+            /* Update PDPT entry to point to new PD */
+            pdpt[pdpt_idx] = pd_phys | X86_PTE_PRESENT | X86_PTE_WRITABLE;
+        } else {
+            /* Validate address before use */
+            if (pd_addr == 0 || pd_addr < 0x100000) {
+                serial_puts("MONITOR: Invalid PD address\n");
+                return -1;
+            }
+            pd = (uint64_t *)pd_addr;
         }
-        pd = (uint64_t *)pd_addr;
     }
 
     /* Step 3: Get or create PT entry from PD */
     uint64_t pd_entry = pd[pd_idx];
     uint64_t *pt;
+
+    /* Debug: Check if we're about to corrupt unpriv_pd */
+    if ((uint64_t)pd == virt_to_phys(unpriv_pd)) {
+        serial_puts("MONITOR: ERROR - pd is unpriv_pd in step 3! pd_idx=0x");
+        serial_put_hex(pd_idx);
+        serial_puts(", pml4_idx=0x");
+        serial_put_hex(pml4_idx);
+        serial_puts(", pdpt_idx=0x");
+        serial_put_hex(pdpt_idx);
+        serial_puts("\n");
+        return -1;  /* Prevent corruption */
+    }
 
     if (!(pd_entry & X86_PTE_PRESENT)) {
         /* Need to allocate new PT */
@@ -554,6 +602,14 @@ void monitor_init(void) {
     monitor_pdpt = (uint64_t *)pmm_alloc(0);
     monitor_pd = (uint64_t *)pmm_alloc(0);
 
+    serial_puts("MONITOR: Allocations: monitor_pml4=0x");
+    serial_put_hex((uint64_t)monitor_pml4);
+    serial_puts(" monitor_pdpt=0x");
+    serial_put_hex((uint64_t)monitor_pdpt);
+    serial_puts(" monitor_pd=0x");
+    serial_put_hex((uint64_t)monitor_pd);
+    serial_puts("\n");
+
     if (!monitor_pml4 || !monitor_pdpt || !monitor_pd) {
         serial_puts("MONITOR: Failed to allocate monitor page tables\n");
         return;
@@ -563,6 +619,14 @@ void monitor_init(void) {
     unpriv_pml4 = (uint64_t *)pmm_alloc(0);
     unpriv_pdpt = (uint64_t *)pmm_alloc(0);
     unpriv_pd = (uint64_t *)pmm_alloc(0);
+
+    serial_puts("MONITOR: Allocations: unpriv_pml4=0x");
+    serial_put_hex((uint64_t)unpriv_pml4);
+    serial_puts(" unpriv_pdpt=0x");
+    serial_put_hex((uint64_t)unpriv_pdpt);
+    serial_puts(" unpriv_pd=0x");
+    serial_put_hex((uint64_t)unpriv_pd);
+    serial_puts("\n");
 
     if (!unpriv_pml4 || !unpriv_pdpt || !unpriv_pd) {
         serial_puts("MONITOR: Failed to allocate unprivileged page tables\n");
@@ -768,6 +832,14 @@ void monitor_init(void) {
     serial_put_hex(g_unpriv_pd_ptr[0]);
     serial_puts("\n  g_unpriv_pd_ptr[1] = 0x");
     serial_put_hex(g_unpriv_pd_ptr[1]);
+    serial_puts("\n  unpriv_pd[2] (kernel at 4MB) = 0x");
+    serial_put_hex(unpriv_pd[2]);
+    serial_puts("\n  boot_pd[2] (kernel at 4MB) = 0x");
+    serial_put_hex(boot_pd[2]);
+    serial_puts("\n  unpriv_pdpt[0] (points to pd) = 0x");
+    serial_put_hex(unpriv_pdpt[0]);
+    serial_puts("\n  unpriv_pml4[0] (points to pdpt) = 0x");
+    serial_put_hex(unpriv_pml4[0]);
     serial_puts("\n  Using 4KB pages for first 2MB\n");
 
     /* Mark page table pages as NK_PGTABLE for PCD tracking */
@@ -852,33 +924,67 @@ bool monitor_is_privileged(void) {
     return cr3 == monitor_pml4_phys;
 }
 
+/* Debug: Dump page table hierarchy */
+void monitor_dump_page_tables(void) {
+    serial_puts("MONITOR: Page table dump:\n");
+    serial_puts("  unpriv_pml4 at 0x");
+    serial_put_hex((uint64_t)unpriv_pml4);
+    serial_puts(" (phys 0x");
+    serial_put_hex(unpriv_pml4_phys);
+    serial_puts(")\n");
+    serial_puts("    [0] = 0x");
+    serial_put_hex(unpriv_pml4[0]);
+    serial_puts(" [1] = 0x");
+    serial_put_hex(unpriv_pml4[1]);
+    serial_puts(" [2] = 0x");
+    serial_put_hex(unpriv_pml4[2]);
+    serial_puts("\n");
+
+    serial_puts("  unpriv_pdpt at 0x");
+    serial_put_hex((uint64_t)unpriv_pdpt);
+    serial_puts("\n");
+    serial_puts("    [0] = 0x");
+    serial_put_hex(unpriv_pdpt[0]);
+    serial_puts(" [1] = 0x");
+    serial_put_hex(unpriv_pdpt[1]);
+    serial_puts(" [2] = 0x");
+    serial_put_hex(unpriv_pdpt[2]);
+    serial_puts(" [3] = 0x");
+    serial_put_hex(unpriv_pdpt[3]);
+    serial_puts("\n");
+
+    serial_puts("  unpriv_pd at 0x");
+    serial_put_hex((uint64_t)unpriv_pd);
+    serial_puts("\n");
+    serial_puts("    [0] = 0x");
+    serial_put_hex(unpriv_pd[0]);
+    serial_puts(" [1] = 0x");
+    serial_put_hex(unpriv_pd[1]);
+    serial_puts(" [2] = 0x");
+    serial_put_hex(unpriv_pd[2]);
+    serial_puts(" [3] = 0x");
+    serial_put_hex(unpriv_pd[3]);
+    serial_puts("\n");
+}
+
 /* Internal monitor call handler (called from privileged context only) */
 monitor_ret_t monitor_call_handler(monitor_call_t call, uint64_t arg1,
                                      uint64_t arg2, uint64_t arg3) {
     monitor_ret_t ret = {0, 0};
 
-    /* Debug: Verify we're in privileged mode */
+    /* Verify we're in privileged mode */
     extern uint64_t monitor_pml4_phys;
     uint64_t current_cr3 = arch_cr3_read();
-    serial_puts("MONITOR_HANDLER: CR3 = 0x");
-    serial_put_hex(current_cr3);
-    serial_puts(", expected = 0x");
-    serial_put_hex(monitor_pml4_phys);
     if (current_cr3 != monitor_pml4_phys) {
-        serial_puts(" - ERROR: Not in privileged mode!\n");
+        serial_puts("MONITOR: ERROR - monitor_call_handler called from unprivileged context!\n");
         ret.error = -1;
         return ret;
     }
-    serial_puts(" - OK\n");
 
     switch (call) {
         case MONITOR_CALL_ALLOC_PHYS:
-            serial_puts("MONITOR_HANDLER: Calling pmm_alloc...\n");
             /* Allocate physical pages */
             ret.result = (uint64_t)pmm_alloc((uint8_t)arg1);
-            serial_puts("MONITOR_HANDLER: pmm_alloc returned 0x");
-            serial_put_hex(ret.result);
-            serial_puts("\n");
             if (!ret.result) {
                 ret.error = -1;
             }

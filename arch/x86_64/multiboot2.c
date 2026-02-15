@@ -276,14 +276,14 @@ void multiboot2_parse(uint32_t mbi_addr) {
                 put_hex(meminfo->mem_upper);
                 serial_puts("KB\n");
 
-                /* Add memory region from basic meminfo */
-                /* mem_lower is lower memory (first 640KB), mem_upper is extended memory */
-                uint64_t upper_mem = (uint64_t)meminfo->mem_upper * 1024;
-                if (upper_mem > 0) {
-                    /* Upper memory starts at 4MB (kernel load address) */
-                    pmm_add_region(0x400000, upper_mem);
-                    found_memory = 1;
-                }
+                /* NOTE: Do NOT add memory from basic meminfo here!
+                 * The memory map (MULTIBOOT_TAG_MMAP) is more accurate and
+                 * already covers all available memory. Adding memory from
+                 * basic meminfo in addition to memory map causes overlapping
+                 * regions, which leads to duplicate page allocations.
+                 * Basic meminfo is only useful as a fallback if memory map
+                 * is not available (handled at the end of parsing).
+                 */
                 break;
             }
 

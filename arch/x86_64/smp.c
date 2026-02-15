@@ -173,7 +173,8 @@ void smp_init(void) {
         per_cpu_data[i].saved_rsp = 0;
         per_cpu_data[i].saved_cr3 = 0;
         per_cpu_data[i].cpu_index = i;
-        per_cpu_data[i].reserved = 0;
+        per_cpu_data[i].saved_rax = 0;
+        per_cpu_data[i].saved_rdx = 0;
     }
 }
 
