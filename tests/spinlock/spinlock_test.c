@@ -2,6 +2,8 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include "test_spinlock.h"
+#include "kernel/test.h"
 #include "arch/x86_64/smp.h"
 #include "include/spinlock.h"
 #include "include/atomic.h"
@@ -20,6 +22,8 @@ extern uint8_t smp_get_apic_id(void);
 
 /* Test activation flag - set by BSP to signal APs to join tests */
 volatile int spinlock_test_start = 0;
+
+#if CONFIG_TESTS_SPINLOCK
 
 /* Barrier counter - counts CPUs that have reached the barrier */
 static atomic_int test_barrier = 0;
@@ -326,20 +330,20 @@ static int test3_irqsafe_operations(void) {
     asm volatile("pushf\npop %0" : "=rm"(rflags));
 
     /* spin_lock_irqsave should save and disable interrupts */
-    spin_lock_irqsave(&lock, &flags);
+    flags = spin_lock_irqsave(&lock);
 
     /* Check that interrupts are disabled */
     uint64_t rflags_after;
     asm volatile("pushf\npop %0" : "=rm"(rflags_after));
     if (rflags_after & (1 << 9)) {
         test_puts("  FAIL: Interrupts not disabled by irqsave\n");
-        spin_unlock_irqrestore(&lock, &flags);
+        spin_unlock_irqrestore(&lock, flags);
         return -1;
     }
     test_puts("  PASS: Interrupts disabled by irqsave\n");
 
     /* Unlock and restore interrupts */
-    spin_unlock_irqrestore(&lock, &flags);
+    spin_unlock_irqrestore(&lock, flags);
 
     /* Check that interrupt state was restored */
     asm volatile("pushf\npop %0" : "=rm"(rflags_after));
@@ -475,9 +479,9 @@ static int test6_lock_contention(int num_cpus) {
     const int ITERATIONS = 100;
     for (int i = 0; i < ITERATIONS; i++) {
         irq_flags_t flags;
-        spin_lock_irqsave(&test_lock1, &flags);
+        flags = spin_lock_irqsave(&test_lock1);
         atomic_fetch_add(&shared_counter, 1);
-        spin_unlock_irqrestore(&test_lock1, &flags);
+        spin_unlock_irqrestore(&test_lock1, flags);
     }
 
     /* Each CPU counts its iterations */
@@ -789,13 +793,13 @@ static int test10_deadlock_prevention(int num_cpus) {
     for (int round = 0; round < ROUNDS; round++) {
         irq_flags_t flags;
         /* Consistent lock order: lock1 → lock2 */
-        spin_lock_irqsave(&test_lock1, &flags);
+        flags = spin_lock_irqsave(&test_lock1);
         spin_lock(&test_lock2);
 
         atomic_fetch_add(&shared_counter, 1);
 
         spin_unlock(&test_lock2);
-        spin_unlock_irqrestore(&test_lock1, &flags);
+        spin_unlock_irqrestore(&test_lock1, flags);
     }
 
     /* Each CPU records its completion */
@@ -1066,3 +1070,42 @@ int run_spinlock_tests(void) {
 
     return failures;
 }
+
+#endif /* CONFIG_TESTS_SPINLOCK */
+
+/* ============================================================================
+ * Test Wrappers
+ * ============================================================================ */
+
+#if CONFIG_TESTS_SPINLOCK
+void test_spinlock_bsp_setup(void) {
+    /* Keep spinlock_test_start = 0 during AP startup
+     * APs will wait for this flag to be set before joining tests */
+    spinlock_test_start = 0;
+
+    /* Spin lock tests - only run if selected via cmdline */
+    if (test_should_run("spinlock")) {
+        /* Enable spin lock test mode - APs are polling for this flag
+         * Once set, APs will wake from their polling loop and join SMP tests */
+        spinlock_test_start = 1;
+
+        /* Memory barrier to ensure APs see the flag change immediately */
+        asm volatile("" ::: "memory");
+
+        /* Small delay to ensure APs wake up and enter spinlock_test_ap_entry()
+         * This gives APs time to exit their polling loop and start waiting for phase 1 */
+        for (volatile int i = 0; i < 1000000; i++) {
+            asm volatile("pause");
+        }
+
+        test_run_by_name("spinlock");
+    }
+}
+
+/* Note: spinlock_test_ap_entry is already defined above inside CONFIG_TESTS_SPINLOCK block */
+#else
+void test_spinlock_bsp_setup(void) { }
+
+/* Provide empty stub for AP entry when spinlock tests are disabled */
+void spinlock_test_ap_entry(void) { }
+#endif

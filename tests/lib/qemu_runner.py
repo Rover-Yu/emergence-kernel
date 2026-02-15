@@ -203,6 +203,7 @@ class QEMURunner:
             "-M", self.config.qemu_machine,
             "-m", self.config.qemu_memory,
             "-monitor", "none",
+            "-no-reboot",  # Exit instead of rebooting on guest reset/shutdown
             "-smp", str(cpu_count),
             "-cdrom", str(self.config.kernel_iso),
             "-device", "isa-debug-exit,iobase=0xB004,iosize=1"

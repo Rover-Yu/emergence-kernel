@@ -1,8 +1,12 @@
 /* Test that monitor trampoline properly switches CR3 */
 
 #include <stdint.h>
+#include "test_monitor_trampoline.h"
+#include "kernel/test.h"
 #include "arch/x86_64/serial.h"
 #include "kernel/monitor/monitor.h"
+
+#if CONFIG_TESTS_NK_TRAMPOLINE
 
 /* Test: Call monitor from unprivileged mode */
 void test_monitor_call_from_unprivileged(void) {
@@ -74,3 +78,18 @@ void test_monitor_call_from_unprivileged(void) {
 
     serial_puts("[TRAMPOLINE TEST] All tests PASSED\n");
 }
+
+#endif /* CONFIG_TESTS_NK_TRAMPOLINE */
+
+/* ============================================================================
+ * Test Wrapper
+ * ============================================================================ */
+
+#if CONFIG_TESTS_NK_TRAMPOLINE
+void test_monitor_trampoline(void) {
+    serial_puts("KERNEL: Testing monitor trampoline...\n");
+    test_monitor_call_from_unprivileged();
+}
+#else
+void test_monitor_trampoline(void) { }
+#endif

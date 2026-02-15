@@ -40,7 +40,7 @@ class TestConfig:
 
     # QEMU settings
     qemu_timeout: int = 3
-    kvm_enabled: bool = True
+    kvm_enabled: bool = False  # Disabled - causes issues with isa-debug-exit
     qemu_memory: str = "128M"
     qemu_machine: str = "pc"
 

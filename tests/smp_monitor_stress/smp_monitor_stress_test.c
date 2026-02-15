@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include "test_smp_monitor_stress.h"
+#include "kernel/test.h"
 #include "arch/x86_64/serial.h"
 #include "arch/x86_64/smp.h"
 #include "include/spinlock.h"
@@ -20,6 +22,8 @@ static spinlock_t stress_lock = SPIN_LOCK_UNLOCKED;
 
 /* Flag for AP polling (exported for smp.c) */
 volatile int smp_monitor_stress_test_start = 0;
+
+#if CONFIG_TESTS_SMP_MONITOR_STRESS
 
 /* External functions */
 extern void *monitor_pmm_alloc(uint8_t order);
@@ -234,3 +238,23 @@ int run_smp_monitor_stress_tests(void) {
 
     return (errors_detected == 0) ? 0 : -1;
 }
+
+#endif /* CONFIG_TESTS_SMP_MONITOR_STRESS */
+
+/* ============================================================================
+ * Test Wrappers
+ * ============================================================================ */
+
+#if CONFIG_TESTS_SMP_MONITOR_STRESS
+void test_smp_monitor_stress(void) {
+    if (test_should_run("smp_monitor_stress")) {
+        test_run_by_name("smp_monitor_stress");
+    }
+}
+/* Note: smp_monitor_stress_ap_entry is already defined above inside CONFIG_TESTS_SMP_MONITOR_STRESS block */
+#else
+void test_smp_monitor_stress(void) { }
+
+/* Provide empty stub for AP entry when stress tests are disabled */
+void smp_monitor_stress_ap_entry(void) { }
+#endif

@@ -1,13 +1,12 @@
 /* Emergence Kernel - Slab Allocator Tests */
 
 #include <stdint.h>
+#include "test_slab.h"
+#include "kernel/test.h"
 #include "kernel/slab.h"
 #include "arch/x86_64/serial.h"
 
-/* Test configuration */
-#define CONFIG_SLAB_TESTS 1
-
-#if CONFIG_SLAB_TESTS
+#if CONFIG_TESTS_SLAB
 
 /* ============================================================================
  * Test Helper Functions
@@ -250,4 +249,18 @@ int run_slab_tests(void) {
     return failures;
 }
 
-#endif /* CONFIG_SLAB_TESTS */
+#endif /* CONFIG_TESTS_SLAB */
+
+/* ============================================================================
+ * Test Wrapper
+ * ============================================================================ */
+
+#if CONFIG_TESTS_SLAB
+void test_slab(void) {
+    if (test_should_run("slab")) {
+        test_run_by_name("slab");
+    }
+}
+#else
+void test_slab(void) { }
+#endif

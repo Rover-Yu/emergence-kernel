@@ -1,6 +1,8 @@
 /* Emergence Kernel - Nested Kernel Invariants Tests */
 
 #include <stdint.h>
+#include "test_nk_invariants.h"
+#include "kernel/test.h"
 #include "arch/x86_64/serial.h"
 #include "kernel/pcd.h"
 
@@ -175,3 +177,17 @@ int run_nested_kernel_invariants_tests(void) {
 
     return (failures > 0) ? -1 : 0;
 }
+
+/* ============================================================================
+ * Test Wrapper
+ * ============================================================================ */
+
+#if CONFIG_TESTS_NK_INVARIANTS
+void test_nk_invariants(void) {
+    if (test_should_run("nested_kernel_invariants")) {
+        test_run_by_name("nested_kernel_invariants");
+    }
+}
+#else
+void test_nk_invariants(void) { }
+#endif

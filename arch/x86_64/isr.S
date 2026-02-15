@@ -13,7 +13,7 @@
     push %rax
     push %rdx
     mov $0x3F8, %dx
-    mov $'X', %al
+    mov $'I', %al
     out %al, %dx
     pop %rdx
     pop %rax

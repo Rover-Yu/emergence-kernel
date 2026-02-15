@@ -1,6 +1,8 @@
 /* Emergence Kernel - SMP Boot Tests */
 
 #include <stdint.h>
+#include "test_smp.h"
+#include "kernel/test.h"
 #include "arch/x86_64/serial.h"
 #include "arch/x86_64/apic.h"
 #include "arch/x86_64/smp.h"
@@ -125,3 +127,17 @@ int run_smp_tests(void) {
 
     return (failures > 0) ? -1 : 0;
 }
+
+/* ============================================================================
+ * Test Wrapper
+ * ============================================================================ */
+
+#if CONFIG_TESTS_SMP
+void test_smp(void) {
+    if (test_should_run("smp")) {
+        test_run_by_name("smp");
+    }
+}
+#else
+void test_smp(void) { }
+#endif

@@ -1,6 +1,8 @@
 /* Emergence Kernel - APIC Timer Tests */
 
 #include <stdint.h>
+#include "test_timer.h"
+#include "kernel/test.h"
 #include "arch/x86_64/timer.h"
 #include "arch/x86_64/serial.h"
 
@@ -71,3 +73,17 @@ int run_apic_timer_tests(void) {
 
     return 0;
 }
+
+/* ============================================================================
+ * Test Wrapper
+ * ============================================================================ */
+
+#if CONFIG_TESTS_APIC_TIMER
+void test_timer(void) {
+    if (test_should_run("timer")) {
+        test_run_by_name("timer");
+    }
+}
+#else
+void test_timer(void) { }
+#endif

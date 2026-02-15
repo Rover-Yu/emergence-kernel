@@ -49,6 +49,7 @@ CFLAGS += -DCONFIG_TESTS_NK_READONLY_VISIBILITY=$(CONFIG_TESTS_NK_READONLY_VISIB
 CFLAGS += -DCONFIG_TESTS_NK_FAULT_INJECTION=$(CONFIG_TESTS_NK_FAULT_INJECTION)
 CFLAGS += -DCONFIG_TESTS_NK_TRAMPOLINE=$(CONFIG_TESTS_NK_TRAMPOLINE)
 CFLAGS += -DCONFIG_TESTS_NK_INVARIANTS_VERIFY=$(CONFIG_TESTS_NK_INVARIANTS_VERIFY)
+CFLAGS += -DCONFIG_TESTS_SMP_MONITOR_STRESS=$(CONFIG_TESTS_SMP_MONITOR_STRESS)
 
 # Debug configuration options (sorted by kernel.config order)
 CFLAGS += -DCONFIG_DEBUG_SMP_AP=$(CONFIG_DEBUG_SMP_AP)
@@ -135,6 +136,10 @@ MONITOR_TRAMPOLINE_TEST_OBJ := $(BUILD_DIR)/monitor_trampoline_test.o
 SMP_MONITOR_STRESS_TEST_SRC := tests/smp_monitor_stress/smp_monitor_stress_test.c
 SMP_MONITOR_STRESS_TEST_OBJ := $(BUILD_DIR)/smp_monitor_stress_test.o
 
+# NK invariants verify test sources (conditionally compiled)
+NK_INVARIANTS_VERIFY_TEST_SRC := tests/nk_invariants_verify/nk_invariants_verify_test.c
+NK_INVARIANTS_VERIFY_TEST_OBJ := $(BUILD_DIR)/nk_invariants_verify_test.o
+
 # Test sources (reference only, not compiled into kernel)
 # These test files are kept for documentation purposes
 TESTS_DIR := tests
@@ -155,10 +160,16 @@ KERNEL_OBJS := $(patsubst $(KERNEL_DIR)/%.c,$(BUILD_DIR)/kernel_%.o,$(KERNEL_C_S
 # Initialize TESTS_OBJS with reference test sources (currently empty)
 TESTS_OBJS := $(patsubst $(TESTS_DIR)/%.c,$(BUILD_DIR)/test_%.o,$(TESTS_C_SRCS))
 
-# Conditionally include test objects (must be BEFORE OBJS is defined)
-ifeq ($(CONFIG_TESTS_SPINLOCK),1)
+# Always compile tests that have wrappers called from kernel code (provides stubs when disabled)
 TESTS_OBJS += $(SPINLOCK_TEST_OBJ)
-endif
+TESTS_OBJS += $(SMP_MONITOR_STRESS_TEST_OBJ)
+TESTS_OBJS += $(NK_PROTECTION_TEST_OBJ)
+TESTS_OBJS += $(READONLY_VISIBILITY_TEST_OBJ)
+TESTS_OBJS += $(USERMODE_TEST_OBJ)
+TESTS_OBJS += $(NK_INVARIANTS_VERIFY_TEST_OBJ)
+TESTS_OBJS += $(MONITOR_TRAMPOLINE_TEST_OBJ)
+
+# Conditionally include test objects (must be BEFORE OBJS is defined)
 ifeq ($(CONFIG_TESTS_PMM),1)
 TESTS_OBJS += $(PMM_TEST_OBJ)
 endif
@@ -167,9 +178,6 @@ TESTS_OBJS += $(SLAB_TEST_OBJ)
 endif
 ifeq ($(CONFIG_TESTS_APIC_TIMER),1)
 TESTS_OBJS += $(TIMER_TEST_OBJ)
-endif
-ifeq ($(CONFIG_TESTS_NK_FAULT_INJECTION),1)
-TESTS_OBJS += $(NK_PROTECTION_TEST_OBJ)
 endif
 ifeq ($(CONFIG_TESTS_BOOT),1)
 TESTS_OBJS += $(BOOT_TEST_OBJ)
@@ -182,15 +190,6 @@ TESTS_OBJS += $(PCD_TEST_OBJ)
 endif
 ifeq ($(CONFIG_TESTS_NK_INVARIANTS),1)
 TESTS_OBJS += $(NK_INVARIANTS_TEST_OBJ)
-endif
-ifeq ($(CONFIG_TESTS_NK_READONLY_VISIBILITY),1)
-TESTS_OBJS += $(READONLY_VISIBILITY_TEST_OBJ)
-endif
-ifeq ($(CONFIG_TESTS_USERMODE),1)
-TESTS_OBJS += $(USERMODE_TEST_OBJ)
-endif
-ifeq ($(CONFIG_TESTS_SMP_MONITOR_STRESS),1)
-TESTS_OBJS += $(SMP_MONITOR_STRESS_TEST_OBJ)
 endif
 
 # Generated command line object (embedded fallback)
@@ -316,11 +315,10 @@ $(BUILD_DIR)/minilibc_%.o: lib/minilibc/%.c | $(BUILD_DIR)
 	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 
 # Compile spinlock test (from tests/spinlock/) - only if enabled
-ifeq ($(CONFIG_TESTS_SPINLOCK),1)
+# Compile spinlock test (from tests/spinlock/) - ALWAYS compiled (provides stubs when disabled)
 $(SPINLOCK_TEST_OBJ): $(SPINLOCK_TEST_SRC) | $(BUILD_DIR)
 	@echo "  CC      $<"
 	$(Q)$(CC) $(CFLAGS) -c $< -o $@
-endif
 
 # Compile slab allocator test (from tests/slab/) - only if enabled
 ifeq ($(CONFIG_TESTS_SLAB),1)
@@ -343,12 +341,10 @@ $(TIMER_TEST_OBJ): $(TIMER_TEST_SRC) | $(BUILD_DIR)
 	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 endif
 
-# Compile nested kernel fault injection test (from tests/nk_fault_injection/) - only if enabled
-ifeq ($(CONFIG_TESTS_NK_FAULT_INJECTION),1)
+# Compile nested kernel fault injection test (from tests/nk_fault_injection/) - ALWAYS compiled (provides stubs when disabled)
 $(NK_PROTECTION_TEST_OBJ): $(NK_PROTECTION_TEST_SRC) | $(BUILD_DIR)
 	@echo "  CC      $<"
 	$(Q)$(CC) $(CFLAGS) -c $< -o $@
-endif
 
 # Compile boot test (from tests/boot/) - only if enabled
 ifeq ($(CONFIG_TESTS_BOOT),1)
@@ -378,26 +374,30 @@ $(NK_INVARIANTS_TEST_OBJ): $(NK_INVARIANTS_TEST_SRC) | $(BUILD_DIR)
 	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 endif
 
-# Compile read-only visibility test (from tests/readonly_visibility/) - only if enabled
-ifeq ($(CONFIG_TESTS_NK_READONLY_VISIBILITY),1)
+# Compile read-only visibility test (from tests/readonly_visibility/) - ALWAYS compiled (provides stubs when disabled)
 $(READONLY_VISIBILITY_TEST_OBJ): $(READONLY_VISIBILITY_TEST_SRC) | $(BUILD_DIR)
 	@echo "  CC      $<"
 	$(Q)$(CC) $(CFLAGS) -c $< -o $@
-endif
 
-# Compile usermode test (from tests/usermode/) - only if enabled
-ifeq ($(CONFIG_TESTS_USERMODE),1)
+# Compile usermode test (from tests/usermode/) - ALWAYS compiled (provides stubs when disabled)
 $(USERMODE_TEST_OBJ): $(USERMODE_TEST_SRC) | $(BUILD_DIR)
 	@echo "  CC      $<"
 	$(Q)$(CC) $(CFLAGS) -c $< -o $@
-endif
 
-# Compile SMP monitor stress test (from tests/smp_monitor_stress/) - only if enabled
-ifeq ($(CONFIG_TESTS_SMP_MONITOR_STRESS),1)
+# Compile SMP monitor stress test (from tests/smp_monitor_stress/) - ALWAYS compiled (provides stubs when disabled)
 $(SMP_MONITOR_STRESS_TEST_OBJ): $(SMP_MONITOR_STRESS_TEST_SRC) | $(BUILD_DIR)
 	@echo "  CC      $<"
 	$(Q)$(CC) $(CFLAGS) -c $< -o $@
-endif
+
+# Compile monitor trampoline test (from tests/monitor_trampoline/) - ALWAYS compiled (provides stubs when disabled)
+$(MONITOR_TRAMPOLINE_TEST_OBJ): $(MONITOR_TRAMPOLINE_TEST_SRC) | $(BUILD_DIR)
+	@echo "  CC      $<"
+	$(Q)$(CC) $(CFLAGS) -c $< -o $@
+
+# Compile NK invariants verify test (from tests/nk_invariants_verify/) - ALWAYS compiled (provides stubs when disabled)
+$(NK_INVARIANTS_VERIFY_TEST_OBJ): $(NK_INVARIANTS_VERIFY_TEST_SRC) | $(BUILD_DIR)
+	@echo "  CC      $<"
+	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 
 # Compile test C files
 $(BUILD_DIR)/test_%.o: $(TESTS_DIR)/%.c | $(BUILD_DIR)

@@ -11,6 +11,11 @@
 #include "arch/x86_64/cr.h"
 #include "arch/x86_64/idt.h"
 
+/* Test wrapper headers */
+#include "tests/spinlock/test_spinlock.h"
+#include "tests/smp_monitor_stress/test_smp_monitor_stress.h"
+#include "tests/nk_invariants_verify/test_nk_invariants_verify.h"
+
 /* External ACPI functions for getting APIC information */
 extern int acpi_get_apic_count(void);
 extern uint8_t acpi_get_apic_id_by_index(int index);
@@ -349,10 +354,8 @@ void ap_start(void) {
         serial_putc('0' + my_index);
         serial_puts(" switched to unprivileged mode\n");
 
-#if CONFIG_TESTS_NK_INVARIANTS_VERIFY
-        /* Verify Nested Kernel invariants on AP as well */
-        monitor_verify_invariants();
-#endif
+        /* Verify NK invariants on AP as well */
+        test_nk_invariants_verify_ap();
     }
 
     cpu_info[my_index].state = CPU_ONLINE;
@@ -367,29 +370,27 @@ void ap_start(void) {
         asm volatile("pause");
     }
 
-#if CONFIG_SPINLOCK_TESTS
-    /* Poll for spin lock test mode - BSP will set this flag */
+    /* Poll for spin lock test mode - BSP will set this flag
+     * The wrapper handles the CONFIG guard internally */
     extern volatile int spinlock_test_start;
     while (!spinlock_test_start) {
         asm volatile("pause");
     }
 
-    /* Enter test mode - participate in SMP tests */
-    extern void spinlock_test_ap_entry(void);
+    /* Enter test mode - participate in SMP tests
+     * The wrapper is an empty stub when CONFIG_TESTS_SPINLOCK=0 */
     spinlock_test_ap_entry();
-#endif
 
-#if CONFIG_TESTS_SMP_MONITOR_STRESS
-    /* Poll for SMP monitor stress test mode */
+    /* Poll for SMP monitor stress test mode
+     * The wrapper handles the CONFIG guard internally */
     extern volatile int smp_monitor_stress_test_start;
-    extern void smp_monitor_stress_ap_entry(void);
     while (!smp_monitor_stress_test_start) {
         asm volatile("pause");
     }
 
-    /* Enter stress test mode */
+    /* Enter stress test mode
+     * The wrapper is an empty stub when CONFIG_TESTS_SMP_MONITOR_STRESS=0 */
     smp_monitor_stress_ap_entry();
-#endif
 
     /* Halt */
     while (1) { arch_halt(); }

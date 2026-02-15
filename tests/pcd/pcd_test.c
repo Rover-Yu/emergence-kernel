@@ -1,6 +1,8 @@
 /* Emergence Kernel - Page Control Data (PCD) Tests */
 
 #include <stdint.h>
+#include "test_pcd.h"
+#include "kernel/test.h"
 #include "arch/x86_64/serial.h"
 #include "kernel/pcd.h"
 
@@ -102,3 +104,17 @@ int run_pcd_tests(void) {
 
     return (failures > 0) ? -1 : 0;
 }
+
+/* ============================================================================
+ * Test Wrapper
+ * ============================================================================ */
+
+#if CONFIG_TESTS_PCD
+void test_pcd(void) {
+    if (test_should_run("pcd")) {
+        test_run_by_name("pcd");
+    }
+}
+#else
+void test_pcd(void) { }
+#endif

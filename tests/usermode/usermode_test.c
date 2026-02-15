@@ -9,9 +9,13 @@
  */
 
 #include <stdint.h>
+#include "test_usermode.h"
+#include "kernel/test.h"
 #include "arch/x86_64/serial.h"
 #include "arch/x86_64/include/syscall.h"
 #include "arch/x86_64/include/gdt.h"
+
+#if CONFIG_TESTS_USERMODE
 
 /* External functions */
 extern void syscall_init(void);
@@ -124,3 +128,55 @@ int run_usermode_tests(void) {
 
     return (tests_failed > 0) ? -1 : 0;
 }
+
+#endif /* CONFIG_TESTS_USERMODE */
+
+/* ============================================================================
+ * Test Wrappers
+ * ============================================================================ */
+
+#if CONFIG_TESTS_USERMODE
+int test_usermode_prepare(void) {
+    /* Check if usermode test is specifically requested */
+    extern const char *cmdline_get_value(const char *key);
+    const char *test_value = cmdline_get_value("test");
+
+    /* Simple string comparison */
+    int is_usermode = 0;
+    if (test_value) {
+        const char *p = test_value;
+        const char *u = "usermode";
+        while (*u && *p && *p == *u) {
+            p++; u++;
+        }
+        if (*u == '\0' && (*p == '\0' || *p == ' ')) {
+            is_usermode = 1;
+        }
+    }
+
+    if (is_usermode) {
+        serial_puts("KERNEL: MONITOR DISABLED for ring 3 usermode test\n");
+
+        /* Pre-allocate user stack BEFORE switching page tables
+         * PMM is only accessible with boot page tables */
+        void *stack = prealloc_user_stack();
+        if (stack) {
+            serial_puts("KERNEL: User stack pre-allocated at 0x");
+            extern void serial_put_hex(uint64_t);
+            serial_put_hex((uint64_t)stack);
+            serial_puts("\n");
+        }
+        return 1;  /* Usermode test is selected, preparation done */
+    }
+    return 0;  /* Usermode test not selected */
+}
+
+void test_usermode(void) {
+    if (test_should_run("usermode")) {
+        test_run_by_name("usermode");
+    }
+}
+#else
+int test_usermode_prepare(void) { return 0; }
+void test_usermode(void) { }
+#endif

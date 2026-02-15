@@ -563,11 +563,10 @@ int run_minilibc_tests(void) {
 
     return 0;
 }
-#endif  /* CONFIG_MINILIBC_TESTS */
+#endif  /* CONFIG_TESTS_MINILIBC */
 
 /* External test functions */
 extern int run_pmm_tests(void);
-extern int run_minilibc_tests(void);
 extern int run_slab_tests(void);
 extern int run_spinlock_tests(void);
 extern int run_nk_fault_injection_tests(void);
@@ -600,7 +599,7 @@ const test_case_t test_registry[] = {
         .auto_run = 1  /* Auto-run after slab_init() */
     },
 #endif
-#if CONFIG_SPINLOCK_TESTS
+#if CONFIG_TESTS_SPINLOCK
     {
         .name = "spinlock",
         .description = "Spin lock and read-write lock synchronization tests",
@@ -618,7 +617,7 @@ const test_case_t test_registry[] = {
         .auto_run = 1  /* Auto-run after BSP init */
     },
 #endif
-#if CONFIG_NK_FAULT_INJECTION_TESTS
+#if CONFIG_TESTS_NK_FAULT_INJECTION
     {
         .name = "nk_fault_injection",
         .description = "Nested kernel fault injection tests (destructive)",
@@ -681,7 +680,7 @@ const test_case_t test_registry[] = {
         .auto_run = 1  /* Auto-run after kernel init */
     },
 #endif
-#if CONFIG_USERMODE_TEST
+#if CONFIG_TESTS_USERMODE
     {
         .name = "usermode",
         .description = "User mode syscall and ring 3 execution tests",
@@ -1048,3 +1047,17 @@ int test_run_unified(void) {
 
     return failures;
 }
+
+/* ============================================================================
+ * Minilibc Test Wrapper (minilibc tests are embedded in this file)
+ * ============================================================================ */
+
+#if CONFIG_TESTS_MINILIBC
+void test_minilibc(void) {
+    if (test_should_run("minilibc")) {
+        test_run_by_name("minilibc");
+    }
+}
+#else
+void test_minilibc(void) { }
+#endif

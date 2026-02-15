@@ -1,8 +1,12 @@
 /* Emergence Kernel - Read-Only Visibility Tests */
 
 #include <stdint.h>
+#include "test_readonly_visibility.h"
+#include "kernel/test.h"
 #include "arch/x86_64/serial.h"
 #include "kernel/pcd.h"
+
+#if CONFIG_TESTS_NK_READONLY_VISIBILITY
 
 /* External function prototypes */
 extern void serial_puts(const char *str);
@@ -127,3 +131,19 @@ int run_readonly_visibility_tests(void) {
 
     return (failures > 0) ? -1 : 0;
 }
+
+#endif /* CONFIG_TESTS_NK_READONLY_VISIBILITY */
+
+/* ============================================================================
+ * Test Wrapper
+ * ============================================================================ */
+
+#if CONFIG_TESTS_NK_READONLY_VISIBILITY
+void test_readonly_visibility(void) {
+    if (test_should_run("readonly_visibility")) {
+        test_run_by_name("readonly_visibility");
+    }
+}
+#else
+void test_readonly_visibility(void) { }
+#endif

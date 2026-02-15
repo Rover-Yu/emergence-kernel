@@ -1,6 +1,8 @@
 /* Emergence Kernel - Boot Tests */
 
 #include <stdint.h>
+#include "test_boot.h"
+#include "kernel/test.h"
 #include "arch/x86_64/serial.h"
 #include "arch/x86_64/apic.h"
 #include "arch/x86_64/smp.h"
@@ -98,3 +100,17 @@ int run_boot_tests(void) {
 
     return (failures > 0) ? -1 : 0;
 }
+
+/* ============================================================================
+ * Test Wrapper
+ * ============================================================================ */
+
+#if CONFIG_TESTS_BOOT
+void test_boot(void) {
+    if (test_should_run("boot")) {
+        test_run_by_name("boot");
+    }
+}
+#else
+void test_boot(void) { }
+#endif

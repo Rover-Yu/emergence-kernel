@@ -1,8 +1,12 @@
 /* nk_fault_injection_test.c - Nested Kernel Fault Injection Tests */
 
 #include <stdint.h>
+#include "test_nk_fault_injection.h"
+#include "kernel/test.h"
 #include "arch/x86_64/serial.h"
 #include "arch/x86_64/paging.h"
+
+#if CONFIG_TESTS_NK_FAULT_INJECTION
 
 /* External symbols - protected nested kernel regions */
 extern uint64_t boot_pml4[];
@@ -125,3 +129,19 @@ int run_nk_fault_injection_tests(void) {
     serial_puts("========================================\n");
     return -1;
 }
+
+#endif /* CONFIG_TESTS_NK_FAULT_INJECTION */
+
+/* ============================================================================
+ * Test Wrapper
+ * ============================================================================ */
+
+#if CONFIG_TESTS_NK_FAULT_INJECTION
+void test_nk_fault_injection(void) {
+    if (test_should_run("nk_protection")) {
+        test_run_by_name("nk_protection");  /* Never returns */
+    }
+}
+#else
+void test_nk_fault_injection(void) { }
+#endif

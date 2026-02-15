@@ -18,6 +18,22 @@
 #include "kernel/test.h"
 #include "arch/x86_64/include/syscall.h"
 
+/* Test wrapper headers */
+#include "tests/pmm/test_pmm.h"
+#include "tests/slab/test_slab.h"
+#include "tests/spinlock/test_spinlock.h"
+#include "tests/timer/test_timer.h"
+#include "tests/boot/test_boot.h"
+#include "tests/smp/test_smp.h"
+#include "tests/pcd/test_pcd.h"
+#include "tests/minilibc/test_minilibc.h"
+#include "tests/usermode/test_usermode.h"
+#include "tests/nested_kernel_invariants/test_nk_invariants.h"
+#include "tests/readonly_visibility/test_readonly_visibility.h"
+#include "tests/nk_fault_injection/test_nk_fault_injection.h"
+#include "tests/monitor_trampoline/test_monitor_trampoline.h"
+#include "tests/nk_invariants_verify/test_nk_invariants_verify.h"
+
 /* External driver initialization functions */
 extern int serial_driver_init(void);
 
@@ -25,7 +41,6 @@ extern int serial_driver_init(void);
 extern void monitor_init(void);
 extern uint64_t monitor_get_unpriv_cr3(void);
 extern uint64_t monitor_pml4_phys;
-extern void monitor_verify_invariants(void);
 
 /* External per-CPU data for GS-base setup */
 extern per_cpu_data_t per_cpu_data[];
@@ -41,6 +56,7 @@ void kernel_halt(void) {
 void kernel_main(uint32_t multiboot_info_addr) {
     uint8_t color = VGA_COLOR(VGA_COLOR_BLACK, VGA_COLOR_WHITE);
     int cpu_id;
+    int skip_cr3_switch = 0;
 
     /* DEBUG: Print received multiboot info address */
     serial_puts("MAIN: mbi_addr=0x");
@@ -98,12 +114,8 @@ void kernel_main(uint32_t multiboot_info_addr) {
     /* Initialize test framework (parses test= parameter from cmdline) */
     test_framework_init();
 
-#if CONFIG_TESTS_PMM
-    /* PMM Tests */
-    if (test_should_run("pmm")) {
-        test_run_by_name("pmm");
-    }
-#endif /* CONFIG_PMM_TESTS */
+    /* PMM Tests (early - uses pmm_alloc directly) */
+    test_pmm_early();
 
     /* Initialize Slab Allocator (for small object allocation) */
     extern void slab_init(void);
@@ -113,12 +125,8 @@ void kernel_main(uint32_t multiboot_info_addr) {
     extern void pcd_init(void);
     pcd_init();
 
-#if CONFIG_TESTS_SLAB
     /* Slab Allocator Tests */
-    if (test_should_run("slab")) {
-        test_run_by_name("slab");
-    }
-#endif /* CONFIG_SLAB_TESTS */
+    test_slab();
 
     /* BSP specific initialization - must complete BEFORE starting APs */
     /* Get CPU ID first to determine if we're BSP or AP */
@@ -131,9 +139,7 @@ void kernel_main(uint32_t multiboot_info_addr) {
         serial_puts("BSP: Initializing...\n");
         idt_init();
         lapic_init();
-        /* smp_init() calls smp_start_all_aps() which starts APs
-         * This is WRONG - smp_init should only be called at top level, not here
-         * Remove smp_init() call from BSP block - APs will be started by main() */        serial_puts("BSP: Initialization complete\n");
+        serial_puts("BSP: Initialization complete\n");
     }
 
     /* Print CPU boot message in English */
@@ -149,159 +155,64 @@ void kernel_main(uint32_t multiboot_info_addr) {
         ipi_driver_init();
 
         /* Initialize nested kernel monitor
-         * Only disable monitor for usermode tests to allow ring 3 transition */
+         * test_usermode_prepare() handles special setup for usermode tests:
+         * - Disables monitor init when running usermode test
+         * - Pre-allocates user stack before CR3 switch
+         */
         serial_puts("KERNEL: Initializing monitor...\n");
-#if CONFIG_TESTS_USERMODE
-        /* Check if usermode test is specifically requested */
-        extern const char *cmdline_get_value(const char *key);
-        const char *test_value = cmdline_get_value("test");
-
-        /* Simple string comparison */
-        int is_usermode = 0;
-        if (test_value) {
-            const char *p = test_value;
-            const char *u = "usermode";
-            while (*u && *p && *p == *u) {
-                p++; u++;
-            }
-            if (*u == '\0' && (*p == '\0' || *p == ' ')) {
-                is_usermode = 1;
-            }
-        }
-
-        if (is_usermode) {
-            serial_puts("KERNEL: MONITOR DISABLED for ring 3 usermode test\n");
-        } else {
+        skip_cr3_switch = test_usermode_prepare();
+        if (!skip_cr3_switch) {
             monitor_init();
         }
-#else
-        monitor_init();
-#endif
 
-        /* Pre-allocate user stack BEFORE switching page tables
-         * PMM is only accessible with boot page tables */
-#if CONFIG_TESTS_USERMODE
-        extern void *prealloc_user_stack(void);
-        void *stack = prealloc_user_stack();
-        if (stack) {
-            serial_puts("KERNEL: User stack pre-allocated at 0x");
-            extern void serial_put_hex(uint64_t);
-            serial_put_hex((uint64_t)stack);
-            serial_puts("\n");
-        }
-#endif
+        /* Switch to unprivileged page tables (unless usermode test is running) */
+        if (!skip_cr3_switch) {
+            uint64_t unpriv_cr3 = monitor_get_unpriv_cr3();
+            if (unpriv_cr3 != 0) {
+                serial_puts("KERNEL: Switching to unprivileged mode\n");
 
-        /* TEMPORARY: Skip CR3 switch to test ring 3 with boot page tables (full access)
-         * This tests whether the triple fault is caused by nested kernel page tables
-         * or by something else (GDT, TSS, syscall mechanism, etc.) */
-#if !defined(CONFIG_TESTS_USERMODE) || !CONFIG_TESTS_USERMODE
-        /* Switch to unprivileged page tables */
-        uint64_t unpriv_cr3 = monitor_get_unpriv_cr3();
-        if (unpriv_cr3 != 0) {
-            serial_puts("KERNEL: Switching to unprivileged mode\n");
+                /* Enable write protection enforcement */
+                /* Set CR0.WP=1 so outer kernel cannot modify read-only PTEs */
+                uint64_t cr0 = arch_cr0_read();
+                cr0 |= (1 << 16);  /* Set CR0.WP bit */
+                arch_cr0_write(cr0);
+                serial_puts("KERNEL: CR0.WP enabled (write protection enforced)\n");
 
-            /* Enable write protection enforcement */
-            /* Set CR0.WP=1 so outer kernel cannot modify read-only PTEs */
-            uint64_t cr0 = arch_cr0_read();
-            cr0 |= (1 << 16);  /* Set CR0.WP bit */
-            arch_cr0_write(cr0);
-            serial_puts("KERNEL: CR0.WP enabled (write protection enforced)\n");
+                /* Switch to unprivileged page tables
+                 * The monitor has set up these tables with proper U/S bits
+                 * User code pages are marked as user-accessible (U/S=1) */
+                arch_cr3_write(unpriv_cr3);
+                serial_puts("KERNEL: Page table switch complete\n");
 
-            /* Switch to unprivileged page tables
-             * The monitor has set up these tables with proper U/S bits
-             * User code pages are marked as user-accessible (U/S=1) */
-            arch_cr3_write(unpriv_cr3);
-            serial_puts("KERNEL: Page table switch complete\n");
+                /* Debug: Verify user program page is accessible after CR3 switch */
+                extern void user_program_start(void);
+                uint64_t user_prog_addr = (uint64_t)user_program_start;
+                serial_puts("KERNEL: Verifying user program at 0x");
+                extern void serial_put_hex(uint64_t);
+                serial_put_hex(user_prog_addr);
+                serial_puts("\n");
 
-            /* Debug: Verify user program page is accessible after CR3 switch */
-            extern void user_program_start(void);
-            uint64_t user_prog_addr = (uint64_t)user_program_start;
-            serial_puts("KERNEL: Verifying user program at 0x");
-            extern void serial_put_hex(uint64_t);
-            serial_put_hex(user_prog_addr);
-            serial_puts("\n");
-
-#if CONFIG_TESTS_NK_INVARIANTS_VERIFY
-            /* Verify all Nested Kernel invariants (including CR0.WP) */
-            monitor_verify_invariants();
-#endif
+                /* Verify NK invariants after CR3 switch */
+                test_nk_invariants_verify();
 
 #if CONFIG_DEBUG_PCD_STATS
-            /* Dump PCD statistics for debugging */
-            extern void pcd_dump_stats(void);
-            pcd_dump_stats();
+                /* Dump PCD statistics for debugging */
+                extern void pcd_dump_stats(void);
+                pcd_dump_stats();
 #endif
 
-#if CONFIG_TESTS_PMM
-            /* PMM Tests - now running after monitor initialization
-             * Uses monitor_pmm_alloc() for proper PCD enforcement */
-            serial_puts("[ PMM tests ] Running allocation tests (via monitor)...\n");
+                /* PMM Tests via monitor (uses monitor_pmm_alloc) */
+                test_pmm_via_monitor();
 
-            extern void *monitor_pmm_alloc(uint8_t order);
-            extern void monitor_pmm_free(void *addr, uint8_t order);
-
-            /* DEBUG: Before first allocation */
-            serial_puts("[ PMM tests ] About to call monitor_pmm_alloc(0)...\n");
-
-            /* Test 1: Single page allocation */
-            void *page1 = monitor_pmm_alloc(0);
-
-            serial_puts("[ PMM tests ] First alloc returned, page1 = 0x");
-            extern void serial_put_hex(uint64_t value);
-            serial_put_hex((uint64_t)page1);
-            serial_puts("\n");
-
-            void *page2 = monitor_pmm_alloc(0);
-            serial_puts("[ PMM tests ] Allocated page1 at 0x");
-            serial_put_hex((uint64_t)page1);
-            serial_puts(", page2 at 0x");
-            serial_put_hex((uint64_t)page2);
-            serial_puts("\n");
-
-            /* Test 2: Multi-page allocation (order 3 = 8 pages = 32KB) */
-            void *block = monitor_pmm_alloc(3);
-            serial_puts("[ PMM tests ] Allocated 32KB block at 0x");
-            serial_put_hex((uint64_t)block);
-            serial_puts("\n");
-
-            /* Test 3: Free and coalesce */
-            monitor_pmm_free(page1, 0);
-            monitor_pmm_free(page2, 0);
-            serial_puts("[ PMM tests ] Freed pages (buddy coalescing)\n");
-
-            /* Test 4: Statistics */
-            extern uint64_t pmm_get_free_pages(void);
-            extern uint64_t pmm_get_total_pages(void);
-            uint64_t free = pmm_get_free_pages();
-            uint64_t total = pmm_get_total_pages();
-            serial_puts("[ PMM tests ] Free: ");
-            serial_put_hex(free);
-            serial_puts(" / Total: ");
-            serial_put_hex(total);
-            serial_puts("\n");
-
-            /* Test 5: Allocate adjacent pages to verify they were coalesced */
-            void *page3 = monitor_pmm_alloc(1);  /* Request 2 pages */
-            serial_puts("[ PMM tests ] Allocated 2-page block at 0x");
-            serial_put_hex((uint64_t)page3);
-            serial_puts(" (should be same as page1 if coalesced)\n");
-
-            serial_puts("[ PMM tests ] Tests complete\n");
-#endif /* CONFIG_PMM_TESTS */
-
-#if CONFIG_NK_TRAMPOLINE_TEST
-            /* Test monitor trampoline CR3 switching */
-            serial_puts("KERNEL: Testing monitor trampoline...\n");
-            extern void test_monitor_call_from_unprivileged(void);
-            test_monitor_call_from_unprivileged();
-#endif /* CONFIG_NK_TRAMPOLINE_TEST */
+                /* Monitor trampoline test */
+                test_monitor_trampoline();
+            } else {
+                serial_puts("KERNEL: Monitor initialization failed\n");
+            }
         } else {
-            serial_puts("KERNEL: Monitor initialization failed\n");
+            /* Usermode tests need full access for ring 3 transition testing */
+            serial_puts("KERNEL: Skipping CR3 switch for usermode tests\n");
         }
-#else
-        /* Usermode tests need full access for ring 3 transition testing */
-        serial_puts("KERNEL: Skipping CR3 switch for usermode tests\n");
-#endif
 
         /* Enable interrupts */
         enable_interrupts_raw();
@@ -312,13 +223,6 @@ void kernel_main(uint32_t multiboot_info_addr) {
         /* Mark BSP as ready */
         smp_mark_cpu_ready(0);
 
-#if CONFIG_TESTS_SPINLOCK
-        /* Keep spinlock_test_start = 0 during AP startup
-         * APs will wait for this flag to be set before joining tests */
-        extern volatile int spinlock_test_start;
-        spinlock_test_start = 0;
-#endif
-
         /* Start all APs */
         serial_puts("SMP: Starting APs...\n");
         serial_unlock();
@@ -328,89 +232,35 @@ void kernel_main(uint32_t multiboot_info_addr) {
          * This allows the APIC timer to generate interrupts */
         enable_interrupts();
 
-#if CONFIG_TESTS_SPINLOCK
-        /* Spin lock tests - only run if selected via cmdline */
-        if (test_should_run("spinlock")) {
-            /* Enable spin lock test mode - APs are polling for this flag
-             * Once set, APs will wake from their polling loop and join SMP tests */
-            extern volatile int spinlock_test_start;
-            spinlock_test_start = 1;
+        /* Spinlock tests (BSP setup - handles spinlock_test_start flag) */
+        test_spinlock_bsp_setup();
 
-            /* Memory barrier to ensure APs see the flag change immediately */
-            asm volatile("" ::: "memory");
-
-            /* Small delay to ensure APs wake up and enter spinlock_test_ap_entry()
-             * This gives APs time to exit their polling loop and start waiting for phase 1 */
-            for (volatile int i = 0; i < 1000000; i++) {
-                asm volatile("pause");
-            }
-
-            test_run_by_name("spinlock");
-        }
-#endif
-
-#if CONFIG_TESTS_APIC_TIMER
         /* APIC Timer Tests - run after APs are ready */
-        if (test_should_run("timer")) {
-            test_run_by_name("timer");
-        }
-#endif
+        test_timer();
 
-#if CONFIG_TESTS_NK_FAULT_INJECTION
-        /* NK protection tests - manual only, run if explicitly selected */
-        if (test_should_run("nk_protection")) {
-            test_run_by_name("nk_protection");  /* Never returns */
-        }
-#endif
+        /* NK protection tests - manual only */
+        test_nk_fault_injection();
 
-#if CONFIG_TESTS_BOOT
-        /* Boot tests - manual only, run if explicitly selected */
-        if (test_should_run("boot")) {
-            test_run_by_name("boot");
-        }
-#endif
+        /* Boot tests */
+        test_boot();
 
-#if CONFIG_TESTS_SMP
-        /* SMP tests - manual only, run if explicitly selected */
-        if (test_should_run("smp")) {
-            test_run_by_name("smp");
-        }
-#endif
+        /* SMP tests */
+        test_smp();
 
-#if CONFIG_TESTS_PCD
-        /* PCD tests - manual only, run if explicitly selected */
-        if (test_should_run("pcd")) {
-            test_run_by_name("pcd");
-        }
-#endif
+        /* PCD tests */
+        test_pcd();
 
-#if CONFIG_TESTS_NK_INVARIANTS
-        /* Nested Kernel invariants tests - manual only, run if explicitly selected */
-        if (test_should_run("nested_kernel_invariants")) {
-            test_run_by_name("nested_kernel_invariants");
-        }
-#endif
+        /* Nested Kernel invariants tests */
+        test_nk_invariants();
 
-#if CONFIG_TESTS_NK_READONLY_VISIBILITY
-        /* Read-only visibility tests - manual only, run if explicitly selected */
-        if (test_should_run("readonly_visibility")) {
-            test_run_by_name("readonly_visibility");
-        }
-#endif
+        /* Read-only visibility tests */
+        test_readonly_visibility();
 
-#if CONFIG_TESTS_MINILIBC
-        /* Minilibc string library tests - auto-run if explicitly selected */
-        if (test_should_run("minilibc")) {
-            test_run_by_name("minilibc");
-        }
-#endif
+        /* Minilibc string library tests */
+        test_minilibc();
 
-#if CONFIG_TESTS_USERMODE
-        /* User mode tests - manual only, run if explicitly selected */
-        if (test_should_run("usermode")) {
-            test_run_by_name("usermode");
-        }
-#endif
+        /* User mode tests */
+        test_usermode();
 
         /* Run unified tests if test=unified was specified */
         test_run_unified();
