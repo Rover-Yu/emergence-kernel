@@ -15,7 +15,7 @@
  */
 static inline uint64_t arch_msr_read(uint32_t msr) {
     uint32_t low, high;
-    asm volatile ("rdmsr" : "=a"(low), "=d"(high) : "c"(msr));
+    asm volatile ("rdmsr" : "=a"(low), "=d"(high) : "c"(msr) : "memory");
     return ((uint64_t)high << 32) | low;
 }
 
@@ -29,7 +29,7 @@ static inline uint64_t arch_msr_read(uint32_t msr) {
 static inline void arch_msr_write(uint32_t msr, uint64_t value) {
     uint32_t low = value & 0xFFFFFFFF;
     uint32_t high = value >> 32;
-    asm volatile ("wrmsr" : : "c"(msr), "a"(low), "d"(high));
+    asm volatile ("wrmsr" : : "c"(msr), "a"(low), "d"(high) : "memory");
 }
 
 #endif /* EMERGENCE_ARCH_X86_64_MSR_H */

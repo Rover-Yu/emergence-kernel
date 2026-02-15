@@ -4,6 +4,7 @@
 #include "arch/x86_64/include/gdt.h"
 #include "serial.h"
 #include "kernel/monitor/monitor.h"  /* For g_unpriv_pd_ptr */
+#include "include/barrier.h"
 
 /* External: kernel stack top from boot.S */
 extern uint64_t nk_boot_stack_top;
@@ -55,12 +56,12 @@ void inline_user_program(void) {
         "movl $1, %0\n"          /* Mark success */
         : "=m"(syscall_worked)
         : "r"(msg)
-        : "rax", "rdi", "rsi", "rdx", "rcx", "r11", "memory"
+        : "rax", "rdi", "rsi", "rdx", "rcx", "r11", "memory", "cc"
     );
 
     /* Infinite loop after successful syscall */
     while (1) {
-        __asm__ volatile ("pause");
+        cpu_relax();
     }
 }
 

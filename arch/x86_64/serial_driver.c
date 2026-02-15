@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include "kernel/device.h"
 #include "arch/x86_64/io.h"
+#include "include/barrier.h"
 
 /* Device type IDs for matching */
 #define DEVICE_TYPE_SERIAL_ID    0x0001  /* Serial port device type */
@@ -35,7 +36,7 @@ static volatile int serial_lock = 0;
 
 static void serial_lock_acquire(void) {
     while (__sync_lock_test_and_set(&serial_lock, 1)) {
-        asm volatile("pause");
+        cpu_relax();
     }
 }
 

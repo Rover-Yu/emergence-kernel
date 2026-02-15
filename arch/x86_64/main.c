@@ -8,6 +8,7 @@
 #include "arch/x86_64/apic.h"
 #include "arch/x86_64/acpi.h"
 #include "arch/x86_64/idt.h"
+#include "arch/x86_64/cpu.h"
 #include "arch/x86_64/cr.h"
 #include "arch/x86_64/timer.h"
 #include "arch/x86_64/ipi.h"
@@ -35,7 +36,7 @@ extern per_cpu_data_t per_cpu_data[];
 /* Architecture-independent halt function */
 void kernel_halt(void) {
     while (1) {
-        asm volatile ("hlt");
+        arch_halt();
     }
 }
 
@@ -238,7 +239,7 @@ void kernel_main(uint32_t multiboot_info_addr) {
         enable_interrupts_raw();
 
         /* Disable interrupts for AP startup */
-        asm volatile ("cli");
+        disable_interrupts();
 
         /* Mark BSP as ready */
         smp_mark_cpu_ready(0);

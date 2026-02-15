@@ -366,14 +366,14 @@ void ap_start(void) {
 
     /* Small delay to ensure BSP sees we're ready */
     for (volatile int i = 0; i < 1000; i++) {
-        asm volatile("pause");
+        cpu_relax();
     }
 
     /* Poll for spin lock test mode - BSP will set this flag
      * The wrapper handles the CONFIG guard internally */
     extern volatile int spinlock_test_start;
     while (!spinlock_test_start) {
-        asm volatile("pause");
+        cpu_relax();
     }
 
     /* Enter test mode - participate in SMP tests
@@ -384,7 +384,7 @@ void ap_start(void) {
      * The wrapper handles the CONFIG guard internally */
     extern volatile int nk_smp_monitor_stress_test_start;
     while (!nk_smp_monitor_stress_test_start) {
-        asm volatile("pause");
+        cpu_relax();
     }
 
     /* Enter stress test mode

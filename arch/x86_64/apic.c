@@ -4,6 +4,7 @@
 #include "arch/x86_64/apic.h"
 #include "arch/x86_64/io.h"
 #include "arch/x86_64/msr.h"
+#include "include/barrier.h"
 
 /* APIC version register */
 #define LAPIC_VER 0x030
@@ -38,7 +39,7 @@ uint32_t lapic_read(uint32_t offset) {
     uint32_t value;
 
     /* Memory barrier before MMIO read */
-    asm volatile ("mfence" ::: "memory");
+    smp_mb();
 
     /* Explicit volatile load with "+m" constraint to prevent caching */
     asm volatile ("movl %1, %0"
@@ -47,7 +48,7 @@ uint32_t lapic_read(uint32_t offset) {
                   : "memory");
 
     /* Memory barrier after MMIO read */
-    asm volatile ("mfence" ::: "memory");
+    smp_mb();
 
     return value;
 }
@@ -65,7 +66,7 @@ void lapic_write(uint32_t offset, uint32_t value) {
     volatile uint32_t *addr = (volatile uint32_t *)((char *)lapic_base + offset);
 
     /* Memory barrier before MMIO write */
-    asm volatile ("mfence" ::: "memory");
+    smp_mb();
 
     /* Explicit volatile store with "+m" constraint to ensure write reaches device */
     asm volatile ("movl %0, %1"
@@ -74,7 +75,7 @@ void lapic_write(uint32_t offset, uint32_t value) {
                   : "memory");
 
     /* Memory barrier after MMIO write */
-    asm volatile ("mfence" ::: "memory");
+    smp_mb();
 }
 
 /**
@@ -121,19 +122,19 @@ void lapic_init(void) {
      * Without this, all APIC register reads return 0. */
 
     /* Flush cache before write */
-    asm volatile ("mfence" ::: "memory");
+    smp_mb();
 
     lapic_write(LAPIC_SVR, 0x100 | 0xFF);  /* Enable + spurious vector */
 
     /* Flush cache after write */
-    asm volatile ("mfence" ::: "memory");
+    smp_mb();
 
     /* Memory fence to ensure SVR write completes before reading */
-    asm volatile ("mfence" ::: "memory");
+    smp_mb();
 
     /* Small delay to let APIC initialize */
     for (volatile int i = 0; i < 1000; i++) {
-        asm volatile ("pause");
+        cpu_relax();
     }
 
     /* Read APIC version */
@@ -210,7 +211,7 @@ int lapic_wait_for_ipi(void) {
             /* Delivery complete */
             return 0;
         }
-        asm volatile ("pause");
+        cpu_relax();
     }
 
     return -1;  /* Timeout */
@@ -224,7 +225,7 @@ static void pit_delay_ms(uint32_t ms) {
     volatile int dummy;
     for (volatile uint32_t i = 0; i < ms * 1000; i++) {
         dummy = i;  /* Prevent optimization */
-        asm volatile ("pause");
+        cpu_relax();
     }
     (void)dummy;  /* Prevent unused warning */
 }
