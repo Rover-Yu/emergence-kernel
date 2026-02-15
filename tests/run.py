@@ -30,114 +30,86 @@ from qemu_runner import QEMURunner
 from output import TerminalOutput, ANSI
 
 
-class TestFilter:
-    """Filter QEMU serial output to show only test names and results."""
+class TestResult:
+    """Represents a single test result."""
+    def __init__(self, name: str, passed: bool):
+        self.name = name
+        self.passed = passed
 
-    # Markers for test output
-    TEST_START_RE = re.compile(r'\[TEST\] Running test: (\S+)')
+
+class TestFilter:
+    """Filter QEMU serial output to show only test results in pretty format."""
+
+    # Regex patterns for test results
     TEST_PASSED_RE = re.compile(r'\[TEST\] PASSED: (\S+)')
     TEST_FAILED_RE = re.compile(r'\[TEST\] FAILED: (\S+)')
-    TEST_HEADER_RE = re.compile(r'=+.*Test Suite=+')
-    CSV_HEADER_RE = re.compile(r'CSV TEST LIST EXECUTION')
-    UNIFIED_PASSED_RE = re.compile(r'UNIFIED: ALL TESTS PASSED')
-    UNIFIED_FAILED_RE = re.compile(r'UNIFIED: SOME TESTS FAILED')
-    SUMMARY_RE = re.compile(r'=+.*Summary=+')
-
-    # Kernel boot markers (to show initial boot progress)
-    KERNEL_INIT_RE = re.compile(
-        r'\s*(' + '|'.join([
-            r'KERNEL: [A-Z].+',
-            r'SMP: [A-Z].+',
-            r'PMM: [A-Z].+',
-            r'MONITOR: [A-Z].+',
-            r'CMDLINE: [A-Z].+',
-            r'Multiboot: [A-Z].+',
-        ]) + r')'
-    )
 
     def __init__(self, verbose: bool = False):
         self.verbose = verbose
-        self.in_test_suite = False
-        self.test_name = None
-        self.last_test = None
-        self.buffer = []
-
-    def _should_print_line(self, line: str) -> bool:
-        """Check if line should be printed (not filtered)."""
-        # Always print kernel init markers in verbose mode
-        if self.verbose and self.KERNEL_INIT_RE.match(line):
-            return True
-
-        # Track when we're in a test suite
-        if self.TEST_HEADER_RE.search(line) or self.CSV_HEADER_RE.search(line):
-            self.in_test_suite = True
-            return True  # Print test suite headers
-
-        # Always print summary markers
-        if self.SUMMARY_RE.search(line):
-            return True
-
-        # Track test execution
-        if self.TEST_START_RE.search(line):
-            match = self.TEST_START_RE.search(line)
-            if match:
-                self.test_name = match.group(1)
-                self.in_test_suite = True
-                return True  # Print test start markers
-
-        # Always print test results
-        if self.TEST_PASSED_RE.search(line) or self.TEST_FAILED_RE.search(line):
-            return True
-
-        # Always print unified summary
-        if self.UNIFIED_PASSED_RE.search(line) or self.UNIFIED_FAILED_RE.search(line):
-            return True
-
-        # Filter everything else
-        return False
-
-    def filter_line(self, line: str) -> str:
-        """Filter a line, returning empty string if filtered out."""
-        if self._should_print_line(line):
-            # Format test results with colored status
-            match = self.TEST_PASSED_RE.search(line)
-            if match:
-                status = ANSI.wrap("PASS", ANSI.GREEN)
-                test_name = match.group(1)
-                return f"{test_name}: {status}"
-            match = self.TEST_FAILED_RE.search(line)
-            if match:
-                status = ANSI.wrap("FAIL", ANSI.RED)
-                test_name = match.group(1)
-                return f"{test_name}: {status}"
-            return line
-        return ""
+        self.results: list[TestResult] = []
+        self.terminal = TerminalOutput()
 
     def filter(self, text: str) -> str:
-        """Filter complete text output."""
+        """Filter complete text output and return pretty formatted results."""
         lines = text.split('\n')
-        filtered_lines = []
 
         for line in lines:
-            filtered = self.filter_line(line)
-            if filtered:  # Keep non-empty filtered lines
-                filtered_lines.append(filtered)
-            elif filtered.strip():  # Keep non-empty lines after filtering
-                filtered_lines.append(line)
+            # Check for PASSED
+            match = self.TEST_PASSED_RE.search(line)
+            if match:
+                test_name = match.group(1)
+                self.results.append(TestResult(test_name, True))
 
-        # Join with newlines and ensure trailing newline
-        result = '\n'.join(filtered_lines)
-        if result and not result.endswith('\n'):
-            result += '\n'
-        return result
+            # Check for FAILED
+            match = self.TEST_FAILED_RE.search(line)
+            if match:
+                test_name = match.group(1)
+                self.results.append(TestResult(test_name, False))
 
-    def flush(self):
-        """Flush any buffered output."""
-        if self.buffer:
-            output = ''.join(self.buffer)
-            sys.stdout.write(output)
-            sys.stdout.flush()
-            self.buffer = []
+        return self._format_output()
+
+    def _format_output(self) -> str:
+        """Format test results into pretty output."""
+        if not self.results:
+            return ""
+
+        lines = []
+        width = 50
+
+        # Header
+        lines.append("")
+        lines.append(ANSI.wrap("=" * width, ANSI.BOLD))
+        lines.append(ANSI.wrap("  Test Results", ANSI.BOLD))
+        lines.append(ANSI.wrap("=" * width, ANSI.BOLD))
+        lines.append("")
+
+        # Results
+        for result in self.results:
+            if result.passed:
+                status = ANSI.wrap("PASS", ANSI.GREEN)
+            else:
+                status = ANSI.wrap("FAIL", ANSI.RED)
+            lines.append(f"  {result.name}: {status}")
+
+        # Summary
+        passed = sum(1 for r in self.results if r.passed)
+        failed = len(self.results) - passed
+
+        lines.append("")
+        lines.append(ANSI.wrap("-" * width, ANSI.DIM))
+        lines.append("")
+
+        if failed == 0:
+            summary = ANSI.wrap(f"  All {len(self.results)} tests passed", ANSI.GREEN)
+        else:
+            summary = f"  {ANSI.wrap(str(passed), ANSI.GREEN)} passed, {ANSI.wrap(str(failed), ANSI.RED)} failed"
+        lines.append(summary)
+
+        lines.append("")
+        lines.append(ANSI.wrap("=" * width, ANSI.BOLD))
+        lines.append("")
+
+        return '\n'.join(lines) + '\n'
 
 
 def main() -> int:
@@ -172,11 +144,6 @@ def main() -> int:
         help="Enable verbose output (show full kernel serial output)"
     )
     parser.add_argument(
-        "--quiet",
-        action="store_true",
-        help="Suppress test start messages (still shows test results)"
-    )
-    parser.add_argument(
         "--real-time",
         action="store_true",
         help="Enable real-time output streaming (for debugging)"
@@ -190,7 +157,7 @@ def main() -> int:
         qemu_timeout=args.timeout,
         cpu_count=args.cpus,
         debug_mode=args.debug,
-        verbose=args.verbose,  # Pass verbose to config
+        verbose=args.verbose,
         keep_output=False,
         real_time_output=args.real_time,
     )
@@ -212,10 +179,9 @@ def main() -> int:
     start_time = time.time()
 
     # Suppress real-time output unless --real-time is explicitly requested
-    # This allows us to filter/print the output after capture
     original_quiet = config.quiet
     if not args.real_time:
-        config.quiet = True  # Suppress real-time callback
+        config.quiet = True
 
     # Use run_qemu_direct (command line is embedded in ISO via grub.cfg)
     output_content, exit_code = runner.run_qemu_direct(
@@ -239,7 +205,6 @@ def main() -> int:
         sys.stdout.flush()
 
     # Return 0 for success (matching original Makefile behavior: || exit 0)
-    # Exit code 124 indicates timeout (Python subprocess.TimeoutExpired)
     return 0 if exit_code != 124 else exit_code
 
 

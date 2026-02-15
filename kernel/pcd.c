@@ -4,6 +4,7 @@
 #include "kernel/pmm.h"
 #include "arch/x86_64/smp.h"
 #include "arch/x86_64/serial.h"
+#include "arch/x86_64/multiboot2.h"
 
 /* External symbols for kernel region */
 extern char _kernel_start[];
@@ -85,7 +86,9 @@ static inline bool pcd_is_managed(uint64_t phys_addr) {
  * for outer kernel use.
  */
 void pcd_init(void) {
-    serial_puts("PCD: Initializing Page Control Data system\n");
+    int quiet = kernel_is_quiet();
+
+    if (!quiet) serial_puts("PCD: Initializing Page Control Data system\n");
 
     /* Initialize lock */
     spin_lock_init(&pcd_state.lock);
@@ -114,11 +117,13 @@ void pcd_init(void) {
         return;
     }
 
-    serial_puts("PCD: Allocating ");
-    serial_put_hex(pcd_array_size);
-    serial_puts(" bytes for PCD array (order ");
-    serial_putc('0' + pcd_order);
-    serial_puts(")\n");
+    if (!quiet) {
+        serial_puts("PCD: Allocating ");
+        serial_put_hex(pcd_array_size);
+        serial_puts(" bytes for PCD array (order ");
+        serial_putc('0' + pcd_order);
+        serial_puts(")\n");
+    }
 
     /* Allocate PCD array from PMM (chicken-and-egg solved!) */
     irq_flags_t flags = spin_lock_irqsave(&pcd_state.lock);
@@ -144,11 +149,13 @@ void pcd_init(void) {
     pcd_state.initialized = true;
     spin_unlock_irqrestore(&pcd_state.lock, flags);
 
-    serial_puts("PCD: Managing ");
-    serial_put_hex(total_pages);
-    serial_puts(" pages (");
-    serial_put_hex(total_pages * PAGE_SIZE);
-    serial_puts(" bytes)\n");
+    if (!quiet) {
+        serial_puts("PCD: Managing ");
+        serial_put_hex(total_pages);
+        serial_puts(" pages (");
+        serial_put_hex(total_pages * PAGE_SIZE);
+        serial_puts(" bytes)\n");
+    }
 
     /* Mark kernel code region as NK_NORMAL */
     uint64_t kernel_start = (uint64_t)_kernel_start;
@@ -156,7 +163,7 @@ void pcd_init(void) {
     pcd_mark_region(kernel_start, kernel_end - kernel_start, PCD_TYPE_NK_NORMAL);
 
     /* Mark nested kernel stacks as NK_NORMAL (monitor-owned, read-only for outer kernel) */
-    serial_puts("PCD: Marking nested kernel stacks as NK_NORMAL\n");
+    if (!quiet) serial_puts("PCD: Marking nested kernel stacks as NK_NORMAL\n");
 
     /* Nested kernel boot stack (16 KiB in boot.S) */
     uint64_t nk_boot_stack_start = (uint64_t)nk_boot_stack_bottom;
@@ -169,7 +176,7 @@ void pcd_init(void) {
     pcd_mark_region(trampoline_stack_start, trampoline_stack_size, PCD_TYPE_NK_NORMAL);
 
     /* Mark outer kernel CPU stacks as OK_NORMAL for outer kernel use */
-    serial_puts("PCD: Marking outer kernel CPU stacks as OK_NORMAL\n");
+    if (!quiet) serial_puts("PCD: Marking outer kernel CPU stacks as OK_NORMAL\n");
 
     /* ok_cpu_stacks is defined in smp.c - we need to get its address */
     extern uint8_t ok_cpu_stacks[];
@@ -178,7 +185,7 @@ void pcd_init(void) {
     uint64_t ok_stacks_size = SMP_MAX_CPUS * CPU_STACK_SIZE;
     pcd_mark_region(ok_stacks_start, ok_stacks_size, PCD_TYPE_OK_NORMAL);
 
-    serial_puts("PCD: Initialized successfully\n");
+    if (!quiet) serial_puts("PCD: Initialized successfully\n");
 }
 
 /**

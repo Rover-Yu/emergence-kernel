@@ -66,6 +66,12 @@ static void parse_cmdline(multiboot_tag_cmdline_t *tag) {
     serial_puts("\n");
 }
 
+/* Check if kernel is in quiet mode (tests are running) */
+int kernel_is_quiet(void) {
+    /* If tests= parameter is present, we're in test mode and should suppress verbose output */
+    return cmdline_get_value("tests") != NULL;
+}
+
 /* Simple key-value parser for cmdline */
 /* Format: key1=value1 key2=value2 or key1="quoted value" */
 const char *cmdline_get_value(const char *key) {
@@ -143,8 +149,9 @@ static void parse_memory_map(multiboot_tag_mmap_t *tag) {
     uint64_t total_pages = 0;
     uint64_t usable_pages = 0;
     int i = 0;
+    int quiet = kernel_is_quiet();
 
-    serial_puts("PMM: Parsing memory map\n");
+    if (!quiet) serial_puts("PMM: Parsing memory map\n");
 
     /* Iterate through memory map entries */
     entry = tag->entries;
@@ -164,11 +171,13 @@ static void parse_memory_map(multiboot_tag_mmap_t *tag) {
             if (aligned_length >= PAGE_SIZE) {
                 pmm_add_region(aligned_base, aligned_length);
                 usable_pages += aligned_length / PAGE_SIZE;
-                serial_puts("PMM: Added region at 0x");
-                put_hex(aligned_base);
-                serial_puts(", size ");
-                put_hex(aligned_length);
-                serial_puts(" bytes\n");
+                if (!quiet) {
+                    serial_puts("PMM: Added region at 0x");
+                    put_hex(aligned_base);
+                    serial_puts(", size ");
+                    put_hex(aligned_length);
+                    serial_puts(" bytes\n");
+                }
             }
         }
 
@@ -179,14 +188,16 @@ static void parse_memory_map(multiboot_tag_mmap_t *tag) {
         i++;
     }
 
-    serial_puts("PMM: Total memory: ");
-    put_hex(total_pages * PAGE_SIZE);
-    serial_puts(" bytes\n");
-    serial_puts("PMM: Usable memory: ");
-    put_hex(usable_pages * PAGE_SIZE);
-    serial_puts(" bytes (");
-    put_hex(usable_pages);
-    serial_puts(" pages)\n");
+    if (!quiet) {
+        serial_puts("PMM: Total memory: ");
+        put_hex(total_pages * PAGE_SIZE);
+        serial_puts(" bytes\n");
+        serial_puts("PMM: Usable memory: ");
+        put_hex(usable_pages * PAGE_SIZE);
+        serial_puts(" bytes (");
+        put_hex(usable_pages);
+        serial_puts(" pages)\n");
+    }
 }
 
 /* Parse multiboot2 information structure */
@@ -195,31 +206,36 @@ void multiboot2_parse(uint32_t mbi_addr) {
     multiboot_tag_t *tag;
     uint64_t total_size;
     int found_memory = 0;
+    int quiet = kernel_is_quiet();
 
     /* Store MBI info for PMM reservation */
     stored_mbi_addr = mbi_addr;
 
-    serial_puts("PMM: Parsing multiboot2 info at 0x");
-    put_hex(mbi_addr);
-    serial_puts("\n");
+    if (!quiet) {
+        serial_puts("PMM: Parsing multiboot2 info at 0x");
+        put_hex(mbi_addr);
+        serial_puts("\n");
+    }
 
     /* Check if multiboot info address is in a reasonable range */
     if (mbi_addr < 0x100000 || mbi_addr > 0x10000000) {
-        serial_puts("PMM: WARNING: Multiboot info address looks suspicious\n");
+        if (!quiet) serial_puts("PMM: WARNING: Multiboot info address looks suspicious\n");
     }
 
     /* Debug: Print first 32 bytes of multiboot info */
-    serial_puts("PMM: Multiboot info dump:\n");
-    uint8_t *mbi_bytes = (uint8_t *)mbi;
-    for (int i = 0; i < 32; i++) {
-        put_hex(mbi_bytes[i]);
-        serial_puts(" ");
+    if (!quiet) {
+        serial_puts("PMM: Multiboot info dump:\n");
+        uint8_t *mbi_bytes = (uint8_t *)mbi;
+        for (int i = 0; i < 32; i++) {
+            put_hex(mbi_bytes[i]);
+            serial_puts(" ");
+        }
+        serial_puts("\n");
     }
-    serial_puts("\n");
 
     /* Check if multiboot info is valid */
     if (mbi_addr == 0) {
-        serial_puts("PMM: No multiboot info provided\n");
+        if (!quiet) serial_puts("PMM: No multiboot info provided\n");
         goto use_default_cmdline;
     }
 
@@ -230,15 +246,19 @@ void multiboot2_parse(uint32_t mbi_addr) {
 
     /* If total_size is 0 or too small, boot loader didn't provide info */
     if (total_size < sizeof(multiboot_info_t)) {
-        serial_puts("PMM: Invalid multiboot info (size=");
-        put_hex(total_size);
-        serial_puts("), using defaults\n");
+        if (!quiet) {
+            serial_puts("PMM: Invalid multiboot info (size=");
+            put_hex(total_size);
+            serial_puts("), using defaults\n");
+        }
         goto use_default_cmdline;
     }
 
-    serial_puts("PMM: Total size: ");
-    put_hex(total_size);
-    serial_puts(" bytes\n");
+    if (!quiet) {
+        serial_puts("PMM: Total size: ");
+        put_hex(total_size);
+        serial_puts(" bytes\n");
+    }
 
     /* Iterate through tags */
     tag = (multiboot_tag_t *)(mbi + 1);
@@ -256,12 +276,12 @@ void multiboot2_parse(uint32_t mbi_addr) {
 
         switch (tag->type) {
             case MULTIBOOT_TAG_CMDLINE:
-                serial_puts("CMDLINE: Found cmdline tag in multiboot info\n");
+                if (!quiet) serial_puts("CMDLINE: Found cmdline tag in multiboot info\n");
                 parse_cmdline((multiboot_tag_cmdline_t *)tag);
                 break;
 
             case MULTIBOOT_TAG_MMAP:
-                serial_puts("PMM: Found memory map tag\n");
+                if (!quiet) serial_puts("PMM: Found memory map tag\n");
                 parse_memory_map((multiboot_tag_mmap_t *)tag);
                 found_memory = 1;
                 break;
@@ -269,12 +289,14 @@ void multiboot2_parse(uint32_t mbi_addr) {
             case MULTIBOOT_TAG_BASIC_MEMINFO: {
                 multiboot_tag_basic_meminfo_t *meminfo =
                     (multiboot_tag_basic_meminfo_t *)tag;
-                serial_puts("PMM: Found basic meminfo tag\n");
-                serial_puts("PMM: mem_lower=");
-                put_hex(meminfo->mem_lower);
-                serial_puts("KB, mem_upper=");
-                put_hex(meminfo->mem_upper);
-                serial_puts("KB\n");
+                if (!quiet) {
+                    serial_puts("PMM: Found basic meminfo tag\n");
+                    serial_puts("PMM: mem_lower=");
+                    put_hex(meminfo->mem_lower);
+                    serial_puts("KB, mem_upper=");
+                    put_hex(meminfo->mem_upper);
+                    serial_puts("KB\n");
+                }
 
                 /* NOTE: Do NOT add memory from basic meminfo here!
                  * The memory map (MULTIBOOT_TAG_MMAP) is more accurate and
@@ -314,20 +336,22 @@ use_default_cmdline:
         }
         kernel_cmdline[i] = '\0';
 
-        serial_puts("CMDLINE: Using embedded command line: '");
-        serial_puts(kernel_cmdline);
-        serial_puts("'\n");
+        if (!quiet) {
+            serial_puts("CMDLINE: Using embedded command line: '");
+            serial_puts(kernel_cmdline);
+            serial_puts("'\n");
+        }
     }
 
     /* Fallback: If no memory info found, use default QEMU memory map */
     if (!found_memory) {
-        serial_puts("PMM: No memory info found, using default map for QEMU\n");
+        if (!quiet) serial_puts("PMM: No memory info found, using default map for QEMU\n");
         /* QEMU default: 128MB starting at 0 */
         /* Kernel now starts at 4MB, add memory from 4MB to 128MB */
         pmm_add_region(0x400000, 128 * 1024 * 1024 - 0x400000);
     }
 
-    serial_puts("PMM: Multiboot2 parsing complete\n");
+    if (!quiet) serial_puts("PMM: Multiboot2 parsing complete\n");
 }
 
 /* Get multiboot info address and size for PMM reservation */

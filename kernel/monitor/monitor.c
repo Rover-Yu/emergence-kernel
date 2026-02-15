@@ -5,6 +5,7 @@
 #include "arch/x86_64/paging.h"
 #include "arch/x86_64/cr.h"
 #include "arch/x86_64/serial.h"
+#include "arch/x86_64/multiboot2.h"
 #include "kernel/pcd.h"
 #include "kernel/pmm.h"
 
@@ -72,7 +73,8 @@ static int monitor_find_pd_entry(uint64_t phys_addr) {
  * - Discovers ALL NK_PGTABLE pages via PCD
  * - Makes them read-only in unprivileged page tables */
 static void monitor_protect_all_ptps(void) {
-    serial_puts("MONITOR: Protecting all PTPs via PCD discovery\n");
+    int quiet = kernel_is_quiet();
+    if (!quiet) serial_puts("MONITOR: Protecting all PTPs via PCD discovery\n");
     int protected_count = 0;
 
     /* Iterate through all PCD-tracked pages */
@@ -98,9 +100,11 @@ static void monitor_protect_all_ptps(void) {
         }
     }
 
-    serial_puts("MONITOR: Protected ");
-    serial_put_hex(protected_count);
-    serial_puts(" PTP pages\n");
+    if (!quiet) {
+        serial_puts("MONITOR: Protected ");
+        serial_put_hex(protected_count);
+        serial_puts(" PTP pages\n");
+    }
 }
 
 /* Protect monitor state pages in unprivileged view
@@ -108,8 +112,9 @@ static void monitor_protect_all_ptps(void) {
  * - PTPs are marked read-only while outer kernel executes
  * - All mappings to PTPs are marked read-only */
 static void monitor_protect_state(void) {
-    serial_puts("MONITOR: Enforcing Nested Kernel invariants\n");
-    serial_puts("MONITOR: Protecting page table pages (Invariant 5)\n");
+    int quiet = kernel_is_quiet();
+    if (!quiet) serial_puts("MONITOR: Enforcing Nested Kernel invariants\n");
+    if (!quiet) serial_puts("MONITOR: Protecting page table pages (Invariant 5)\n");
 
     /* Get physical addresses of all 6 monitor page table pages
      * These are the PTPs that must be write-protected (Invariant 5) */
@@ -129,8 +134,10 @@ static void monitor_protect_state(void) {
     for (int i = 1; i < 6; i++) {
         int idx = monitor_find_pd_entry(monitor_pages[i]);
         if (idx != pd_index) {
-            serial_puts("MONITOR: WARNING: Monitor pages span multiple 2MB regions\n");
-            serial_puts("MONITOR: Only protecting first region\n");
+            if (!quiet) {
+                serial_puts("MONITOR: WARNING: Monitor pages span multiple 2MB regions\n");
+                serial_puts("MONITOR: Only protecting first region\n");
+            }
             break;
         }
     }
@@ -144,19 +151,19 @@ static void monitor_protect_state(void) {
      * the kernel region (0x400000+) and mark individual PTP PTEs as read-only.
      * This is tracked as TODO for future improvement.
      */
-    serial_puts("MONITOR: Skipping PD entry protection (kernel region overlap)\n");
-    serial_puts("MONITOR: Relying on 4KB PTE protection via PCD discovery\n");
+    if (!quiet) serial_puts("MONITOR: Skipping PD entry protection (kernel region overlap)\n");
+    if (!quiet) serial_puts("MONITOR: Relying on 4KB PTE protection via PCD discovery\n");
 
     /* Invalidate TLB for the affected 2MB region */
     monitor_invalidate_page((void *)monitor_pages[0]);
 
-    serial_puts("MONITOR: TLB invalidated (Invariant 2 enforcement active)\n");
+    if (!quiet) serial_puts("MONITOR: TLB invalidated (Invariant 2 enforcement active)\n");
 
     /* Protect all PTPs discovered via PCD - this handles individual page protection */
     monitor_protect_all_ptps();
 
-    serial_puts("MONITOR: Nested Kernel invariants enforced\n");
-    serial_puts("MONITOR: Note: Boot page tables protected via 4KB page tables\n");
+    if (!quiet) serial_puts("MONITOR: Nested Kernel invariants enforced\n");
+    if (!quiet) serial_puts("MONITOR: Note: Boot page tables protected via 4KB page tables\n");
 }
 
 /* Verify Nested Kernel invariants are correctly configured
@@ -570,8 +577,9 @@ static int create_ro_mapping(uint64_t phys_addr, uint64_t virt_addr) {
  */
 int monitor_create_ro_mappings(void) {
     uint64_t ro_page_count = 0;
+    int quiet = kernel_is_quiet();
 
-    serial_puts("MONITOR: Creating read-only mappings for outer kernel\n");
+    if (!quiet) serial_puts("MONITOR: Creating read-only mappings for outer kernel\n");
 
     for (uint64_t i = 0; i < pcd_get_max_pages(); i++) {
         uint64_t phys_addr = i << PAGE_SHIFT;
@@ -586,29 +594,34 @@ int monitor_create_ro_mappings(void) {
         }
     }
 
-    serial_puts("MONITOR: Created ");
-    serial_put_hex(ro_page_count);
-    serial_puts(" read-only mappings\n");
+    if (!quiet) {
+        serial_puts("MONITOR: Created ");
+        serial_put_hex(ro_page_count);
+        serial_puts(" read-only mappings\n");
+    }
 
     return 0;
 }
 
 /* Initialize monitor page tables */
 void monitor_init(void) {
-    serial_puts("MONITOR: Initializing nested kernel architecture\n");
+    int quiet = kernel_is_quiet();
+    if (!quiet) serial_puts("MONITOR: Initializing nested kernel architecture\n");
 
     /* Allocate page tables for monitor (privileged) view */
     monitor_pml4 = (uint64_t *)pmm_alloc(0);  /* 1 page */
     monitor_pdpt = (uint64_t *)pmm_alloc(0);
     monitor_pd = (uint64_t *)pmm_alloc(0);
 
-    serial_puts("MONITOR: Allocations: monitor_pml4=0x");
-    serial_put_hex((uint64_t)monitor_pml4);
-    serial_puts(" monitor_pdpt=0x");
-    serial_put_hex((uint64_t)monitor_pdpt);
-    serial_puts(" monitor_pd=0x");
-    serial_put_hex((uint64_t)monitor_pd);
-    serial_puts("\n");
+    if (!quiet) {
+        serial_puts("MONITOR: Allocations: monitor_pml4=0x");
+        serial_put_hex((uint64_t)monitor_pml4);
+        serial_puts(" monitor_pdpt=0x");
+        serial_put_hex((uint64_t)monitor_pdpt);
+        serial_puts(" monitor_pd=0x");
+        serial_put_hex((uint64_t)monitor_pd);
+        serial_puts("\n");
+    }
 
     if (!monitor_pml4 || !monitor_pdpt || !monitor_pd) {
         serial_puts("MONITOR: Failed to allocate monitor page tables\n");
@@ -620,13 +633,15 @@ void monitor_init(void) {
     unpriv_pdpt = (uint64_t *)pmm_alloc(0);
     unpriv_pd = (uint64_t *)pmm_alloc(0);
 
-    serial_puts("MONITOR: Allocations: unpriv_pml4=0x");
-    serial_put_hex((uint64_t)unpriv_pml4);
-    serial_puts(" unpriv_pdpt=0x");
-    serial_put_hex((uint64_t)unpriv_pdpt);
-    serial_puts(" unpriv_pd=0x");
-    serial_put_hex((uint64_t)unpriv_pd);
-    serial_puts("\n");
+    if (!quiet) {
+        serial_puts("MONITOR: Allocations: unpriv_pml4=0x");
+        serial_put_hex((uint64_t)unpriv_pml4);
+        serial_puts(" unpriv_pdpt=0x");
+        serial_put_hex((uint64_t)unpriv_pdpt);
+        serial_puts(" unpriv_pd=0x");
+        serial_put_hex((uint64_t)unpriv_pd);
+        serial_puts("\n");
+    }
 
     if (!unpriv_pml4 || !unpriv_pdpt || !unpriv_pd) {
         serial_puts("MONITOR: Failed to allocate unprivileged page tables\n");
@@ -663,7 +678,7 @@ void monitor_init(void) {
      * Note: With kernel at 4MB, GRUB2 gap is 1MB-4MB
      * PMM allocations start above 4MB, so we map 4MB-6MB region */
     unpriv_pd[1] |= X86_PTE_USER;
-    serial_puts("MONITOR: User stack region (0x200000-0x3FFFFF) is now user-accessible\n");
+    if (!quiet) serial_puts("MONITOR: User stack region (0x200000-0x3FFFFF) is now user-accessible\n");
     /* TODO: After kernel moves to 4MB, update this to map region above kernel */
 
     /* Set up 4KB page tables for first 2MB region */
@@ -686,24 +701,10 @@ void monitor_init(void) {
             phys_addr == virt_to_phys(unpriv_pd)) {
             /* Page table pages: read-only, supervisor-only */
             unpriv_pt_0_2mb[i] = phys_addr | X86_PTE_PRESENT;
-            /* Debug: Print first few page table pages */
-            if (i < 5) {
-                serial_puts("MONITOR: Page table page at 0x");
-                serial_put_hex(phys_addr);
-                serial_puts(" marked supervisor-only\n");
-            }
         } else {
             /* Other pages: writable + user-accessible (for user mode syscall test) */
             /* This includes kernel code, kernel stack, and other kernel data */
             unpriv_pt_0_2mb[i] = phys_addr | X86_PTE_PRESENT | X86_PTE_WRITABLE | X86_PTE_USER;
-            /* Debug: Print if this is the kernel code page */
-            if (phys_addr == 0x400000) {
-                serial_puts("MONITOR: Kernel code page at 0x");
-                serial_put_hex(phys_addr);
-                serial_puts(" marked user-accessible (PTE = 0x");
-                serial_put_hex(unpriv_pt_0_2mb[i]);
-                serial_puts(")\n");
-            }
         }
     }
 
@@ -714,7 +715,7 @@ void monitor_init(void) {
     uint64_t stack_start = ((uint64_t)nk_boot_stack_bottom) & ~0xFFF;
     uint64_t stack_end = ((uint64_t)nk_boot_stack_top) & ~0xFFF;
 
-    serial_puts("MONITOR: Verifying stack pages are writable in unprivileged view\n");
+    if (!quiet) serial_puts("MONITOR: Verifying stack pages are writable in unprivileged view\n");
     for (uint64_t addr = stack_start; addr <= stack_end; addr += 0x1000) {
         int pte_index = addr >> 12;
         uint64_t pte = unpriv_pt_0_2mb[pte_index];
@@ -756,91 +757,55 @@ void monitor_init(void) {
     monitor_pdpt[0] = (boot_pdpt_entry0 & 0xFFF) | monitor_pd_phys;
 
     /* Debug: Verify the hierarchy update worked */
-    serial_puts("MONITOR: After hierarchy update:\n");
-    serial_puts("  monitor_pml4[0] = 0x");
-    serial_put_hex(monitor_pml4[0]);
-    serial_puts(" (should be monitor_pdpt)\n");
-    serial_puts("  monitor_pdpt[0] = 0x");
-    serial_put_hex(monitor_pdpt[0]);
-    serial_puts(" (should be monitor_pd)\n");
-    serial_puts("  unpriv_pml4[0] = 0x");
-    serial_put_hex(unpriv_pml4[0]);
-    serial_puts(" (should be unpriv_pdpt)\n");
-    serial_puts("  unpriv_pdpt[0] = 0x");
-    serial_put_hex(unpriv_pdpt[0]);
-    serial_puts(" (should be unpriv_pd)\n");
-
-    /* Debug: Check some critical PTEs */
-    serial_puts("MONITOR: Critical PTEs in unpriv_pt_0_2mb:\n");
-    /* Kernel code starts at 0x400000 */
-    uint64_t kernel_code_pde = (0x400000 >> 12);
-    serial_puts("  Kernel code at 0x400000 (PTE ");
-    serial_put_hex(kernel_code_pde);
-    serial_puts("): 0x");
-    serial_put_hex(unpriv_pt_0_2mb[kernel_code_pde]);
-    serial_puts("\n");
-    /* Note: The kernel_code_pde is now 0x400 (1024), which is outside
-     * the range of unpriv_pt_0_2mb (which only covers first 2MB).
-     * This debug output will now show page 0 for the first 2MB region. */
-
-    /* Debug: Verify boot_pml4 page table entry */
-    uint64_t boot_pml4_phys = virt_to_phys(boot_pml4);
-    uint64_t boot_pml4_pte_index = boot_pml4_phys >> 12;  /* Div by 4KB */
-    serial_puts("MONITOR: boot_pml4 at 0x");
-    serial_put_hex(boot_pml4_phys);
-    serial_puts(", PTE index ");
-    serial_put_hex(boot_pml4_pte_index);
-    serial_puts("\n");
-    serial_puts("  unpriv_pt_0_2mb[");
-    serial_put_hex(boot_pml4_pte_index);
-    serial_puts("] = 0x");
-    serial_put_hex(unpriv_pt_0_2mb[boot_pml4_pte_index]);
-    serial_puts(" (should be read-only)\n");
-    serial_puts("  monitor_pt_0_2mb[");
-    serial_put_hex(boot_pml4_pte_index);
-    serial_puts("] = 0x");
-    serial_put_hex(monitor_pt_0_2mb[boot_pml4_pte_index]);
-    serial_puts(" (should be writable)\n");
-
-    /* Debug: Verify page table hierarchy */
-    serial_puts("  unpriv_pml4[0] = 0x");
-    serial_put_hex(unpriv_pml4[0]);
-    serial_puts(" (should point to unpriv_pdpt)\n");
-    serial_puts("  unpriv_pdpt[0] = 0x");
-    serial_put_hex(unpriv_pdpt[0]);
-    serial_puts(" (should point to unpriv_pd)\n");
+    if (!quiet) {
+        serial_puts("MONITOR: After hierarchy update:\n");
+        serial_puts("  monitor_pml4[0] = 0x");
+        serial_put_hex(monitor_pml4[0]);
+        serial_puts(" (should be monitor_pdpt)\n");
+        serial_puts("  monitor_pdpt[0] = 0x");
+        serial_put_hex(monitor_pdpt[0]);
+        serial_puts(" (should be monitor_pd)\n");
+        serial_puts("  unpriv_pml4[0] = 0x");
+        serial_put_hex(unpriv_pml4[0]);
+        serial_puts(" (should be unpriv_pdpt)\n");
+        serial_puts("  unpriv_pdpt[0] = 0x");
+        serial_put_hex(unpriv_pdpt[0]);
+        serial_puts(" (should be unpriv_pd)\n");
+    }
 
     /* Save physical addresses */
     monitor_pml4_phys = virt_to_phys(monitor_pml4);
     unpriv_pml4_phys = virt_to_phys(unpriv_pml4);
 
     /* Debug: Print page table structure */
-    serial_puts("MONITOR: Page table structure:\n");
-    serial_puts("  boot_pml4 phys = 0x");
-    serial_put_hex(virt_to_phys(boot_pml4));
-    serial_puts("\n  unpriv_pml4 phys = 0x");
-    serial_put_hex(unpriv_pml4_phys);
-    serial_puts("\n  boot_pd phys = 0x");
-    serial_put_hex(virt_to_phys(boot_pd));
-    serial_puts("\n  boot_pd[0] = 0x");
-    serial_put_hex(boot_pd[0]);
-    serial_puts("\n  boot_pd[1] = 0x");
-    serial_put_hex(boot_pd[1]);
-    serial_puts("\n  monitor_pd[0] = 0x");
-    serial_put_hex(monitor_pd[0]);
-    serial_puts("\n  g_unpriv_pd_ptr[0] = 0x");
-    serial_put_hex(g_unpriv_pd_ptr[0]);
-    serial_puts("\n  g_unpriv_pd_ptr[1] = 0x");
-    serial_put_hex(g_unpriv_pd_ptr[1]);
-    serial_puts("\n  unpriv_pd[2] (kernel at 4MB) = 0x");
-    serial_put_hex(unpriv_pd[2]);
-    serial_puts("\n  boot_pd[2] (kernel at 4MB) = 0x");
-    serial_put_hex(boot_pd[2]);
-    serial_puts("\n  unpriv_pdpt[0] (points to pd) = 0x");
-    serial_put_hex(unpriv_pdpt[0]);
-    serial_puts("\n  unpriv_pml4[0] (points to pdpt) = 0x");
-    serial_put_hex(unpriv_pml4[0]);
-    serial_puts("\n  Using 4KB pages for first 2MB\n");
+    if (!quiet) {
+        serial_puts("MONITOR: Page table structure:\n");
+        serial_puts("  boot_pml4 phys = 0x");
+        serial_put_hex(virt_to_phys(boot_pml4));
+        serial_puts("\n  unpriv_pml4 phys = 0x");
+        serial_put_hex(unpriv_pml4_phys);
+        serial_puts("\n  boot_pd phys = 0x");
+        serial_put_hex(virt_to_phys(boot_pd));
+        serial_puts("\n  boot_pd[0] = 0x");
+        serial_put_hex(boot_pd[0]);
+        serial_puts("\n  boot_pd[1] = 0x");
+        serial_put_hex(boot_pd[1]);
+        serial_puts("\n  monitor_pd[0] = 0x");
+        serial_put_hex(monitor_pd[0]);
+        serial_puts("\n  g_unpriv_pd_ptr[0] = 0x");
+        serial_put_hex(g_unpriv_pd_ptr[0]);
+        serial_puts("\n  g_unpriv_pd_ptr[1] = 0x");
+        serial_put_hex(g_unpriv_pd_ptr[1]);
+        serial_puts("\n  unpriv_pd[2] (kernel at 4MB) = 0x");
+        serial_put_hex(unpriv_pd[2]);
+        serial_puts("\n  boot_pd[2] (kernel at 4MB) = 0x");
+        serial_put_hex(boot_pd[2]);
+        serial_puts("\n  unpriv_pdpt[0] (points to pd) = 0x");
+        serial_put_hex(unpriv_pdpt[0]);
+        serial_puts("\n  unpriv_pml4[0] (points to pdpt) = 0x");
+        serial_put_hex(unpriv_pml4[0]);
+        serial_puts("\n  Using 4KB pages for first 2MB\n");
+    }
 
     /* Mark page table pages as NK_PGTABLE for PCD tracking */
     /* These pages should not be accessible to outer kernel for mapping */
@@ -860,37 +825,45 @@ void monitor_init(void) {
     _pcd_set_type_internal(virt_to_phys(unpriv_pdpt), PCD_TYPE_NK_PGTABLE);
     _pcd_set_type_internal(virt_to_phys(unpriv_pd), PCD_TYPE_NK_PGTABLE);
 
-    serial_puts("MONITOR: Page tables initialized\n");
+    if (!quiet) serial_puts("MONITOR: Page tables initialized\n");
 
     /* Debug: Verify GDT is accessible */
-    serial_puts("MONITOR: GDT at 0x");
-    serial_put_hex((uint64_t)gdt64);
-    serial_puts(" (size ");
-    serial_put_hex(sizeof(gdt64));
-    serial_puts(" bytes)\n");
+    if (!quiet) {
+        serial_puts("MONITOR: GDT at 0x");
+        serial_put_hex((uint64_t)gdt64);
+        serial_puts(" (size ");
+        serial_put_hex(sizeof(gdt64));
+        serial_puts(" bytes)\n");
+    }
     /* Check if GDT is in first 2MB region */
     if ((uint64_t)gdt64 < 0x200000) {
         uint64_t gdt_page = (uint64_t)gdt64 & ~0xFFF;
         int gdt_pte_index = gdt_page >> 12;
-        serial_puts("MONITOR: GDT page at 0x");
-        serial_put_hex(gdt_page);
-        serial_puts(", PTE = 0x");
-        serial_put_hex(unpriv_pt_0_2mb[gdt_pte_index]);
-        serial_puts("\n");
+        if (!quiet) {
+            serial_puts("MONITOR: GDT page at 0x");
+            serial_put_hex(gdt_page);
+            serial_puts(", PTE = 0x");
+            serial_put_hex(unpriv_pt_0_2mb[gdt_pte_index]);
+            serial_puts("\n");
+        }
     }
 
     /* Debug: Verify TSS is accessible */
     extern void tss_desc(void);
     extern void tss(void);
-    serial_puts("MONITOR: TSS structure at 0x");
-    serial_put_hex((uint64_t)tss);
-    serial_puts("\n");
+    if (!quiet) {
+        serial_puts("MONITOR: TSS structure at 0x");
+        serial_put_hex((uint64_t)tss);
+        serial_puts("\n");
+    }
     if ((uint64_t)tss < 0x200000) {
         uint64_t tss_page = (uint64_t)tss & ~0xFFF;
         int tss_pte_index = tss_page >> 12;
-        serial_puts("MONITOR: TSS page PTE = 0x");
-        serial_put_hex(unpriv_pt_0_2mb[tss_pte_index]);
-        serial_puts("\n");
+        if (!quiet) {
+            serial_puts("MONITOR: TSS page PTE = 0x");
+            serial_put_hex(unpriv_pt_0_2mb[tss_pte_index]);
+            serial_puts("\n");
+        }
     }
 
     /* Enforce Nested Kernel invariants by write-protecting PTPs */
@@ -910,7 +883,7 @@ void monitor_init(void) {
      * in main.c, not here during monitor_init(). This ensures we verify
      * the final state where all invariants should be enforced. */
 
-    serial_puts("MONITOR: APIC accessible from unprivileged mode\n");
+    if (!quiet) serial_puts("MONITOR: APIC accessible from unprivileged mode\n");
 }
 
 /* Get unprivileged CR3 value */

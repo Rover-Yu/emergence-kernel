@@ -292,7 +292,7 @@ $(ISO): $(KERNEL_ELF) always-rebuild-cmdline | $(ISO_DIR) .tmp
 	env TMPDIR=$(PWD)/.tmp $(GRUB_MKRESCUE) -o $@ $(ISO_DIR)
 
 run: $(ISO)
-	PYTHONUNBUFFERED=1 python3 tests/run.py --timeout 8 --cpus 4 --verbose || exit 0
+	PYTHONUNBUFFERED=1 python3 tests/run.py --timeout 8 --cpus 4 || exit 0
 
 run-debug: $(ISO)
 	PYTHONUNBUFFERED=1 python3 tests/run.py --debug || exit 0

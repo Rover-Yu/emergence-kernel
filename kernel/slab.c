@@ -4,6 +4,7 @@
 #include "kernel/slab.h"
 #include "kernel/pmm.h"
 #include "arch/x86_64/serial.h"
+#include "arch/x86_64/multiboot2.h"
 
 /* External monitor function for PCD-tracked allocations */
 extern void *monitor_pmm_alloc(uint8_t order);
@@ -99,13 +100,15 @@ static slab_t *slab_new(slab_cache_t *cache) {
     cache->total_objects += objects_per_slab;
     cache->free_objects += objects_per_slab;
 
-    serial_puts("SLAB: Created new slab at 0x");
-    serial_put_hex((uint64_t)slab);
-    serial_puts(" with ");
-    serial_put_hex(objects_per_slab);
-    serial_puts(" objects of size ");
-    serial_put_hex(cache->object_size);
-    serial_puts("\n");
+    if (!kernel_is_quiet()) {
+        serial_puts("SLAB: Created new slab at 0x");
+        serial_put_hex((uint64_t)slab);
+        serial_puts(" with ");
+        serial_put_hex(objects_per_slab);
+        serial_puts(" objects of size ");
+        serial_put_hex(cache->object_size);
+        serial_puts("\n");
+    }
 
     return slab;
 }
@@ -119,17 +122,20 @@ static slab_t *slab_new(slab_cache_t *cache) {
  */
 void slab_init(void) {
     int i;
+    int quiet = kernel_is_quiet();
 
-    serial_puts("SLAB: Initializing slab allocator...\n");
+    if (!quiet) serial_puts("SLAB: Initializing slab allocator...\n");
 
     /* Initialize each cache */
     for (i = 0; i < SLAB_NR_CACHES; i++) {
         slab_cache_create(&slab_caches[i], cache_sizes[i]);
     }
 
-    serial_puts("SLAB: Initialized ");
-    serial_put_hex(SLAB_NR_CACHES);
-    serial_puts(" caches\n");
+    if (!quiet) {
+        serial_puts("SLAB: Initialized ");
+        serial_put_hex(SLAB_NR_CACHES);
+        serial_puts(" caches\n");
+    }
 }
 
 /**
@@ -167,11 +173,13 @@ int slab_cache_create(slab_cache_t *cache, size_t object_size) {
     cache->total_objects = 0;
     cache->free_objects = 0;
 
-    serial_puts("SLAB: Created cache for size ");
-    serial_put_hex(object_size);
-    serial_puts(" (");
-    serial_put_hex(cache->objects_per_slab);
-    serial_puts(" objects/slab)\n");
+    if (!kernel_is_quiet()) {
+        serial_puts("SLAB: Created cache for size ");
+        serial_put_hex(object_size);
+        serial_puts(" (");
+        serial_put_hex(cache->objects_per_slab);
+        serial_puts(" objects/slab)\n");
+    }
 
     return 0;
 }

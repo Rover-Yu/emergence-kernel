@@ -211,7 +211,9 @@ static void coalesce_block(block_info_t *block) {
  * @mbi_addr: Multiboot2 info structure address
  */
 void pmm_init(uint32_t mbi_addr) {
-    serial_puts("PMM: Initializing...\n");
+    int quiet = kernel_is_quiet();
+
+    if (!quiet) serial_puts("PMM: Initializing...\n");
 
     /* Initialize spin lock */
     spin_lock_init(&pmm_state.lock);
@@ -240,11 +242,13 @@ void pmm_init(uint32_t mbi_addr) {
         uint32_t mbi_pages = (mbi_info_size + PAGE_SIZE - 1) / PAGE_SIZE;
         uint64_t mbi_size_aligned = mbi_pages * PAGE_SIZE;
 
-        serial_puts("PMM: Reserving multiboot info at 0x");
-        put_hex(mbi_info_addr);
-        serial_puts(", size ");
-        put_hex(mbi_size_aligned);
-        serial_puts(" bytes\n");
+        if (!quiet) {
+            serial_puts("PMM: Reserving multiboot info at 0x");
+            put_hex(mbi_info_addr);
+            serial_puts(", size ");
+            put_hex(mbi_size_aligned);
+            serial_puts(" bytes\n");
+        }
         pmm_reserve_region(mbi_info_addr, mbi_size_aligned);
     }
 
@@ -253,36 +257,40 @@ void pmm_init(uint32_t mbi_addr) {
     uint64_t kernel_end = (uint64_t)_kernel_end;
     uint64_t kernel_size = kernel_end - kernel_start;
 
-    serial_puts("PMM: Reserving kernel at 0x");
-    put_hex(kernel_start);
-    serial_puts(", size ");
-    put_hex(kernel_size);
-    serial_puts(" bytes\n");
+    if (!quiet) {
+        serial_puts("PMM: Reserving kernel at 0x");
+        put_hex(kernel_start);
+        serial_puts(", size ");
+        put_hex(kernel_size);
+        serial_puts(" bytes\n");
+    }
     pmm_reserve_region(kernel_start, kernel_size);
 
     /* Reserve AP trampoline (0x7000 - 0x9FFF)
      * Includes: trampoline code (4KB), GDT64, stub (4KB), and GOT (4KB)
      * Total: 12KB from 0x7000 to 0x9FFF */
-    serial_puts("PMM: Reserving trampoline at 0x7000, size 12288 bytes\n");
+    if (!quiet) serial_puts("PMM: Reserving trampoline at 0x7000, size 12288 bytes\n");
     pmm_reserve_region(0x7000, 12288);
 
     /* Reserve boot stack area
      * The boot stack is defined in boot.S as nk_boot_stack_bottom to nk_boot_stack_top
      * We must reserve exactly these pages, not kernel_end which comes after them
      * Boot stack is 16KB (0x4000 bytes) starting at nk_boot_stack_bottom */
-    serial_puts("PMM: Reserving boot stacks at nk_boot_stack_bottom, size 16384 bytes\n");
+    if (!quiet) serial_puts("PMM: Reserving boot stacks at nk_boot_stack_bottom, size 16384 bytes\n");
     pmm_reserve_region((uint64_t)nk_boot_stack_bottom, 16384);
 
     /* Reserve GRUB2 gap (1MB - 4MB) to prevent PMM allocation
      * GRUB2 requires this region for its own use */
-    serial_puts("PMM: Reserving GRUB2 gap at 0x100000, size 3145728 bytes\n");
+    if (!quiet) serial_puts("PMM: Reserving GRUB2 gap at 0x100000, size 3145728 bytes\n");
     pmm_reserve_region(0x100000, 0x300000);
 
-    serial_puts("PMM: Initialized with ");
-    put_hex(pmm_state.total_pages * PAGE_SIZE);
-    serial_puts(" bytes total, ");
-    put_hex(pmm_state.free_pages * PAGE_SIZE);
-    serial_puts(" bytes free\n");
+    if (!quiet) {
+        serial_puts("PMM: Initialized with ");
+        put_hex(pmm_state.total_pages * PAGE_SIZE);
+        serial_puts(" bytes total, ");
+        put_hex(pmm_state.free_pages * PAGE_SIZE);
+        serial_puts(" bytes free\n");
+    }
 }
 
 /**
@@ -295,11 +303,13 @@ void pmm_add_region(uint64_t base, uint64_t size) {
     uint64_t end;
     uint8_t order;
 
-    serial_puts("PMM: Adding region 0x");
-    put_hex(base);
-    serial_puts(" - 0x");
-    put_hex(base + size);
-    serial_puts("\n");
+    if (!kernel_is_quiet()) {
+        serial_puts("PMM: Adding region 0x");
+        put_hex(base);
+        serial_puts(" - 0x");
+        put_hex(base + size);
+        serial_puts("\n");
+    }
 
     /* Align to page boundaries */
     base = (base + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);

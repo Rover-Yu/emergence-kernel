@@ -85,5 +85,6 @@ void multiboot2_parse(uint32_t mbi_addr);
 void multiboot_get_info(uint32_t *addr, uint32_t *size);
 const char *multiboot_get_cmdline(void);
 const char *cmdline_get_value(const char *key);
+int kernel_is_quiet(void);
 
 #endif /* _KERNEL_MULTIBOOT2_H */
