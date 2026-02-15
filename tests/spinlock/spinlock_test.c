@@ -191,6 +191,7 @@ static int test_atomic_inc(volatile int *ptr) {
  * This establishes a "happens-before" relationship with the CPU that called
  * atomic_store_explicit with release semantics to set the flag.
  */
+__attribute__((unused))
 static int test_wait_for_flag(atomic_int *flag, int timeout_cycles) {
     while (!atomic_load_explicit(flag, memory_order_acquire) && timeout_cycles > 0) {
         cpu_relax();
