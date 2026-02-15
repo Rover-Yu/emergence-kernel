@@ -71,6 +71,9 @@ static void run_tests(void) {
     /* Read-only visibility tests */
     test_nk_readonly_visibility();
 
+    /* SMP monitor stress tests */
+    test_nk_smp_monitor_stress();
+
     /* Minilibc string library tests */
     test_minilibc();
 

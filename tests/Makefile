@@ -58,7 +58,12 @@ tests-slab:
 # Nested Kernel tests (all use nk_ prefix)
 tests-nk:
 	@echo "Running all Nested Kernel tests..."
-	@$(MAKE) KERNEL_CMDLINE="tests=nk_invariants,nk_fault_injection,nk_readonly_visibility,nk_smp_monitor_stress" all run
+	@$(MAKE) \
+		CONFIG_TESTS_NK_FAULT_INJECTION=1 \
+		CONFIG_TESTS_NK_READONLY_VISIBILITY=1 \
+		CONFIG_TESTS_SMP_MONITOR_STRESS=1 \
+		KERNEL_CMDLINE="tests=nk_invariants,nk_fault_injection,nk_readonly_visibility,nk_smp_monitor_stress" \
+		all run
 
 tests-nk-invariants:
 	@echo "Running Nested Kernel Invariants Test..."
@@ -66,15 +71,15 @@ tests-nk-invariants:
 
 tests-nk-fault-injection:
 	@echo "Running Nested Kernel Fault Injection Test..."
-	@$(MAKE) KERNEL_CMDLINE="tests=nk_fault_injection" all run
+	@$(MAKE) CONFIG_TESTS_NK_FAULT_INJECTION=1 KERNEL_CMDLINE="tests=nk_fault_injection" all run
 
 tests-nk-readonly-visibility:
 	@echo "Running NK Read-Only Visibility Test..."
-	@$(MAKE) KERNEL_CMDLINE="tests=nk_readonly_visibility" all run
+	@$(MAKE) CONFIG_TESTS_NK_READONLY_VISIBILITY=1 KERNEL_CMDLINE="tests=nk_readonly_visibility" all run
 
 tests-nk-smp-monitor-stress:
 	@echo "Running NK SMP Monitor Stress Test..."
-	@$(MAKE) KERNEL_CMDLINE="tests=nk_smp_monitor_stress" all run
+	@$(MAKE) CONFIG_TESTS_SMP_MONITOR_STRESS=1 KERNEL_CMDLINE="tests=nk_smp_monitor_stress" all run
 
 # Other tests
 tests-usermode:
