@@ -211,10 +211,10 @@ def main() -> int:
     # Normal mode: Run with timeout and capture output
     start_time = time.time()
 
-    # Suppress real-time output when not verbose (quiet=True)
-    # This allows us to filter the output before printing
+    # Suppress real-time output unless --real-time is explicitly requested
+    # This allows us to filter/print the output after capture
     original_quiet = config.quiet
-    if not args.verbose:
+    if not args.real_time:
         config.quiet = True  # Suppress real-time callback
 
     # Use run_qemu_direct (command line is embedded in ISO via grub.cfg)
