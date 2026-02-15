@@ -39,6 +39,47 @@ void kernel_halt(void) {
     }
 }
 
+/**
+ * run_tests - Execute all post-initialization tests
+ *
+ * Runs tests that require full system initialization including SMP,
+ * interrupts, and monitor context. Called only on BSP after APs are ready.
+ */
+static void run_tests(void) {
+    /* Spinlock tests (BSP setup - handles spinlock_test_start flag) */
+    test_spinlock_bsp_setup();
+
+    /* APIC Timer Tests - run after APs are ready */
+    test_timer();
+
+    /* NK protection tests - manual only */
+    test_nk_fault_injection();
+
+    /* Boot tests */
+    test_boot();
+
+    /* SMP tests */
+    test_smp();
+
+    /* PCD tests */
+    test_pcd();
+
+    /* Nested Kernel invariants tests */
+    test_nk_invariants();
+
+    /* Read-only visibility tests */
+    test_nk_readonly_visibility();
+
+    /* Minilibc string library tests */
+    test_minilibc();
+
+    /* User mode tests */
+    test_usermode();
+
+    /* Run unified tests if test=unified was specified */
+    test_run_unified();
+}
+
 /* Kernel main entry point - called from boot.S */
 void kernel_main(uint32_t multiboot_info_addr) {
     uint8_t color = VGA_COLOR(VGA_COLOR_BLACK, VGA_COLOR_WHITE);
@@ -211,38 +252,8 @@ void kernel_main(uint32_t multiboot_info_addr) {
          * This allows the APIC timer to generate interrupts */
         enable_interrupts();
 
-        /* Spinlock tests (BSP setup - handles spinlock_test_start flag) */
-        test_spinlock_bsp_setup();
-
-        /* APIC Timer Tests - run after APs are ready */
-        test_timer();
-
-        /* NK protection tests - manual only */
-        test_nk_fault_injection();
-
-        /* Boot tests */
-        test_boot();
-
-        /* SMP tests */
-        test_smp();
-
-        /* PCD tests */
-        test_pcd();
-
-        /* Nested Kernel invariants tests */
-        test_nk_invariants();
-
-        /* Read-only visibility tests */
-        test_nk_readonly_visibility();
-
-        /* Minilibc string library tests */
-        test_minilibc();
-
-        /* User mode tests */
-        test_usermode();
-
-        /* Run unified tests if test=unified was specified */
-        test_run_unified();
+        /* Run all post-initialization tests */
+        run_tests();
 
         /* BSP waits with interrupts enabled for timer interrupts to fire
          * The HLT instruction will wake up on each interrupt */
