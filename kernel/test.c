@@ -30,7 +30,7 @@ static int tests_run_count = 0;
  * Test Registry
  * ============================================================================ */
 
-#include <string.h>
+#include "include/string.h"
 
 #if CONFIG_TESTS_MINILIBC
 /* Minilibc string library tests */
@@ -494,10 +494,169 @@ static int test_memcpy_all_bytes(void) {
     return 0;
 }
 
+/* ============================================================================
+ * snprintf Tests
+ * ============================================================================ */
+
+static int test_snprintf_basic_string(void) {
+    char buf[32];
+    int ret = snprintf(buf, sizeof(buf), "hello");
+
+    if (ret != 5 || strcmp(buf, "hello") != 0) {
+        serial_puts("[MINILIBC test] snprintf(basic string) FAILED\n");
+        return -1;
+    }
+    serial_puts("[MINILIBC test] snprintf(basic string) PASSED\n");
+    return 0;
+}
+
+static int test_snprintf_truncation(void) {
+    char buf[5];
+    int ret = snprintf(buf, sizeof(buf), "hello world");
+
+    /* C99: returns what WOULD be written (11), not truncated length */
+    if (ret != 11 || strcmp(buf, "hell") != 0) {
+        serial_puts("[SNPRINTF test] truncation FAILED: ret=");
+        serial_put_hex(ret);
+        serial_puts(" buf='");
+        serial_puts(buf);
+        serial_puts("'\n");
+        return -1;
+    }
+    serial_puts("[MINILIBC test] snprintf(truncation) PASSED\n");
+    return 0;
+}
+
+static int test_snprintf_format_d(void) {
+    char buf[32];
+    int ret = snprintf(buf, sizeof(buf), "value: %d", 42);
+
+    if (ret != 9 || strcmp(buf, "value: 42") != 0) {
+        serial_puts("[SNPRINTF test] %%d FAILED\n");
+        return -1;
+    }
+    serial_puts("[MINILIBC test] snprintf(%d) PASSED\n");
+    return 0;
+}
+
+static int test_snprintf_format_negative(void) {
+    char buf[32];
+    int ret = snprintf(buf, sizeof(buf), "%d", -123);
+
+    if (ret != 4 || strcmp(buf, "-123") != 0) {
+        serial_puts("[SNPRINTF test] negative FAILED\n");
+        return -1;
+    }
+    serial_puts("[MINILIBC test] snprintf(negative) PASSED\n");
+    return 0;
+}
+
+static int test_snprintf_format_x(void) {
+    char buf[32];
+    int ret = snprintf(buf, sizeof(buf), "0x%x", 255);
+
+    if (ret != 4 || strcmp(buf, "0xff") != 0) {
+        serial_puts("[SNPRINTF test] %%x FAILED\n");
+        return -1;
+    }
+    serial_puts("[MINILIBC test] snprintf(%x) PASSED\n");
+    return 0;
+}
+
+static int test_snprintf_format_X(void) {
+    char buf[32];
+    int ret = snprintf(buf, sizeof(buf), "0x%X", 255);
+
+    if (ret != 4 || strcmp(buf, "0xFF") != 0) {
+        serial_puts("[SNPRINTF test] %%X FAILED\n");
+        return -1;
+    }
+    serial_puts("[MINILIBC test] snprintf(%X) PASSED\n");
+    return 0;
+}
+
+static int test_snprintf_format_s(void) {
+    char buf[32];
+    int ret = snprintf(buf, sizeof(buf), "msg: %s", "test");
+
+    if (ret != 9 || strcmp(buf, "msg: test") != 0) {
+        serial_puts("[SNPRINTF test] %%s FAILED\n");
+        return -1;
+    }
+    serial_puts("[MINILIBC test] snprintf(%s) PASSED\n");
+    return 0;
+}
+
+static int test_snprintf_format_c(void) {
+    char buf[32];
+    int ret = snprintf(buf, sizeof(buf), "char: %c", 'Z');
+
+    if (ret != 7 || strcmp(buf, "char: Z") != 0) {
+        serial_puts("[SNPRINTF test] %%c FAILED\n");
+        return -1;
+    }
+    serial_puts("[MINILIBC test] snprintf(%c) PASSED\n");
+    return 0;
+}
+
+static int test_snprintf_format_p(void) {
+    char buf[32];
+    int ret = snprintf(buf, sizeof(buf), "%p", (void *)0x1234);
+
+    if (ret < 6 || buf[0] != '0' || buf[1] != 'x') {
+        serial_puts("[SNPRINTF test] %p FAILED\n");
+        return -1;
+    }
+    serial_puts("[MINILIBC test] snprintf(%p) PASSED\n");
+    return 0;
+}
+
+static int test_snprintf_format_percent(void) {
+    char buf[32];
+    int ret = snprintf(buf, sizeof(buf), "100%%");
+
+    if (ret != 4 || strcmp(buf, "100%") != 0) {
+        serial_puts("[SNPRINTF test] %% FAILED\n");
+        return -1;
+    }
+    serial_puts("[MINILIBC test] snprintf(%%) PASSED\n");
+    return 0;
+}
+
+static int test_snprintf_multiple_specs(void) {
+    char buf[64];
+    int ret = snprintf(buf, sizeof(buf), "%s: %d (0x%x)", "test", 10, 255);
+
+    /* "test: 10 (0xff)" = 15 chars */
+    if (ret != 15 || strcmp(buf, "test: 10 (0xff)") != 0) {
+        serial_puts("[SNPRINTF test] multiple specs FAILED: ret=");
+        serial_put_hex(ret);
+        serial_puts(" buf='");
+        serial_puts(buf);
+        serial_puts("'\n");
+        return -1;
+    }
+    serial_puts("[MINILIBC test] snprintf(multiple) PASSED\n");
+    return 0;
+}
+
+static int test_snprintf_zero_size(void) {
+    char buf[4] = "xxx";
+    int ret = snprintf(buf, 0, "hello");
+
+    /* Should not write anything, return length */
+    if (ret != 5 || strcmp(buf, "xxx") != 0) {
+        serial_puts("[SNPRINTF test] zero size FAILED\n");
+        return -1;
+    }
+    serial_puts("[MINILIBC test] snprintf(zero size) PASSED\n");
+    return 0;
+}
+
 /**
  * run_minilibc_tests - Run minilibc string library tests
  *
- * Tests strlen, strcpy, strcmp, strncmp, memset, memcpy functions.
+ * Tests strlen, strcpy, strcmp, strncmp, memset, memcpy, snprintf functions.
  *
  * Returns: 0 on success, -1 on failure
  */
@@ -553,6 +712,20 @@ int run_minilibc_tests(void) {
     if (test_memcpy_exact_count() != 0) return -1;
     if (test_memcpy_source_unchanged() != 0) return -1;
     if (test_memcpy_all_bytes() != 0) return -1;
+
+    /* Run snprintf tests */
+    if (test_snprintf_basic_string() != 0) return -1;
+    if (test_snprintf_truncation() != 0) return -1;
+    if (test_snprintf_format_d() != 0) return -1;
+    if (test_snprintf_format_negative() != 0) return -1;
+    if (test_snprintf_format_x() != 0) return -1;
+    if (test_snprintf_format_X() != 0) return -1;
+    if (test_snprintf_format_s() != 0) return -1;
+    if (test_snprintf_format_c() != 0) return -1;
+    if (test_snprintf_format_p() != 0) return -1;
+    if (test_snprintf_format_percent() != 0) return -1;
+    if (test_snprintf_multiple_specs() != 0) return -1;
+    if (test_snprintf_zero_size() != 0) return -1;
 
     serial_puts("\n========================================\n");
     serial_puts("  Minilibc: All tests PASSED\n");
@@ -672,7 +845,7 @@ const test_case_t test_registry[] = {
 #if CONFIG_TESTS_MINILIBC
     {
         .name = "minilibc",
-        .description = "Minimal string library tests (37 comprehensive tests for strlen, strcpy, strcmp, strncmp, memset, memcpy)",
+        .description = "Minimal string library tests (49 tests: strlen, strcpy, strcmp, strncmp, memset, memcpy, snprintf)",
         .run_func = run_minilibc_tests,
         .enabled = 1,
         .auto_run = 1  /* Auto-run after kernel init */
