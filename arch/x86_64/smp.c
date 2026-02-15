@@ -391,7 +391,7 @@ void ap_start(void) {
 
     /* Enter stress test mode
      * The wrapper is an empty stub when CONFIG_TESTS_SMP_MONITOR_STRESS=0 */
-    smp_monitor_stress_ap_entry();
+    test_smp_monitor_stress_ap_entry();
 
     /* Halt */
     while (1) { arch_halt(); }

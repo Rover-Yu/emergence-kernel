@@ -18,12 +18,14 @@ static volatile int stress_test_started = 0;
 static volatile int stress_test_complete = 0;
 static volatile int ap_completions[SMP_MAX_CPUS];
 static volatile int errors_detected = 0;
-static spinlock_t stress_lock = SPIN_LOCK_UNLOCKED;
 
 /* Flag for AP polling (exported for smp.c) */
 volatile int smp_monitor_stress_test_start = 0;
 
 #if CONFIG_TESTS_SMP_MONITOR_STRESS
+
+/* Lock for serial output (only needed when tests are enabled) */
+static spinlock_t stress_lock = SPIN_LOCK_UNLOCKED;
 
 /* External functions */
 extern void *monitor_pmm_alloc(uint8_t order);
@@ -251,10 +253,10 @@ void test_smp_monitor_stress(void) {
         test_run_by_name("smp_monitor_stress");
     }
 }
-/* Note: smp_monitor_stress_ap_entry is already defined above inside CONFIG_TESTS_SMP_MONITOR_STRESS block */
+/* Note: test_smp_monitor_stress_ap_entry is already defined above inside CONFIG_TESTS_SMP_MONITOR_STRESS block */
 #else
 void test_smp_monitor_stress(void) { }
 
 /* Provide empty stub for AP entry when stress tests are disabled */
-void smp_monitor_stress_ap_entry(void) { }
+void test_smp_monitor_stress_ap_entry(void) { }
 #endif

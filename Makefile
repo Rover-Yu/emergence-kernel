@@ -159,6 +159,10 @@ SMP_MONITOR_STRESS_TEST_OBJ := $(BUILD_DIR)/smp_monitor_stress_test.o
 NK_INVARIANTS_VERIFY_TEST_SRC := tests/nk_invariants_verify/nk_invariants_verify_test.c
 NK_INVARIANTS_VERIFY_TEST_OBJ := $(BUILD_DIR)/nk_invariants_verify_test.o
 
+# Minilibc test sources (always compiled, provides stubs when disabled)
+MINILIBC_TEST_SRC := tests/minilibc/minilibc_test.c
+MINILIBC_TEST_OBJ := $(BUILD_DIR)/minilibc_test.o
+
 # Test sources (reference only, not compiled into kernel)
 # These test files are kept for documentation purposes
 TESTS_DIR := tests
@@ -187,6 +191,7 @@ TESTS_OBJS += $(READONLY_VISIBILITY_TEST_OBJ)
 TESTS_OBJS += $(USERMODE_TEST_OBJ)
 TESTS_OBJS += $(NK_INVARIANTS_VERIFY_TEST_OBJ)
 TESTS_OBJS += $(MONITOR_TRAMPOLINE_TEST_OBJ)
+TESTS_OBJS += $(MINILIBC_TEST_OBJ)
 
 # Conditionally include test objects (must be BEFORE OBJS is defined)
 ifeq ($(CONFIG_TESTS_PMM),1)
@@ -415,6 +420,11 @@ $(MONITOR_TRAMPOLINE_TEST_OBJ): $(MONITOR_TRAMPOLINE_TEST_SRC) $(CONFIG_DEP) | $
 
 # Compile NK invariants verify test (from tests/nk_invariants_verify/) - ALWAYS compiled (provides stubs when disabled)
 $(NK_INVARIANTS_VERIFY_TEST_OBJ): $(NK_INVARIANTS_VERIFY_TEST_SRC) $(CONFIG_DEP) | $(BUILD_DIR)
+	@echo "  CC      $<"
+	$(Q)$(CC) $(CFLAGS) -c $< -o $@
+
+# Compile minilibc test (from tests/minilibc/) - ALWAYS compiled (provides stubs when disabled)
+$(MINILIBC_TEST_OBJ): $(MINILIBC_TEST_SRC) $(CONFIG_DEP) | $(BUILD_DIR)
 	@echo "  CC      $<"
 	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 
