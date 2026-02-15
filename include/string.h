@@ -9,6 +9,7 @@
 #define MINILIBC_STRING_H
 
 #include <stdint.h>
+#include <stdarg.h>
 
 /* ==== String Length ==== */
 
@@ -77,5 +78,34 @@ void *memset(void *s, int c, size_t n);
  * NOTE: Caller must ensure areas do not overlap
  */
 void *memcpy(void *dest, const void *src, size_t n);
+
+/* ==== Formatted Output ==== */
+
+/**
+ * snprintf - Format string to buffer with size limit
+ * @str: Destination buffer
+ * @size: Buffer size (including space for null terminator)
+ * @format: Format string
+ * @...: Variable arguments
+ *
+ * Supports: %d, %i, %u, %x, %X, %p, %s, %c, %%
+ *
+ * Returns: Number of characters that would have been written (excluding null)
+ *          if buffer was large enough. Negative on error.
+ *
+ * NOTE: Output is always null-terminated if size > 0
+ */
+int snprintf(char *str, size_t size, const char *format, ...);
+
+/**
+ * vsnprintf - Format string to buffer with va_list
+ * @str: Destination buffer
+ * @size: Buffer size (including space for null terminator)
+ * @format: Format string
+ * @ap: Variable argument list
+ *
+ * Returns: Number of characters that would have been written (excluding null)
+ */
+int vsnprintf(char *str, size_t size, const char *format, va_list ap);
 
 #endif /* MINILIBC_STRING_H */

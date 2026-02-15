@@ -99,7 +99,8 @@ KERNEL_C_SRCS := $(KERNEL_DIR)/device.c $(KERNEL_DIR)/pmm.c $(KERNEL_DIR)/pcd.c 
                  $(KERNEL_DIR)/monitor/monitor.c
 
 # Minilibc sources
-MINILIBC_C_SRCS := lib/minilibc/string.c
+MINILIBC_C_SRCS := lib/minilibc/string.c \
+                   lib/minilibc/printf.c
 MINILIBC_OBJS := $(patsubst lib/minilibc/%.c,$(BUILD_DIR)/minilibc_%.o,$(MINILIBC_C_SRCS))
 
 # Spinlock test sources (conditionally compiled)
