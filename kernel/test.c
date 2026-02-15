@@ -25,7 +25,7 @@ static int selected_test_count = 0;
 
 /* Track which tests have already run (for unified mode) */
 #define MAX_TESTS 16
-static char tests_run[MAX_TESTS];  /* 0 = not run, 1 = run */
+static const char *tests_run_names[MAX_TESTS];  /* Stores names of run tests */
 static int tests_run_count = 0;
 
 /* ============================================================================
@@ -221,9 +221,9 @@ void test_framework_init(void) {
 
     serial_puts("[TEST] Initializing test framework...\n");
 
-    /* Initialize tests_run tracking array */
+    /* Initialize tests_run_names tracking array */
     for (int i = 0; i < MAX_TESTS; i++) {
-        tests_run[i] = 0;
+        tests_run_names[i] = NULL;
     }
     tests_run_count = 0;
 
@@ -350,7 +350,7 @@ int test_run_by_name(const char *name) {
 
     /* Mark test as run */
     if (tests_run_count < MAX_TESTS) {
-        tests_run[tests_run_count++] = 1;
+        tests_run_names[tests_run_count++] = name;
     }
 
     /* Run test */
@@ -416,12 +416,12 @@ int test_run_unified(void) {
                 continue;  /* Skip disabled tests */
             }
 
-            /* Check if already run (shouldn't happen in unified mode, but be safe) */
+            /* Check if this specific test already ran */
             int already_run = 0;
             for (int j = 0; j < tests_run_count; j++) {
-                if (tests_run[j]) {
-                        already_run = 1;
-                        break;
+                if (tests_run_names[j] && strcmp(tests_run_names[j], test->name) == 0) {
+                    already_run = 1;
+                    break;
                 }
             }
             if (already_run) {
@@ -473,15 +473,18 @@ int test_run_unified(void) {
                 continue;
             }
 
-            /* Check if already run */
+            /* Check if this specific test already ran */
             int already_run = 0;
             for (int j = 0; j < tests_run_count; j++) {
-                if (tests_run[j]) {
-                        already_run = 1;
-                        break;
+                if (tests_run_names[j] && strcmp(tests_run_names[j], test_name) == 0) {
+                    already_run = 1;
+                    break;
                 }
             }
             if (already_run) {
+                serial_puts("[TEST] SKIP: ");
+                serial_puts(test_name);
+                serial_puts(" (already run)\n");
                 continue;
             }
 

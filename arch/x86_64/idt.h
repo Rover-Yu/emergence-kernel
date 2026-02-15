@@ -99,8 +99,13 @@ static inline void enable_interrupts(void) {
  */
 static inline void irq_disable(void) {
     int *depth = smp_get_irq_nest_depth_ptr();
-    (*depth)++;
-    if (*depth == 1) {
+    if (depth) {
+        (*depth)++;
+        if (*depth == 1) {
+            asm volatile ("cli" : : : "memory");
+        }
+    } else {
+        /* Fallback: disable interrupts without nesting */
         asm volatile ("cli" : : : "memory");
     }
 }
@@ -113,8 +118,13 @@ static inline void irq_disable(void) {
  */
 static inline void irq_enable(void) {
     int *depth = smp_get_irq_nest_depth_ptr();
-    (*depth)--;
-    if (*depth == 0) {
+    if (depth) {
+        (*depth)--;
+        if (*depth == 0) {
+            asm volatile ("sti" : : : "memory");
+        }
+    } else {
+        /* Fallback: enable interrupts without nesting */
         asm volatile ("sti" : : : "memory");
     }
 }
@@ -148,11 +158,19 @@ static inline irq_flags_t irq_save(int disable) {
  * Nesting-aware: Only enables interrupts when nesting depth is zero.
  */
 static inline void irq_restore(irq_flags_t flags) {
-    /* Only enable interrupts if they were enabled when saved AND no nesting remains */
-    if ((flags & (1UL << 9)) && (*smp_get_irq_nest_depth_ptr() == 0)) {
-        irq_enable();
+    int *depth = smp_get_irq_nest_depth_ptr();
+
+    /* Decrement nesting depth */
+    if (depth && *depth > 0) {
+        (*depth)--;
     }
-    asm volatile ("push %0; popf" : : "rm"(flags) : "memory");
+
+    /* Only enable interrupts if they were enabled when saved AND no nesting remains */
+    if (flags & (1UL << 9)) {
+        if (!depth || *depth == 0) {
+            asm volatile ("sti" : : : "memory");
+        }
+    }
 }
 
 #endif /* EMERGENCE_ARCH_X86_64_IDT_H */
