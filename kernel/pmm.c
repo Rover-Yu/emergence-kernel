@@ -58,7 +58,7 @@ static void add_free_block(uint64_t addr, uint8_t order) {
     block_info_t *block = alloc_block();
 
     if (!block) {
-        serial_puts("PMM: ERROR - Out of block descriptors\n");
+        klog_error("PMM", "Out of block descriptors");
         return;
     }
 

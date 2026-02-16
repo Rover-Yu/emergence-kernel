@@ -6,6 +6,7 @@
 #include "arch/x86_64/multiboot2.h"
 #include "arch/x86_64/serial.h"
 #include "arch/x86_64/power.h"
+#include "kernel/klog.h"
 
 /* External cmdline_get_value from multiboot2.c */
 extern const char *cmdline_get_value(const char *key);
@@ -219,7 +220,7 @@ static int parse_test_csv(const char *csv_str) {
 void test_framework_init(void) {
     const char *tests_value;
 
-    serial_puts("[TEST] Initializing test framework...\n");
+    klog_info("TEST", "Initializing test framework...");
 
     /* Initialize tests_run_names tracking array */
     for (int i = 0; i < MAX_TESTS; i++) {
@@ -238,39 +239,29 @@ void test_framework_init(void) {
 
     if (tests_value == NULL) {
         test_mode = TEST_MODE_NONE;
-        serial_puts("[TEST] No tests= parameter (default: no tests run)\n");
+        klog_info("TEST", "No tests= parameter (default: no tests run)");
         return;
     }
 
-    serial_puts("[TEST] tests=");
-    serial_puts(tests_value);
-    serial_puts("\n");
+    klog_info("TEST", "tests=%s", tests_value);
 
     /* Determine test mode */
     if (strcmp(tests_value, "all") == 0) {
         test_mode = TEST_MODE_ALL;
-        serial_puts("[TEST] Mode: ALL (run all auto_run tests)\n");
+        klog_info("TEST", "Mode: ALL (run all auto_run tests)");
     } else if (strcmp(tests_value, "unified") == 0) {
         test_mode = TEST_MODE_UNIFIED;
-        serial_puts("[TEST] Mode: UNIFIED (run all selected tests at end)\n");
+        klog_info("TEST", "Mode: UNIFIED (run all selected tests at end)");
     } else {
         /* Parse CSV list of test names */
         selected_test_count = parse_test_csv(tests_value);
         if (selected_test_count > 0) {
-            serial_puts("[TEST] Mode: CSV LIST (");
-            serial_put_hex(selected_test_count);
-            serial_puts(" test(s))\n");
+            klog_info("TEST", "Mode: CSV LIST (%d test(s))", selected_test_count);
             for (int i = 0; i < selected_test_count; i++) {
-                serial_puts("[TEST]   [");
-                serial_put_hex(i + 1);
-                serial_puts("/");
-                serial_put_hex(selected_test_count);
-                serial_puts("] ");
-                serial_puts(selected_test_names[i]);
-                serial_puts("\n");
+                klog_info("TEST", "  [%d/%d] %s", i + 1, selected_test_count, selected_test_names[i]);
             }
         } else {
-            serial_puts("[TEST] ERROR: Empty or invalid CSV list\n");
+            klog_error("TEST", "Empty or invalid CSV list");
             test_mode = TEST_MODE_NONE;
         }
     }
@@ -335,16 +326,12 @@ int test_run_by_name(const char *name) {
     }
 
     if (test == NULL) {
-        serial_puts("[TEST] ERROR: Test '");
-        serial_puts(name);
-        serial_puts("' not found in registry\n");
+        klog_error("TEST", "Test '%s' not found in registry", name);
         return -1;
     }
 
     if (!test->enabled) {
-        serial_puts("[TEST] ERROR: Test '");
-        serial_puts(name);
-        serial_puts("' is not enabled (check CONFIG_ flag)\n");
+        klog_error("TEST", "Test '%s' is not enabled (check CONFIG_ flag)", name);
         return -1;
     }
 
@@ -361,18 +348,12 @@ int test_run_by_name(const char *name) {
     serial_flush();
 
     if (result == 0) {
-        serial_puts("[TEST] PASSED: ");
-        serial_puts(name);
-        serial_puts("\n");
+        klog_info("TEST", "PASSED: %s", name);
         serial_flush();
     } else {
-        serial_puts("[TEST] FAILED: ");
-        serial_puts(name);
-        serial_puts(" (failures: ");
-        serial_put_hex(result);
-        serial_puts(")\n");
+        klog_error("TEST", "FAILED: %s (failures: %d)", name, result);
         serial_flush();
-        serial_puts("[TEST] FAILURE - System shutting down\n");
+        klog_error("TEST", "FAILURE - System shutting down");
         system_shutdown();
         /* Never returns */
     }
@@ -438,15 +419,11 @@ int test_run_unified(void) {
             int result = test->run_func();
 
             if (result != 0) {
-                serial_puts("[TEST] FAILED: ");
-                serial_puts(test->name);
-                serial_puts("\n");
+                klog_error("TEST", "FAILED: %s", test->name);
                 failures++;
                 /* Continue running other tests to see all failures */
             } else {
-                serial_puts("[TEST] PASSED: ");
-                serial_puts(test->name);
-                serial_puts("\n");
+                klog_info("TEST", "PASSED: %s", test->name);
             }
         }
     } else {
@@ -464,17 +441,13 @@ int test_run_unified(void) {
             }
 
             if (test == NULL) {
-                serial_puts("[TEST] ERROR: Test '");
-                serial_puts(test_name);
-                serial_puts("' not found in registry\n");
+                klog_error("TEST", "Test '%s' not found in registry", test_name);
                 failures++;
                 continue;
             }
 
             if (!test->enabled) {
-                serial_puts("[TEST] ERROR: Test '");
-                serial_puts(test_name);
-                serial_puts("' is not enabled\n");
+                klog_error("TEST", "Test '%s' is not enabled", test_name);
                 failures++;
                 continue;
             }
@@ -488,9 +461,7 @@ int test_run_unified(void) {
                 }
             }
             if (already_run) {
-                serial_puts("[TEST] SKIP: ");
-                serial_puts(test_name);
-                serial_puts(" (already run)\n");
+                klog_info("TEST", "SKIP: %s (already run)", test_name);
                 continue;
             }
 
@@ -498,15 +469,11 @@ int test_run_unified(void) {
             int result = test->run_func();
 
             if (result != 0) {
-                serial_puts("[TEST] FAILED: ");
-                serial_puts(test_name);
-                serial_puts("\n");
+                klog_error("TEST", "FAILED: %s", test_name);
                 failures++;
                 /* Continue running other tests to see all failures */
             } else {
-                serial_puts("[TEST] PASSED: ");
-                serial_puts(test_name);
-                serial_puts("\n");
+                klog_info("TEST", "PASSED: %s", test_name);
             }
         }
     }
@@ -514,12 +481,9 @@ int test_run_unified(void) {
     /* Summary */
     serial_puts("========================================\n");
     if (failures == 0) {
-        serial_puts("UNIFIED: ALL TESTS PASSED\n");
+        klog_info("TEST", "UNIFIED: ALL TESTS PASSED");
     } else {
-        serial_puts("UNIFIED: SOME TESTS FAILED\n");
-        serial_puts("Failures: ");
-        serial_put_hex(failures);
-        serial_puts("\n");
+        klog_error("TEST", "UNIFIED: %d tests FAILED", failures);
     }
     serial_puts("========================================\n");
     serial_puts("\n");

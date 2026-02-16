@@ -340,16 +340,8 @@ void slab_dump_stats(void) {
 
     for (i = 0; i < SLAB_NR_CACHES; i++) {
         slab_cache_t *cache = &slab_caches[i];
-
-        serial_puts("Cache[");
-        serial_putc('0' + i);
-        serial_puts("] size=");
-        serial_put_hex(cache->object_size);
-        serial_puts(" total=");
-        serial_put_hex(cache->total_objects);
-        serial_puts(" free=");
-        serial_put_hex(cache->free_objects);
-        serial_puts("\n");
+        klog_info("SLAB", "Cache[%d] size=%x total=%d free=%d",
+                 i, cache->object_size, cache->total_objects, cache->free_objects);
     }
 
     serial_puts("==================================\n\n");

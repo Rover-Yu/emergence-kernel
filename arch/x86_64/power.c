@@ -4,6 +4,7 @@
 #include "arch/x86_64/io.h"
 #include "arch/x86_64/serial.h"
 #include "arch/x86_64/cpu.h"
+#include "kernel/klog.h"
 
 /* Shutdown port addresses for various platforms */
 #define SHUTDOWN_PORT_QEMU   0xB004  /* QEMU, Bochs */
@@ -18,7 +19,7 @@
 
 void system_shutdown(void) {
     /* Print shutdown message and exit QEMU cleanly */
-    serial_puts("system is shutting down\n");
+    klog_info("KERN", "system is shutting down");
 
     /* Flush serial output to ensure all characters are transmitted */
     serial_flush();
@@ -43,7 +44,7 @@ void system_shutdown(void) {
 
     /* The code below should never execute in QEMU. It's only for other environments. */
     outb(SHUTDOWN_PORT_VBOX, SHUTDOWN_CMD_VBOX);
-    serial_puts("SHUTDOWN: Port I/O failed, halting...\n");
+    klog_error("KERN", "SHUTDOWN: Port I/O failed, halting...");
 
     /* If still here, halt forever */
     while (1) {

@@ -3,6 +3,7 @@
 
 #include "test_nk_invariants_verify.h"
 #include "kernel/test.h"
+#include "kernel/klog.h"
 #include "arch/x86_64/serial.h"
 
 /* External monitor function for invariant verification */
@@ -14,18 +15,18 @@ extern void monitor_verify_invariants(void);
  * test_nk_invariants_verify - Verify NK invariants on BSP after CR3 switch
  */
 void test_nk_invariants_verify(void) {
-    serial_puts("[NK-VERIFY] BSP: Verifying Nested Kernel invariants...\n");
+    klog_debug("NK_VERIFY_TEST", "BSP: Verifying Nested Kernel invariants...");
     monitor_verify_invariants();
-    serial_puts("[NK-VERIFY] BSP: Invariants verified successfully\n");
+    klog_debug("NK_VERIFY_TEST", "BSP: Invariants verified successfully");
 }
 
 /**
  * test_nk_invariants_verify_ap - Verify NK invariants on AP after CR3 switch
  */
 void test_nk_invariants_verify_ap(void) {
-    serial_puts("[NK-VERIFY] AP: Verifying Nested Kernel invariants...\n");
+    klog_debug("NK_VERIFY_TEST", "AP: Verifying Nested Kernel invariants...");
     monitor_verify_invariants();
-    serial_puts("[NK-VERIFY] AP: Invariants verified successfully\n");
+    klog_debug("NK_VERIFY_TEST", "AP: Invariants verified successfully");
 }
 
 #else /* !CONFIG_TESTS_NK_INVARIANTS_VERIFY */

@@ -3,14 +3,10 @@
 #include <stdint.h>
 #include "test_smp.h"
 #include "kernel/test.h"
+#include "kernel/klog.h"
 #include "arch/x86_64/serial.h"
 #include "arch/x86_64/apic.h"
 #include "arch/x86_64/smp.h"
-
-/* External function prototypes */
-extern void serial_puts(const char *str);
-extern void serial_putc(char c);
-extern void serial_put_hex(uint64_t value);
 
 /* External kernel state */
 extern volatile int bsp_init_done;
@@ -40,76 +36,68 @@ int run_smp_tests(void) {
     serial_puts("\n");
 
     /* Test 1: Verify a valid CPU has booted */
-    serial_puts("[SMP TEST] Test 1: CPU boot verification\n");
+    klog_info("SMP_TEST", "Test 1: CPU boot verification");
     cpu_index = smp_get_cpu_index();
     if (cpu_index >= 0 && cpu_index < SMP_MAX_CPUS) {
-        serial_puts("[SMP TEST] Valid CPU is running (PASS)\n");
-        serial_puts("[SMP TEST] CPU index: ");
-        serial_put_hex(cpu_index);
-        serial_puts("\n");
+        klog_info("SMP_TEST", "Valid CPU is running (PASS)");
+        klog_info("SMP_TEST", "CPU index: %d", cpu_index);
     } else {
-        serial_puts("[SMP TEST] Invalid CPU index (FAIL)\n");
+        klog_error("SMP_TEST", "Invalid CPU index (FAIL)");
         failures++;
     }
 
     /* Test 2: Verify BSP initialization completed */
-    serial_puts("[SMP TEST] Test 2: BSP initialization status\n");
+    klog_info("SMP_TEST", "Test 2: BSP initialization status");
     if (bsp_init_done) {
-        serial_puts("[SMP TEST] BSP initialization complete (PASS)\n");
+        klog_info("SMP_TEST", "BSP initialization complete (PASS)");
     } else {
-        serial_puts("[SMP TEST] BSP initialization NOT complete (FAIL)\n");
+        klog_error("SMP_TEST", "BSP initialization NOT complete (FAIL)");
         failures++;
     }
 
     /* Test 3: Get expected CPU count */
-    serial_puts("[SMP TEST] Test 3: CPU count detection\n");
+    klog_info("SMP_TEST", "Test 3: CPU count detection");
     cpu_count = smp_get_cpu_count();
-    serial_puts("[SMP TEST] Detected ");
-    serial_put_hex(cpu_count);
-    serial_puts(" CPUs\n");
+    klog_info("SMP_TEST", "Detected %d CPUs", cpu_count);
 
     /* For SMP test, we expect at least 2 CPUs */
     expected_cpus = 2;
     if (cpu_count >= expected_cpus) {
-        serial_puts("[SMP TEST] CPU count >= 2 (PASS)\n");
+        klog_info("SMP_TEST", "CPU count >= 2 (PASS)");
     } else {
-        serial_puts("[SMP TEST] CPU count < 2 (WARNING - running in single-CPU mode)\n");
+        klog_warn("SMP_TEST", "CPU count < 2 (WARNING - running in single-CPU mode)");
         /* Don't fail the test - it might be running on single-CPU hardware */
     }
 
     /* Test 4: Verify AP startup (cpu_count) */
-    serial_puts("[SMP TEST] Test 4: CPU count verification\n");
-    serial_puts("[SMP TEST] Detected CPUs: ");
-    serial_put_hex(cpu_count);
-    serial_puts("\n");
+    klog_info("SMP_TEST", "Test 4: CPU count verification");
+    klog_info("SMP_TEST", "Detected CPUs: %d", cpu_count);
 
     if (cpu_count >= 1) {
-        serial_puts("[SMP TEST] At least 1 CPU detected (PASS)\n");
+        klog_info("SMP_TEST", "At least 1 CPU detected (PASS)");
     } else {
-        serial_puts("[SMP TEST] No CPUs detected (FAIL)\n");
+        klog_error("SMP_TEST", "No CPUs detected (FAIL)");
         failures++;
     }
 
     /* Test 5: Verify we're running on a valid CPU */
-    serial_puts("[SMP TEST] Test 5: Current CPU verification\n");
+    klog_info("SMP_TEST", "Test 5: Current CPU verification");
     if (cpu_index >= 0 && cpu_index < SMP_MAX_CPUS) {
-        serial_puts("[SMP TEST] Valid CPU index (PASS)\n");
+        klog_info("SMP_TEST", "Valid CPU index (PASS)");
     } else {
-        serial_puts("[SMP TEST] Invalid CPU index (FAIL)\n");
+        klog_error("SMP_TEST", "Invalid CPU index (FAIL)");
         failures++;
     }
 
     /* Test 6: Verify APIC ID is valid */
-    serial_puts("[SMP TEST] Test 6: APIC accessibility\n");
+    klog_info("SMP_TEST", "Test 6: APIC accessibility");
     apic_id = lapic_get_id();
-    serial_puts("[SMP TEST] Local APIC ID: ");
-    serial_put_hex(apic_id);
-    serial_puts("\n");
+    klog_info("SMP_TEST", "Local APIC ID: %x", apic_id);
 
     if (apic_id < 256) {  /* Valid APIC IDs are 0-255 */
-        serial_puts("[SMP TEST] Valid APIC ID (PASS)\n");
+        klog_info("SMP_TEST", "Valid APIC ID (PASS)");
     } else {
-        serial_puts("[SMP TEST] Invalid APIC ID (FAIL)\n");
+        klog_error("SMP_TEST", "Invalid APIC ID (FAIL)");
         failures++;
     }
 

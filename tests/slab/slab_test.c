@@ -4,6 +4,7 @@
 #include "test_slab.h"
 #include "kernel/test.h"
 #include "kernel/slab.h"
+#include "kernel/klog.h"
 #include "arch/x86_64/serial.h"
 
 #if CONFIG_TESTS_SLAB
@@ -18,23 +19,21 @@
 static int test_single_alloc_free(void) {
     void *ptr;
 
-    serial_puts("[SLAB test] Single allocation test...\n");
+    klog_info("SLAB_TEST", "Single allocation test...");
 
     /* Allocate from 64-byte cache */
     ptr = slab_alloc_size(64);
     if (ptr == NULL) {
-        serial_puts("[SLAB test] FAILED: Allocation returned NULL\n");
+        klog_error("SLAB_TEST", "FAILED: Allocation returned NULL");
         return -1;
     }
 
-    serial_puts("[SLAB test] Allocated 64-byte object at 0x");
-    serial_put_hex((uint64_t)ptr);
-    serial_puts("\n");
+    klog_info("SLAB_TEST", "Allocated 64-byte object at %p", ptr);
 
     /* Free the object */
     slab_free_size(ptr, 64);
 
-    serial_puts("[SLAB test] Single allocation test PASSED\n");
+    klog_info("SLAB_TEST", "Single allocation test PASSED");
     return 0;
 }
 
@@ -45,27 +44,25 @@ static int test_multiple_allocations(void) {
     void *ptrs[16];
     int i;
 
-    serial_puts("[SLAB test] Multiple allocations test...\n");
+    klog_info("SLAB_TEST", "Multiple allocations test...");
 
     /* Allocate 16 objects from 128-byte cache */
     for (i = 0; i < 16; i++) {
         ptrs[i] = slab_alloc_size(128);
         if (ptrs[i] == NULL) {
-            serial_puts("[SLAB test] FAILED: Allocation ");
-            serial_put_hex(i);
-            serial_puts(" returned NULL\n");
+            klog_error("SLAB_TEST", "FAILED: Allocation %d returned NULL", i);
             return -1;
         }
     }
 
-    serial_puts("[SLAB test] Allocated 16 objects of 128 bytes\n");
+    klog_info("SLAB_TEST", "Allocated 16 objects of 128 bytes");
 
     /* Free all objects */
     for (i = 0; i < 16; i++) {
         slab_free_size(ptrs[i], 128);
     }
 
-    serial_puts("[SLAB test] Multiple allocations test PASSED\n");
+    klog_info("SLAB_TEST", "Multiple allocations test PASSED");
     return 0;
 }
 
@@ -75,42 +72,38 @@ static int test_multiple_allocations(void) {
 static int test_free_reuse(void) {
     void *ptr1, *ptr2;
 
-    serial_puts("[SLAB test] Free reuse test...\n");
+    klog_info("SLAB_TEST", "Free reuse test...");
 
     /* Allocate from 256-byte cache */
     ptr1 = slab_alloc_size(256);
     if (ptr1 == NULL) {
-        serial_puts("[SLAB test] FAILED: First allocation returned NULL\n");
+        klog_error("SLAB_TEST", "FAILED: First allocation returned NULL");
         return -1;
     }
 
-    serial_puts("[SLAB test] First allocation at 0x");
-    serial_put_hex((uint64_t)ptr1);
-    serial_puts("\n");
+    klog_info("SLAB_TEST", "First allocation at %p", ptr1);
 
     /* Free and reallocate - should get same address */
     slab_free_size(ptr1, 256);
 
     ptr2 = slab_alloc_size(256);
     if (ptr2 == NULL) {
-        serial_puts("[SLAB test] FAILED: Second allocation returned NULL\n");
+        klog_error("SLAB_TEST", "FAILED: Second allocation returned NULL");
         return -1;
     }
 
-    serial_puts("[SLAB test] Second allocation at 0x");
-    serial_put_hex((uint64_t)ptr2);
-    serial_puts("\n");
+    klog_info("SLAB_TEST", "Second allocation at %p", ptr2);
 
     /* Check if we got the same address (likely but not guaranteed) */
     if (ptr1 == ptr2) {
-        serial_puts("[SLAB test] Object reused (same address)\n");
+        klog_info("SLAB_TEST", "Object reused (same address)");
     } else {
-        serial_puts("[SLAB test] Object reused (different address, OK)\n");
+        klog_info("SLAB_TEST", "Object reused (different address, OK)");
     }
 
     slab_free_size(ptr2, 256);
 
-    serial_puts("[SLAB test] Free reuse test PASSED\n");
+    klog_info("SLAB_TEST", "Free reuse test PASSED");
     return 0;
 }
 
@@ -122,23 +115,17 @@ static int test_all_cache_sizes(void) {
     size_t sizes[] = {32, 64, 128, 256, 512, 1024, 2048, 4096};
     int i;
 
-    serial_puts("[SLAB test] All cache sizes test...\n");
+    klog_info("SLAB_TEST", "All cache sizes test...");
 
     /* Allocate one object from each cache */
     for (i = 0; i < 8; i++) {
         ptrs[i] = slab_alloc_size(sizes[i]);
         if (ptrs[i] == NULL) {
-            serial_puts("[SLAB test] FAILED: Allocation for size ");
-            serial_put_hex(sizes[i]);
-            serial_puts(" returned NULL\n");
+            klog_error("SLAB_TEST", "FAILED: Allocation for size %d returned NULL", sizes[i]);
             return -1;
         }
 
-        serial_puts("[SLAB test] Allocated ");
-        serial_put_hex(sizes[i]);
-        serial_puts("-byte object at 0x");
-        serial_put_hex((uint64_t)ptrs[i]);
-        serial_puts("\n");
+        klog_info("SLAB_TEST", "Allocated %d-byte object at %p", sizes[i], ptrs[i]);
     }
 
     /* Free all objects */
@@ -146,7 +133,7 @@ static int test_all_cache_sizes(void) {
         slab_free_size(ptrs[i], sizes[i]);
     }
 
-    serial_puts("[SLAB test] All cache sizes test PASSED\n");
+    klog_info("SLAB_TEST", "All cache sizes test PASSED");
     return 0;
 }
 
@@ -156,29 +143,29 @@ static int test_all_cache_sizes(void) {
 static int test_size_rounding(void) {
     void *ptr;
 
-    serial_puts("[SLAB test] Size rounding test...\n");
+    klog_info("SLAB_TEST", "Size rounding test...");
 
     /* Allocate 50 bytes - should round to 64 */
     ptr = slab_alloc_size(50);
     if (ptr == NULL) {
-        serial_puts("[SLAB test] FAILED: Allocation returned NULL\n");
+        klog_error("SLAB_TEST", "FAILED: Allocation returned NULL");
         return -1;
     }
 
-    serial_puts("[SLAB test] Allocated 50 bytes (rounded to 64)\n");
+    klog_info("SLAB_TEST", "Allocated 50 bytes (rounded to 64)");
     slab_free_size(ptr, 50);
 
     /* Allocate 1000 bytes - should round to 1024 */
     ptr = slab_alloc_size(1000);
     if (ptr == NULL) {
-        serial_puts("[SLAB test] FAILED: Allocation returned NULL\n");
+        klog_error("SLAB_TEST", "FAILED: Allocation returned NULL");
         return -1;
     }
 
-    serial_puts("[SLAB test] Allocated 1000 bytes (rounded to 1024)\n");
+    klog_info("SLAB_TEST", "Allocated 1000 bytes (rounded to 1024)");
     slab_free_size(ptr, 1000);
 
-    serial_puts("[SLAB test] Size rounding test PASSED\n");
+    klog_info("SLAB_TEST", "Size rounding test PASSED");
     return 0;
 }
 

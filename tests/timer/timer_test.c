@@ -3,12 +3,9 @@
 #include <stdint.h>
 #include "test_timer.h"
 #include "kernel/test.h"
+#include "kernel/klog.h"
 #include "arch/x86_64/timer.h"
 #include "arch/x86_64/serial.h"
-
-/* External function prototypes */
-extern void serial_puts(const char *str);
-extern void serial_put_hex(uint64_t value);
 
 /* External APIC timer functions from arch/x86_64/timer.c */
 extern void apic_timer_init(void);
@@ -37,32 +34,32 @@ int run_apic_timer_tests(void) {
     serial_puts("\n");
 
     /* Test 1: Initialize APIC timer */
-    serial_puts("[TIMER TEST] Test 1: Initialize APIC timer\n");
+    klog_info("TIMER_TEST", "Test 1: Initialize APIC timer");
     apic_timer_init();
-    serial_puts("[TIMER TEST] APIC timer initialized\n");
+    klog_info("TIMER_TEST", "APIC timer initialized");
 
     /* Test 2: Start timer to verify it can run */
-    serial_puts("[TIMER TEST] Test 2: Start timer\n");
+    klog_info("TIMER_TEST", "Test 2: Start timer");
     timer_start();
-    serial_puts("[TIMER TEST] Timer started successfully\n");
+    klog_info("TIMER_TEST", "Timer started successfully");
 
     /* Test 3: Verify timer state */
     if (timer_is_active()) {
-        serial_puts("[TIMER TEST] Timer is active (PASS)\n");
+        klog_info("TIMER_TEST", "Timer is active (PASS)");
     } else {
-        serial_puts("[TIMER TEST] Timer is NOT active (FAIL)\n");
+        klog_error("TIMER_TEST", "Timer is NOT active (FAIL)");
         return -1;
     }
 
     /* Test 4: Stop timer */
-    serial_puts("[TIMER TEST] Test 3: Stop timer\n");
+    klog_info("TIMER_TEST", "Test 3: Stop timer");
     extern void timer_stop(void);
     timer_stop();
 
     if (!timer_is_active()) {
-        serial_puts("[TIMER TEST] Timer stopped successfully (PASS)\n");
+        klog_info("TIMER_TEST", "Timer stopped successfully (PASS)");
     } else {
-        serial_puts("[TIMER TEST] Timer is STILL active (FAIL)\n");
+        klog_error("TIMER_TEST", "Timer is STILL active (FAIL)");
         return -1;
     }
 

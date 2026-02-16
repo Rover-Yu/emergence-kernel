@@ -10,6 +10,7 @@
 #include "arch/x86_64/cpu.h"
 #include "arch/x86_64/cr.h"
 #include "arch/x86_64/idt.h"
+#include "kernel/klog.h"
 
 /* Test wrapper headers */
 #include "tests/testcases.h"
@@ -17,10 +18,6 @@
 /* External ACPI functions for getting APIC information */
 extern int acpi_get_apic_count(void);
 extern uint8_t acpi_get_apic_id_by_index(int index);
-
-/* External serial output functions */
-extern void serial_puts(const char *str);
-extern void serial_putc(char c);
 
 /* External monitor functions */
 extern uint64_t monitor_get_unpriv_cr3(void);
@@ -215,18 +212,12 @@ per_cpu_data_t *smp_get_per_cpu_data(void) {
  */
 void smp_start_all_aps(void) {
     extern int ap_startup(uint8_t apic_id, uint32_t startup_addr);
-#if CONFIG_DEBUG_SMP_AP
-    extern void serial_puts(const char *str);
-    extern void serial_putc(char c);
-#endif
 
     /* AP trampoline is at 0x7000 (page 7)
      * Page number for STARTUP IPI = 0x7000 >> 12 = 7 */
     const uint32_t TRAMPOLINE_PAGE = 7;
 
-#if CONFIG_DEBUG_SMP_AP
-    serial_puts("SMP: Starting all Application Processors...\n");
-#endif
+    klog_info("SMP", "Starting all Application Processors...");
 
     /* Disable interrupts during AP startup to avoid interference */
     disable_interrupts();
@@ -252,11 +243,7 @@ void smp_start_all_aps(void) {
         int ret = ap_startup(apic_id, TRAMPOLINE_PAGE);
 
         if (ret < 0) {
-#if CONFIG_DEBUG_SMP_AP
-            serial_puts("SMP: AP ");
-            serial_putc('0' + i);
-            serial_puts(" startup FAILED!\n");
-#endif
+            klog_error("SMP", "AP %d startup FAILED!", i);
             cpu_info[i].state = CPU_OFFLINE;
             continue;  /* Skip failed AP and try the next one */
         }
@@ -294,11 +281,7 @@ void smp_start_all_aps(void) {
         }
     }
 
-    serial_puts("SMP: All APs startup complete. ");
-    serial_putc('0' + ap_ready_count);
-    serial_puts("/");
-    serial_putc('0' + expected_aps);
-    serial_puts(" APs ready\n");
+    klog_info("SMP", "All APs startup complete. %d/%d APs ready", ap_ready_count, expected_aps);
 
     /* BSP will halt after returning to main.c */
 }
@@ -320,7 +303,7 @@ void ap_start(void) {
     int my_index = atomic_fetch_add(&next_cpu_id, 1);
 
     if (my_index <= 0 || my_index >= SMP_MAX_CPUS) {
-        serial_puts("[AP] ERROR: Invalid CPU index!\n");
+        klog_error("SMP", "[AP] ERROR: Invalid CPU index!");
         while (1) { arch_halt(); }
     }
 
@@ -349,9 +332,7 @@ void ap_start(void) {
         arch_cr0_write(cr0);
 
         arch_cr3_write(unpriv_cr3);
-        serial_puts("[AP] CPU");
-        serial_putc('0' + my_index);
-        serial_puts(" switched to unprivileged mode\n");
+        klog_info("SMP", "[AP] CPU%d switched to unprivileged mode", my_index);
 
         /* Verify NK invariants on AP as well */
         test_nk_invariants_verify_ap();

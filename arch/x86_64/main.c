@@ -91,21 +91,7 @@ void kernel_main(uint32_t multiboot_info_addr) {
     int cpu_id;
     int skip_cr3_switch = 0;
 
-    /* DEBUG: Print received multiboot info address */
-    serial_puts("MAIN: mbi_addr=0x");
-    serial_put_hex(multiboot_info_addr);
-    serial_puts("\n");
-
-    /* Check if the address is zero - this indicates multiboot didn't provide info */
-    if (multiboot_info_addr == 0) {
-        serial_puts("MAIN: WARNING: mbi_addr is 0, multiboot may not have loaded properly\n");
-    }
-
-    /* Initialize VGA directly (only BSP should do this) */
-    vga_init();
-
-    /* Initialize device drivers (only BSP) */
-    /* Step 1: Register platform-specific drivers and devices */
+    /* Initialize serial driver early for debug output */
     serial_driver_init();
 
     /* Print boot banner FIRST - before any other output */
@@ -119,6 +105,7 @@ void kernel_main(uint32_t multiboot_info_addr) {
     const int banner_lines = sizeof(banner) / sizeof(banner[0]);
 
     /* Print banner to VGA */
+    vga_init();
     for (int i = 0; i < banner_lines && i < 25; i++) {
         vga_puts(banner[i], i, 0, color);
     }
@@ -131,8 +118,8 @@ void kernel_main(uint32_t multiboot_info_addr) {
     }
     serial_puts("\n");
 
-    /* Step 2: Probe devices and match with drivers */
-    device_probe_all();
+    /* Initialize Physical Memory Manager (must be early, before any dynamic allocation) */
+    pmm_init(multiboot_info_addr);
 
     /* Step 3: Initialize all devices in priority order */
     device_init_all();

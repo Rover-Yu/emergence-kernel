@@ -6,10 +6,7 @@
 #include "arch/x86_64/apic.h"
 #include "kernel/device.h"
 #include "arch/x86_64/smp.h"
-
-/* External functions */
-extern void serial_puts(const char *str);
-extern void serial_putc(char c);
+#include "kernel/klog.h"
 
 /* IPI interrupt count */
 static volatile int ipi_count = 0;
@@ -90,14 +87,14 @@ int ipi_driver_init(void) {
     /* Register IPI driver */
     ret = driver_register(&ipi_driver);
     if (ret < 0) {
-        serial_puts("IPI: Failed to register driver\n");
+        klog_error("IPI", "Failed to register driver");
         return ret;
     }
 
     /* Register IPI device */
     ret = device_register(&ipi_device);
     if (ret < 0) {
-        serial_puts("IPI: Failed to register device\n");
+        klog_error("IPI", "Failed to register device");
         return ret;
     }
 

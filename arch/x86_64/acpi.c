@@ -5,9 +5,7 @@
 #include "arch/x86_64/acpi.h"
 #include "arch/x86_64/io.h"
 #include "arch/x86_64/cpu.h"
-
-/* External serial output functions */
-extern void serial_puts(const char *str);
+#include "kernel/klog.h"
 
 /* EBDA (Extended BIOS Data Area) base address */
 #define EBDA_BASE 0x9FFFF000  /* Typical EBDA location */
@@ -85,7 +83,7 @@ madt_header_t *acpi_find_madt(void) {
 
     /* Validate RSDT address before dereferencing */
     if (rsdt_address == 0 || rsdt_address < 0x400000) {
-        serial_puts("ACPI: Invalid RSDT address\n");
+        klog_warn("ACPI", "Invalid RSDT address");
         return NULL;
     }
 
@@ -96,7 +94,7 @@ madt_header_t *acpi_find_madt(void) {
     /* Validate RSDT length before accessing */
     uint32_t rsdt_length = rsdt[1];
     if (rsdt_length < 8 || rsdt_length > 4096) {
-        serial_puts("ACPI: Invalid RSDT length\n");
+        klog_warn("ACPI", "Invalid RSDT length");
         return NULL;
     }
 

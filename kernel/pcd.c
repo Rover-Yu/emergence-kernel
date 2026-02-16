@@ -3,7 +3,6 @@
 #include "kernel/pcd.h"
 #include "kernel/pmm.h"
 #include "arch/x86_64/smp.h"
-#include "arch/x86_64/serial.h"
 #include "kernel/klog.h"
 
 /* External symbols for kernel region */
@@ -20,11 +19,6 @@ extern uint8_t nk_trampoline_stack_end[];
 
 /* PCD state - global instance */
 static pcd_state_t pcd_state;
-
-/* External serial functions */
-extern void serial_puts(const char *str);
-extern void serial_putc(char c);
-extern void serial_put_hex(uint64_t value);
 
 /* Internal PCD function for monitor access */
 void _pcd_set_type_internal(uint64_t phys_addr, uint8_t type) {

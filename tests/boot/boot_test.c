@@ -6,11 +6,7 @@
 #include "arch/x86_64/serial.h"
 #include "arch/x86_64/apic.h"
 #include "arch/x86_64/smp.h"
-
-/* External function prototypes */
-extern void serial_puts(const char *str);
-extern void serial_putc(char c);
-extern void serial_put_hex(uint64_t value);
+#include "kernel/klog.h"
 
 /* External kernel state */
 extern volatile int bsp_init_done;
@@ -38,62 +34,56 @@ int run_boot_tests(void) {
     serial_puts("\n");
 
     /* Test 1: Verify serial output is working (this test itself proves it) */
-    serial_puts("[BOOT TEST] Test 1: Serial console output\n");
-    serial_puts("[BOOT TEST] Serial console is working (PASS)\n");
+    klog_info("BOOT_TEST", "Test 1: Serial console output");
+    klog_info("BOOT_TEST", "Serial console is working (PASS)");
 
     /* Test 2: Verify we're running on a valid CPU (BSP or AP) */
-    serial_puts("[BOOT TEST] Test 2: CPU identification\n");
+    klog_info("BOOT_TEST", "Test 2: CPU identification");
     cpu_index = smp_get_cpu_index();
     if (cpu_index >= 0 && cpu_index < SMP_MAX_CPUS) {
-        serial_puts("[BOOT TEST] Running on valid CPU (PASS)\n");
-        serial_puts("[BOOT TEST] CPU index: ");
-        serial_put_hex(cpu_index);
-        serial_puts("\n");
+        klog_info("BOOT_TEST", "Running on valid CPU (PASS)");
+        klog_info("BOOT_TEST", "CPU index: %d", cpu_index);
     } else {
-        serial_puts("[BOOT TEST] Invalid CPU index (FAIL)\n");
+        klog_error("BOOT_TEST", "Invalid CPU index (FAIL)");
         failures++;
     }
 
     /* Test 3: Verify BSP initialization completed */
-    serial_puts("[BOOT TEST] Test 3: BSP initialization status\n");
+    klog_info("BOOT_TEST", "Test 3: BSP initialization status");
     if (bsp_init_done) {
-        serial_puts("[BOOT TEST] BSP initialization complete (PASS)\n");
+        klog_info("BOOT_TEST", "BSP initialization complete (PASS)");
     } else {
-        serial_puts("[BOOT TEST] BSP initialization NOT complete (FAIL)\n");
+        klog_error("BOOT_TEST", "BSP initialization NOT complete (FAIL)");
         failures++;
     }
 
     /* Test 4: Verify at least 1 CPU exists */
-    serial_puts("[BOOT TEST] Test 4: CPU count verification\n");
+    klog_info("BOOT_TEST", "Test 4: CPU count verification");
     if (smp_get_cpu_count() >= 1) {
-        serial_puts("[BOOT TEST] At least 1 CPU detected (PASS)\n");
+        klog_info("BOOT_TEST", "At least 1 CPU detected (PASS)");
     } else {
-        serial_puts("[BOOT TEST] No CPUs detected (FAIL)\n");
+        klog_error("BOOT_TEST", "No CPUs detected (FAIL)");
         failures++;
     }
 
     /* Test 5: Verify APIC is accessible */
-    serial_puts("[BOOT TEST] Test 5: Local APIC accessibility\n");
+    klog_info("BOOT_TEST", "Test 5: Local APIC accessibility");
     apic_id = lapic_get_id();
-    serial_puts("[BOOT TEST] Local APIC ID: ");
-    serial_put_hex(apic_id);
-    serial_puts("\n");
+    klog_info("BOOT_TEST", "Local APIC ID: %x", apic_id);
 
     if (apic_id < 256) {  /* Valid APIC IDs are 0-255 */
-        serial_puts("[BOOT TEST] Local APIC accessible (PASS)\n");
+        klog_info("BOOT_TEST", "Local APIC accessible (PASS)");
     } else {
-        serial_puts("[BOOT TEST] Local APIC NOT accessible (FAIL)\n");
+        klog_error("BOOT_TEST", "Local APIC NOT accessible (FAIL)");
         failures++;
     }
 
     /* Print summary */
     serial_puts("\n========================================\n");
     if (failures == 0) {
-        serial_puts("  BOOT: All tests PASSED\n");
+        klog_info("BOOT_TEST", "BOOT: All tests PASSED");
     } else {
-        serial_puts("  BOOT: Some tests FAILED (");
-        serial_put_hex(failures);
-        serial_puts(" failures)\n");
+        klog_error("BOOT_TEST", "BOOT: %d tests FAILED", failures);
     }
     serial_puts("========================================\n");
     serial_puts("\n");

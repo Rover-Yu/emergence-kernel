@@ -3,12 +3,9 @@
 #include <stdint.h>
 #include "test_pcd.h"
 #include "kernel/test.h"
+#include "kernel/klog.h"
 #include "arch/x86_64/serial.h"
 #include "kernel/pcd.h"
-
-/* External function prototypes */
-extern void serial_puts(const char *str);
-extern void serial_put_hex(uint64_t value);
 
 /* External monitor functions */
 extern void monitor_init(void);
@@ -40,55 +37,49 @@ int run_pcd_tests(void) {
     serial_puts("\n");
 
     /* Test 1: Verify PCD initialization */
-    serial_puts("[PCD TEST] Test 1: PCD initialization\n");
+    klog_info("PCD_TEST", "Test 1: PCD initialization");
     if (pcd_is_initialized()) {
-        serial_puts("[PCD TEST] PCD initialized (PASS)\n");
+        klog_info("PCD_TEST", "PCD initialized (PASS)");
     } else {
-        serial_puts("[PCD TEST] PCD NOT initialized (FAIL)\n");
+        klog_error("PCD_TEST", "PCD NOT initialized (FAIL)");
         failures++;
     }
 
     /* Test 2: Verify PCD has valid page count */
-    serial_puts("[PCD TEST] Test 2: PCD page count\n");
+    klog_info("PCD_TEST", "Test 2: PCD page count");
     max_pages = pcd_get_max_pages();
-    serial_puts("[PCD TEST] Max pages: ");
-    serial_put_hex(max_pages);
-    serial_puts("\n");
+    klog_info("PCD_TEST", "Max pages: %x", max_pages);
 
     if (max_pages > 0) {
-        serial_puts("[PCD TEST] PCD has pages (PASS)\n");
+        klog_info("PCD_TEST", "PCD has pages (PASS)");
     } else {
-        serial_puts("[PCD TEST] PCD has no pages (FAIL)\n");
+        klog_error("PCD_TEST", "PCD has no pages (FAIL)");
         failures++;
     }
 
     /* Test 3: Verify can query PCD type */
-    serial_puts("[PCD TEST] Test 3: PCD type query\n");
+    klog_info("PCD_TEST", "Test 3: PCD type query");
     page_type = pcd_get_type(test_page_addr);
-    serial_puts("[PCD TEST] Page type at 0x");
-    serial_put_hex(test_page_addr);
-    serial_puts(": ");
-    serial_put_hex(page_type);
-    serial_puts("\n");
+    klog_info("PCD_TEST", "Page type at %x: %x", test_page_addr, page_type);
 
     /* Page type should be valid (0-3) or 255 if not tracked */
     if (page_type <= 3 || page_type == 255) {
-        serial_puts("[PCD TEST] Valid page type (PASS)\n");
+        klog_info("PCD_TEST", "Valid page type (PASS)");
     } else {
-        serial_puts("[PCD TEST] Invalid page type (FAIL)\n");
+        klog_error("PCD_TEST", "Invalid page type (FAIL)");
         failures++;
     }
 
     /* Test 4: Verify monitor still initializes after PCD */
-    serial_puts("[PCD TEST] Test 4: Monitor initialization\n");
+    klog_info("PCD_TEST", "Test 4: Monitor initialization");
     /* Note: Monitor is already initialized by main.c, so we just verify it worked */
     /* We can't call monitor_init() again, so we verify Nested Kernel invariants */
-    serial_puts("[PCD TEST] Monitor already initialized in main (SKIP - verify invariants)\n");
+    klog_info("PCD_TEST", "Monitor already initialized in main (SKIP - verify invariants)");
 
     /* Test 5: Verify Nested Kernel invariants */
-    serial_puts("[PCD TEST] Test 5: Nested Kernel invariants\n");
+    klog_info("PCD_TEST", "Test 5: Nested Kernel invariants");
     monitor_verify_invariants();
-    serial_puts("[PCD TEST] Invariants verification complete (PASS)\n");
+    klog_info("PCD_TEST", "Invariants verification complete (PASS)");
 
     /* Print summary */
     serial_puts("\n========================================\n");

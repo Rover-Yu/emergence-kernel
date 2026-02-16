@@ -5,13 +5,10 @@
 #include "arch/x86_64/io.h"
 #include "arch/x86_64/msr.h"
 #include "include/barrier.h"
+#include "kernel/klog.h"
 
 /* APIC version register */
 #define LAPIC_VER 0x030
-
-/* External functions for serial output */
-extern void serial_puts(const char *str);
-extern void serial_putc(char c);
 
 /* Local APIC base address (set during initialization) */
 static volatile uint32_t *lapic_base = (volatile uint32_t *)LAPIC_DEFAULT_BASE;
@@ -139,19 +136,9 @@ void lapic_init(void) {
 
     /* Read APIC version */
     ver = lapic_read(LAPIC_VER);
-    serial_puts("APIC: LAPIC_VER = 0x");
-    for (int i = 28; i >= 0; i -= 4) {
-        uint8_t nibble = (ver >> i) & 0xF;
-        serial_putc(nibble < 10 ? '0' + nibble : 'A' + nibble - 10);
-    }
-    serial_puts("\n");
-    serial_puts("APIC: APIC version=");
-    serial_putc('0' + (ver & 0xFF));
-    serial_puts(" maxlvt=");
-    serial_putc('0' + ((ver >> 16) & 0xFF));
-    serial_puts("\n");
-
-    serial_puts("APIC: Local APIC initialized\n");
+    klog_debug("APIC", "LAPIC_VER = %p", ver);
+    klog_info("APIC", "APIC version=%d maxlvt=%d", ver & 0xFF, (ver >> 16) & 0xFF);
+    klog_info("APIC", "Local APIC initialized");
 }
 
 /**
@@ -373,6 +360,6 @@ void apic_timer_init(void) {
 
     /* NOTE: Timer is NOT started here. timer_start() will unmask and start it. */
 
-    serial_puts("APIC: APIC timer initialized successfully\n");
+    klog_info("APIC", "APIC timer initialized successfully");
 }
 

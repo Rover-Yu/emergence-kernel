@@ -3,14 +3,11 @@
 #include <stdint.h>
 #include "test_nk_readonly_visibility.h"
 #include "kernel/test.h"
+#include "kernel/klog.h"
 #include "arch/x86_64/serial.h"
 #include "kernel/pcd.h"
 
 #if CONFIG_TESTS_NK_READONLY_VISIBILITY
-
-/* External function prototypes */
-extern void serial_puts(const char *str);
-extern void serial_put_hex(uint64_t value);
 
 /* External monitor functions */
 extern void monitor_init(void);
@@ -47,84 +44,76 @@ int run_nk_readonly_visibility_tests(void) {
     serial_puts("\n");
 
     /* Test 1: Verify PCD initialization */
-    serial_puts("[RO VIS TEST] Test 1: PCD initialization\n");
+    klog_info("NK_RO_VIS_TEST", "Test 1: PCD initialization");
     if (pcd_is_initialized()) {
-        serial_puts("[RO VIS TEST] PCD initialized (PASS)\n");
+        klog_info("NK_RO_VIS_TEST", "PCD initialized (PASS)");
     } else {
-        serial_puts("[RO VIS TEST] PCD NOT initialized (FAIL)\n");
+        klog_error("NK_RO_VIS_TEST", "PCD NOT initialized (FAIL)");
         failures++;
     }
 
     /* Test 2: Verify PCD has valid page count */
-    serial_puts("[RO VIS TEST] Test 2: PCD page count\n");
+    klog_info("NK_RO_VIS_TEST", "Test 2: PCD page count");
     max_pages = pcd_get_max_pages();
-    serial_puts("[RO VIS TEST] Max pages: ");
-    serial_put_hex(max_pages);
-    serial_puts("\n");
+    klog_info("NK_RO_VIS_TEST", "Max pages: %x", max_pages);
 
     if (max_pages > 0) {
-        serial_puts("[RO VIS TEST] PCD has pages (PASS)\n");
+        klog_info("NK_RO_VIS_TEST", "PCD has pages (PASS)");
     } else {
-        serial_puts("[RO VIS TEST] PCD has no pages (FAIL)\n");
+        klog_error("NK_RO_VIS_TEST", "PCD has no pages (FAIL)");
         failures++;
     }
 
     /* Test 3: Verify monitor initialization */
-    serial_puts("[RO VIS TEST] Test 3: Monitor initialization\n");
+    klog_info("NK_RO_VIS_TEST", "Test 3: Monitor initialization");
     /* Monitor is initialized in main.c */
-    serial_puts("[RO VIS TEST] Monitor initialized in main (SKIP)\n");
+    klog_info("NK_RO_VIS_TEST", "Monitor initialized in main (SKIP)");
 
     /* Test 4: Verify CR3 switch to unprivileged mode */
-    serial_puts("[RO VIS TEST] Test 4: CR3 unprivileged mode\n");
+    klog_info("NK_RO_VIS_TEST", "Test 4: CR3 unprivileged mode");
     unpriv_cr3 = monitor_get_unpriv_cr3();
-    serial_puts("[RO VIS TEST] Unprivileged CR3: ");
-    serial_put_hex(unpriv_cr3);
-    serial_puts("\n");
+    klog_info("NK_RO_VIS_TEST", "Unprivileged CR3: %x", unpriv_cr3);
 
     if (unpriv_cr3 != 0) {
-        serial_puts("[RO VIS TEST] CR3 switch complete (PASS)\n");
+        klog_info("NK_RO_VIS_TEST", "CR3 switch complete (PASS)");
     } else {
-        serial_puts("[RO VIS TEST] CR3 NOT switched (FAIL)\n");
+        klog_error("NK_RO_VIS_TEST", "CR3 NOT switched (FAIL)");
         failures++;
     }
 
     /* Test 5: Verify BSP initialization */
-    serial_puts("[RO VIS TEST] Test 5: BSP initialization\n");
+    klog_info("NK_RO_VIS_TEST", "Test 5: BSP initialization");
     if (bsp_init_done) {
-        serial_puts("[RO VIS TEST] BSP initialized (PASS)\n");
+        klog_info("NK_RO_VIS_TEST", "BSP initialized (PASS)");
     } else {
-        serial_puts("[RO VIS TEST] BSP NOT initialized (FAIL)\n");
+        klog_error("NK_RO_VIS_TEST", "BSP NOT initialized (FAIL)");
         failures++;
     }
 
     /* Test 6: Verify Nested Kernel invariants */
-    serial_puts("[RO VIS TEST] Test 6: Nested Kernel invariants\n");
+    klog_info("NK_RO_VIS_TEST", "Test 6: Nested Kernel invariants");
     monitor_verify_invariants();
-    serial_puts("[RO VIS TEST] Invariants verification complete (PASS)\n");
+    klog_info("NK_RO_VIS_TEST", "Invariants verification complete (PASS)");
 
     /* Test 7: Verify page tables are marked (check PCD type for page table area) */
-    serial_puts("[RO VIS TEST] Test 7: Page table markings\n");
+    klog_info("NK_RO_VIS_TEST", "Test 7: Page table markings");
     /* Check a page in the typical page table area (0x1000-0x7000) */
     page_type = pcd_get_type(0x1000);
-    serial_puts("[RO VIS TEST] Page type at 0x1000: ");
-    serial_put_hex(page_type);
-    serial_puts("\n");
+    klog_info("NK_RO_VIS_TEST", "Page type at 0x1000: %x", page_type);
 
     if (page_type == PCD_TYPE_NK_PGTABLE || page_type == 255) {
-        serial_puts("[RO VIS TEST] Page table area properly marked (PASS)\n");
+        klog_info("NK_RO_VIS_TEST", "Page table area properly marked (PASS)");
     } else {
-        serial_puts("[RO VIS TEST] Page table area NOT marked (WARNING - may be OK)\n");
+        klog_warn("NK_RO_VIS_TEST", "Page table area NOT marked (WARNING - may be OK)");
         /* Don't fail - page table locations vary */
     }
 
     /* Print summary */
     serial_puts("\n========================================\n");
     if (failures == 0) {
-        serial_puts("  READ-ONLY VISIBILITY: All tests PASSED\n");
+        klog_info("NK_RO_VIS_TEST", "READ-ONLY VISIBILITY: All tests PASSED");
     } else {
-        serial_puts("  READ-ONLY VISIBILITY: Some tests FAILED (");
-        serial_put_hex(failures);
-        serial_puts(" failures)\n");
+        klog_error("NK_RO_VIS_TEST", "READ-ONLY VISIBILITY: %d tests FAILED", failures);
     }
     serial_puts("========================================\n");
     serial_puts("\n");

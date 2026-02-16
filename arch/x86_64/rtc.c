@@ -3,9 +3,7 @@
 #include <stdint.h>
 #include "arch/x86_64/rtc.h"
 #include "arch/x86_64/io.h"
-
-/* External serial output */
-extern void serial_puts(const char *str);
+#include "kernel/klog.h"
 
 /* Use RTC Status B definitions from rtc.h */
 
@@ -65,7 +63,7 @@ void rtc_init(uint8_t rate) {
     /* Read Status C to clear any pending flags */
     rtc_read(RTC_REG_STATUS_C);
 
-    serial_puts("RTC initialized for periodic interrupts\n");
+    klog_info("RTC", "initialized for periodic interrupts");
 }
 
 /* Note: RTC timer functionality removed - only APIC timer is supported */

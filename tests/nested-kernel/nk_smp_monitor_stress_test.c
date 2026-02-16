@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include "test_nk_smp_monitor_stress.h"
 #include "kernel/test.h"
+#include "kernel/klog.h"
 #include "arch/x86_64/serial.h"
 #include "arch/x86_64/smp.h"
 #include "include/spinlock.h"
@@ -58,21 +59,14 @@ void nk_smp_monitor_stress_ap_entry(void) {
     uint64_t expected_base = (uint64_t)&per_cpu_data[cpu_id];
 
     if (gs_base != expected_base) {
-        serial_puts("[SMP-STRESS] CPU");
-        serial_putc('0' + cpu_id);
-        serial_puts(" GS base mismatch! Expected 0x");
-        serial_put_hex(expected_base);
-        serial_puts(" got 0x");
-        serial_put_hex(gs_base);
-        serial_puts("\n");
+        klog_error("NK_SMP_STRESS_TEST", "CPU%d GS base mismatch! Expected %x got %x",
+                  cpu_id, expected_base, gs_base);
         errors_detected++;
     }
 
     /* Verify per_cpu_data has correct cpu_index */
     if (per_cpu_data[cpu_id].cpu_index != cpu_id) {
-        serial_puts("[SMP-STRESS] CPU");
-        serial_putc('0' + cpu_id);
-        serial_puts(" cpu_index mismatch!\n");
+        klog_error("NK_SMP_STRESS_TEST", "CPU%d cpu_index mismatch!", cpu_id);
         errors_detected++;
     }
 
@@ -96,17 +90,8 @@ void nk_smp_monitor_stress_ap_entry(void) {
     /* Report results */
     irq_flags_t flags;
     flags = spin_lock_irqsave(&stress_lock);
-    serial_puts("[SMP-STRESS] CPU");
-    serial_putc('0' + cpu_id);
-    serial_puts(" complete: ");
-    serial_put_hex(allocations_ok);
-    serial_puts("/");
-    serial_put_hex(STRESS_ITERATIONS);
-    serial_puts(" allocs, ");
-    serial_put_hex(frees_ok);
-    serial_puts("/");
-    serial_put_hex(STRESS_ITERATIONS);
-    serial_puts(" frees\n");
+    klog_info("NK_SMP_STRESS_TEST", "CPU%d complete: %d/%d allocs, %d/%d frees",
+             cpu_id, allocations_ok, STRESS_ITERATIONS, frees_ok, STRESS_ITERATIONS);
     spin_unlock_irqrestore(&stress_lock, flags);
 
     ap_completions[cpu_id] = 1;
@@ -137,44 +122,31 @@ int run_nk_smp_monitor_stress_tests(void) {
     cpu_id = smp_get_cpu_index();
 
     if (cpu_count < 2) {
-        serial_puts("[SMP-STRESS] SKIP: Requires at least 2 CPUs\n");
-        serial_puts("[SMP-STRESS] Current CPU count: ");
-        serial_putc('0' + cpu_count);
-        serial_puts("\n");
+        klog_warn("NK_SMP_STRESS_TEST", "SKIP: Requires at least 2 CPUs (current: %d)", cpu_count);
         return 0;
     }
 
-    serial_puts("[SMP-STRESS] Testing with ");
-    serial_putc('0' + cpu_count);
-    serial_puts(" CPUs\n");
+    klog_info("NK_SMP_STRESS_TEST", "Testing with %d CPUs", cpu_count);
 
     /* Verify BSP GS base */
     uint64_t gs_base = rdmsr_gs_base();
     uint64_t expected_base = (uint64_t)&per_cpu_data[cpu_id];
-    serial_puts("[SMP-STRESS] BSP (CPU0) GS base: 0x");
-    serial_put_hex(gs_base);
-    serial_puts("\n[SMP-STRESS] Expected: 0x");
-    serial_put_hex(expected_base);
-    serial_puts("\n");
+    klog_info("NK_SMP_STRESS_TEST", "BSP (CPU0) GS base: %x (expected: %x)", gs_base, expected_base);
 
     if (gs_base != expected_base) {
-        serial_puts("[SMP-STRESS] BSP GS base mismatch (FAIL)\n");
+        klog_error("NK_SMP_STRESS_TEST", "BSP GS base mismatch (FAIL)");
         errors_detected++;
     } else {
-        serial_puts("[SMP-STRESS] BSP GS base correct (PASS)\n");
+        klog_info("NK_SMP_STRESS_TEST", "BSP GS base correct (PASS)");
     }
 
     /* Verify per_cpu_data initialization */
-    serial_puts("[SMP-STRESS] Verifying per_cpu_data initialization:\n");
+    klog_info("NK_SMP_STRESS_TEST", "Verifying per_cpu_data initialization:");
     for (int i = 0; i < cpu_count; i++) {
-        serial_puts("[SMP-STRESS]   per_cpu_data[");
-        serial_putc('0' + i);
-        serial_puts("].cpu_index = ");
-        serial_putc('0' + per_cpu_data[i].cpu_index);
-        serial_puts("\n");
+        klog_info("NK_SMP_STRESS_TEST", "  per_cpu_data[%d].cpu_index = %d", i, per_cpu_data[i].cpu_index);
 
         if (per_cpu_data[i].cpu_index != i) {
-            serial_puts("[SMP-STRESS]   ERROR: cpu_index mismatch!\n");
+            klog_error("NK_SMP_STRESS_TEST", "  ERROR: cpu_index mismatch!");
             errors_detected++;
         }
     }
@@ -207,12 +179,10 @@ int run_nk_smp_monitor_stress_tests(void) {
     }
 
     if (!all_done) {
-        serial_puts("[SMP-STRESS] TIMEOUT waiting for APs\n");
+        klog_error("NK_SMP_STRESS_TEST", "TIMEOUT waiting for APs");
         for (int i = 1; i < cpu_count; i++) {
             if (!ap_completions[i]) {
-                serial_puts("[SMP-STRESS]   CPU");
-                serial_putc('0' + i);
-                serial_puts(" did not complete\n");
+                klog_error("NK_SMP_STRESS_TEST", "  CPU%d did not complete", i);
             }
         }
         errors_detected++;
@@ -230,11 +200,9 @@ int run_nk_smp_monitor_stress_tests(void) {
     /* Report results */
     serial_puts("\n========================================\n");
     if (errors_detected == 0) {
-        serial_puts("  SMP-STRESS: ALL PASSED\n");
+        klog_info("NK_SMP_STRESS_TEST", "SMP-STRESS: ALL PASSED");
     } else {
-        serial_puts("  SMP-STRESS: FAILED (");
-        serial_put_hex(errors_detected);
-        serial_puts(" errors)\n");
+        klog_error("NK_SMP_STRESS_TEST", "SMP-STRESS: %d errors detected", errors_detected);
     }
     serial_puts("========================================\n");
 

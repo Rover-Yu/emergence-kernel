@@ -5,6 +5,7 @@
 #include "serial.h"
 #include "kernel/monitor/monitor.h"  /* For g_unpriv_pd_ptr */
 #include "include/barrier.h"
+#include "kernel/klog.h"
 
 /* External: kernel stack top from boot.S */
 extern uint64_t nk_boot_stack_top;
@@ -27,14 +28,7 @@ extern void jump_to_user_mode(uint64_t user_rip, uint64_t user_rsp, uint64_t use
 
 /* Debug function to print sysretq parameters */
 void debug_sysret_params(uint64_t rip, uint64_t rsp, uint64_t rflags) {
-    serial_puts("[DEBUG] sysretq params:\n");
-    serial_puts("  RCX (user RIP):   0x");
-    serial_put_hex(rip);
-    serial_puts("\n  RSP (user stack): 0x");
-    serial_put_hex(rsp);
-    serial_puts("\n  R11 (user RFLAGS): 0x");
-    serial_put_hex(rflags);
-    serial_puts("\n");
+    klog_debug("SYSCALL", "sysretq params: RIP=%p RSP=%p RFLAGS=%p", rip, rsp, rflags);
 }
 
 /* External user program entry */
@@ -93,32 +87,20 @@ static int64_t sys_write(uint64_t fd, const char *buf, uint64_t count) {
     if (buf == 0) return -1;
 
     /* Simple output - don't dereference user pointer yet (no user paging) */
-    serial_puts("[USER] ");
-    serial_puts(buf);
-    serial_puts("\n");
+    klog_info("USER", "%s", buf);
 
     return count;
 }
 
 static void sys_exit(int64_t exit_code) {
-    serial_puts("[USER] Process exited with code: ");
-    serial_put_hex(exit_code);
-    serial_puts("\n");
+    klog_info("USER", "Process exited with code: %d", (int)exit_code);
     kernel_halt();  /* Halt for now - no scheduler yet */
 }
 
 /* Syscall dispatcher */
 void syscall_handler(uint64_t nr, uint64_t a1, uint64_t a2, uint64_t a3) {
     /* Debug: syscall was called! */
-    serial_puts("[KERNEL] Syscall ");
-    serial_put_hex(nr);
-    serial_puts(" args: ");
-    serial_put_hex(a1);
-    serial_puts(" ");
-    serial_put_hex(a2);
-    serial_puts(" ");
-    serial_put_hex(a3);
-    serial_puts("\n");
+    klog_debug("SYSCALL", "Syscall %x args: %x %x %x", nr, a1, a2, a3);
 
     int64_t result;
 
@@ -127,17 +109,13 @@ void syscall_handler(uint64_t nr, uint64_t a1, uint64_t a2, uint64_t a3) {
             result = sys_write(a1, (const char *)a2, a3);
             /* Return value in RAX */
             __asm__ volatile ("mov %0, %%rax" : : "r"(result) : "rax");
-            serial_puts("[KERNEL] Write returned: ");
-            serial_put_hex(result);
-            serial_puts("\n");
+            klog_debug("SYSCALL", "Write returned: %d", (int)result);
             break;
         case 2: /* SYS_exit */
             sys_exit(a1);
             break;
         default:
-            serial_puts("[KERNEL] Unknown syscall: ");
-            serial_put_hex(nr);
-            serial_puts("\n");
+            klog_warn("SYSCALL", "Unknown syscall: %x", nr);
             __asm__ volatile ("mov $-1, %%rax" ::: "rax");
             break;
     }
@@ -147,7 +125,7 @@ void syscall_handler(uint64_t nr, uint64_t a1, uint64_t a2, uint64_t a3) {
 void syscall_init(void) {
     uint64_t star, lstar, fmask, efer;
 
-    serial_puts("[KERNEL] syscall_init: starting...\n");
+    klog_info("SYSCALL", "syscall_init: starting...");
 
     /* CRITICAL: Enable SYSCALL/SYSRET by setting SCE bit in IA32_EFER */
     __asm__ volatile (
@@ -160,7 +138,7 @@ void syscall_init(void) {
         "wrmsr"
         : : "c"(MSR_IA32_EFER), "a"(efer & 0xFFFFFFFF), "d"(efer >> 32)
     );
-    serial_puts("[KERNEL] SYSCALL/SYSRET enabled (IA32_EFER.SCE=1)\n");
+    klog_info("SYSCALL", "SYSCALL/SYSRET enabled (IA32_EFER.SCE=1)");
 
     /* STAR: [63:48] = kernel CS, [47:32] = user CS for SYSRET
      * STAR format:
@@ -185,9 +163,7 @@ void syscall_init(void) {
     uint32_t star_low = 0x00000000;                    /* STAR[31:0] */
     uint32_t star_high = 0x00080018;                   /* STAR[63:32] */
 
-    serial_puts("[KERNEL] Computed STAR: 0x");
-    serial_put_hex(star);
-    serial_puts("\n");
+    klog_debug("SYSCALL", "Computed STAR: %p", ((uint64_t)star_high << 32) | star_low);
 
     /* LSTAR: Entry point for SYSCALL */
     lstar = (uint64_t)syscall_entry;
@@ -195,7 +171,7 @@ void syscall_init(void) {
     /* FMASK: Clear IF on syscall */
     fmask = 0x200;
 
-    serial_puts("[KERNEL] syscall_init: writing STAR MSR...\n");
+    klog_debug("SYSCALL", "writing STAR MSR...");
     __asm__ volatile (
         "wrmsr"
         : : "c"(MSR_IA32_STAR), "a"(star_low), "d"(star_high)
@@ -208,62 +184,48 @@ void syscall_init(void) {
         : "=a"(read_low), "=d"(read_high)
         : "c"(MSR_IA32_STAR)
     );
-    serial_puts("[KERNEL] STAR verify: EAX=0x");
-    serial_put_hex(read_low);
-    serial_puts(" EDX=0x");
-    serial_put_hex(read_high);
-    serial_puts("\n");
-    serial_puts("[KERNEL] STAR[63:48] (kernel CS): 0x");
-    serial_put_hex(read_high >> 16);
-    serial_puts("\n");
-    serial_puts("[KERNEL] STAR[47:32] (user CS): 0x");
-    serial_put_hex(read_high & 0xFFFF);
-    serial_puts("\n");
+    klog_debug("SYSCALL", "STAR verify: EAX=%p EDX=%p", read_low, read_high);
+    klog_debug("SYSCALL", "STAR[63:48] (kernel CS): %p", read_high >> 16);
+    klog_debug("SYSCALL", "STAR[47:32] (user CS): %p", read_high & 0xFFFF);
 
-    serial_puts("[KERNEL] syscall_init: writing LSTAR MSR...\n");
+    klog_debug("SYSCALL", "writing LSTAR MSR...");
     __asm__ volatile (
         "wrmsr"
         : : "c"(MSR_IA32_LSTAR), "a"(lstar & 0xFFFFFFFF), "d"(lstar >> 32)
     );
 
-    serial_puts("[KERNEL] syscall_init: writing FMASK MSR...\n");
+    klog_debug("SYSCALL", "writing FMASK MSR...");
     __asm__ volatile (
         "wrmsr"
         : : "c"(MSR_IA32_FMASK), "a"(fmask & 0xFFFFFFFF), "d"(fmask >> 32)
     );
 
-    serial_puts("[KERNEL] Syscall initialized\n");
+    klog_info("SYSCALL", "Syscall initialized");
 }
 
 /* Jump to user mode - MINIMAL VERSION for debugging */
 void enter_user_mode(void) {
-    serial_puts("[KERNEL] Entering user mode (MINIMAL)...\n");
+    klog_info("SYSCALL", "Entering user mode (MINIMAL)...");
 
     /* Get address of user program */
     uint64_t user_rip = (uint64_t)user_program_start;
     uint64_t user_rsp = (uint64_t)user_stack + user_stack_size;
 
-    serial_puts("[KERNEL] user_program_start address: 0x");
-    serial_put_hex(user_rip);
-    serial_puts("\n");
+    klog_debug("SYSCALL", "user_program_start address: %p", user_rip);
 
     /* For iretq, we just need 16-byte stack alignment
      * RIP doesn't need special alignment */
     user_rsp &= ~0xF;
 
-    serial_puts("[KERNEL] User RIP: 0x");
-    serial_put_hex(user_rip);
-    serial_puts(", RSP: 0x");
-    serial_put_hex(user_rsp);
-    serial_puts("\n");
+    klog_debug("SYSCALL", "User RIP: %p, RSP: %p", user_rip, user_rsp);
 
     /* RFLAGS: IF=1, bit 1=1 (reserved but must be 1) */
     uint64_t user_rflags = 0x202;
 
     /* Jump to user mode using the assembly function */
-    serial_puts("[KERNEL] Calling jump_to_user_mode...\n");
+    klog_debug("SYSCALL", "Calling jump_to_user_mode...");
     jump_to_user_mode(user_rip, user_rsp, user_rflags);
 
     /* Should never reach here */
-    serial_puts("[KERNEL] ERROR: Returned from jump_to_user_mode!\n");
+    klog_error("SYSCALL", "ERROR: Returned from jump_to_user_mode!");
 }

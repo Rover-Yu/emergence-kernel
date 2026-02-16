@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include "test_minilibc.h"
 #include "kernel/test.h"
+#include "kernel/klog.h"
 #include "arch/x86_64/serial.h"
 #include "include/string.h"
 
@@ -16,50 +17,50 @@
 static int test_strlen_empty(void) {
     size_t len = strlen("");
     if (len != 0) {
-        serial_puts("[MINILIBC test] strlen(\"\") FAILED: expected 0\n");
+        klog_error("MINILIBC_TEST", "strlen(\"\") FAILED: expected 0");
         return -1;
     }
-    serial_puts("[MINILIBC test] strlen(\"\") PASSED\n");
+    klog_info("MINILIBC_TEST", "strlen(\"\") PASSED");
     return 0;
 }
 
 static int test_strlen_basic(void) {
     size_t len = strlen("hello");
     if (len != 5) {
-        serial_puts("[MINILIBC test] strlen(\"hello\") FAILED: expected 5\n");
+        klog_error("MINILIBC_TEST", "strlen(\"hello\") FAILED: expected 5");
         return -1;
     }
-    serial_puts("[MINILIBC test] strlen(\"hello\") PASSED\n");
+    klog_info("MINILIBC_TEST", "strlen(\"hello\") PASSED");
     return 0;
 }
 
 static int test_strlen_single_char(void) {
     size_t len = strlen("A");
     if (len != 1) {
-        serial_puts("[MINILIBC test] strlen(\"A\") FAILED: expected 1\n");
+        klog_error("MINILIBC_TEST", "strlen(\"A\") FAILED: expected 1");
         return -1;
     }
-    serial_puts("[MINILIBC test] strlen(\"A\") PASSED\n");
+    klog_info("MINILIBC_TEST", "strlen(\"A\") PASSED");
     return 0;
 }
 
 static int test_strlen_with_spaces(void) {
     size_t len = strlen("hello world");
     if (len != 11) {
-        serial_puts("[MINILIBC test] strlen(\"hello world\") FAILED: expected 11\n");
+        klog_error("MINILIBC_TEST", "strlen(\"hello world\") FAILED: expected 11");
         return -1;
     }
-    serial_puts("[MINILIBC test] strlen(\"hello world\") PASSED\n");
+    klog_info("MINILIBC_TEST", "strlen(\"hello world\") PASSED");
     return 0;
 }
 
 static int test_strlen_special_chars(void) {
     size_t len = strlen("\n\t\x01");
     if (len != 3) {
-        serial_puts("[MINILIBC test] strlen(special chars) FAILED: expected 3\n");
+        klog_error("MINILIBC_TEST", "strlen(special chars) FAILED: expected 3");
         return -1;
     }
-    serial_puts("[MINILIBC test] strlen(special chars) PASSED\n");
+    klog_info("MINILIBC_TEST", "strlen(special chars) PASSED");
     return 0;
 }
 
@@ -73,14 +74,14 @@ static int test_strcpy_basic(void) {
     char *result = strcpy(dest, src);
 
     if (result != dest) {
-        serial_puts("[MINILIBC test] strcpy FAILED: wrong return value\n");
+        klog_error("MINILIBC_TEST", "strcpy FAILED: wrong return value");
         return -1;
     }
     if (strcmp(dest, src) != 0) {
-        serial_puts("[MINILIBC test] strcpy FAILED: copy mismatch\n");
+        klog_error("MINILIBC_TEST", "strcpy FAILED: copy mismatch");
         return -1;
     }
-    serial_puts("[MINILIBC test] strcpy(basic) PASSED\n");
+    klog_info("MINILIBC_TEST", "strcpy(basic) PASSED");
     return 0;
 }
 
@@ -89,14 +90,14 @@ static int test_strcpy_empty_src(void) {
     char *result = strcpy(dest, "");
 
     if (result != dest) {
-        serial_puts("[MINILIBC test] strcpy(empty) FAILED: wrong return value\n");
+        klog_error("MINILIBC_TEST", "strcpy(empty) FAILED: wrong return value");
         return -1;
     }
     if (dest[0] != '\0') {
-        serial_puts("[MINILIBC test] strcpy(empty) FAILED: not null terminated\n");
+        klog_error("MINILIBC_TEST", "strcpy(empty) FAILED: not null terminated");
         return -1;
     }
-    serial_puts("[MINILIBC test] strcpy(empty) PASSED\n");
+    klog_info("MINILIBC_TEST", "strcpy(empty) PASSED");
     return 0;
 }
 
@@ -105,14 +106,14 @@ static int test_strcpy_single_char(void) {
     char *result = strcpy(dest, "X");
 
     if (result != dest) {
-        serial_puts("[MINILIBC test] strcpy(single) FAILED: wrong return value\n");
+        klog_error("MINILIBC_TEST", "strcpy(single) FAILED: wrong return value");
         return -1;
     }
     if (dest[0] != 'X' || dest[1] != '\0') {
-        serial_puts("[MINILIBC test] strcpy(single) FAILED: incorrect copy\n");
+        klog_error("MINILIBC_TEST", "strcpy(single) FAILED: incorrect copy");
         return -1;
     }
-    serial_puts("[MINILIBC test] strcpy(single) PASSED\n");
+    klog_info("MINILIBC_TEST", "strcpy(single) PASSED");
     return 0;
 }
 
@@ -121,10 +122,10 @@ static int test_strcopy_with_spaces(void) {
     strcpy(dest, "hello world");
 
     if (strcmp(dest, "hello world") != 0) {
-        serial_puts("[MINILIBC test] strcpy(spaces) FAILED: copy mismatch\n");
+        klog_error("MINILIBC_TEST", "strcpy(spaces) FAILED: copy mismatch");
         return -1;
     }
-    serial_puts("[MINILIBC test] strcpy(spaces) PASSED\n");
+    klog_info("MINILIBC_TEST", "strcpy(spaces) PASSED");
     return 0;
 }
 
@@ -134,68 +135,68 @@ static int test_strcopy_with_spaces(void) {
 
 static int test_strcmp_equal(void) {
     if (strcmp("hello", "hello") != 0) {
-        serial_puts("[MINILIBC test] strcmp(equal) FAILED\n");
+        klog_error("MINILIBC_TEST", "strcmp(equal) FAILED");
         return -1;
     }
-    serial_puts("[MINILIBC test] strcmp(equal) PASSED\n");
+    klog_info("MINILIBC_TEST", "strcmp(equal) PASSED");
     return 0;
 }
 
 static int test_strcmp_both_empty(void) {
     if (strcmp("", "") != 0) {
-        serial_puts("[MINILIBC test] strcmp(both empty) FAILED\n");
+        klog_error("MINILIBC_TEST", "strcmp(both empty) FAILED");
         return -1;
     }
-    serial_puts("[MINILIBC test] strcmp(both empty) PASSED\n");
+    klog_info("MINILIBC_TEST", "strcmp(both empty) PASSED");
     return 0;
 }
 
 static int test_strcmp_one_empty(void) {
     if (strcmp("", "abc") >= 0) {
-        serial_puts("[MINILIBC test] strcmp(empty < nonempty) FAILED\n");
+        klog_error("MINILIBC_TEST", "strcmp(empty < nonempty) FAILED");
         return -1;
     }
     if (strcmp("abc", "") <= 0) {
-        serial_puts("[MINILIBC test] strcmp(nonempty > empty) FAILED\n");
+        klog_error("MINILIBC_TEST", "strcmp(nonempty > empty) FAILED");
         return -1;
     }
-    serial_puts("[MINILIBC test] strcmp(one empty) PASSED\n");
+    klog_info("MINILIBC_TEST", "strcmp(one empty) PASSED");
     return 0;
 }
 
 static int test_strcmp_less(void) {
     if (strcmp("abc", "def") >= 0) {
-        serial_puts("[MINILIBC test] strcmp(less) FAILED\n");
+        klog_error("MINILIBC_TEST", "strcmp(less) FAILED");
         return -1;
     }
-    serial_puts("[MINILIBC test] strcmp(less) PASSED\n");
+    klog_info("MINILIBC_TEST", "strcmp(less) PASSED");
     return 0;
 }
 
 static int test_strcmp_greater(void) {
     if (strcmp("xyz", "abc") <= 0) {
-        serial_puts("[MINILIBC test] strcmp(greater) FAILED\n");
+        klog_error("MINILIBC_TEST", "strcmp(greater) FAILED");
         return -1;
     }
-    serial_puts("[MINILIBC test] strcmp(greater) PASSED\n");
+    klog_info("MINILIBC_TEST", "strcmp(greater) PASSED");
     return 0;
 }
 
 static int test_strcmp_prefix(void) {
     if (strcmp("abc", "abcd") >= 0) {
-        serial_puts("[MINILIBC test] strcmp(prefix) FAILED\n");
+        klog_error("MINILIBC_TEST", "strcmp(prefix) FAILED");
         return -1;
     }
-    serial_puts("[MINILIBC test] strcmp(prefix) PASSED\n");
+    klog_info("MINILIBC_TEST", "strcmp(prefix) PASSED");
     return 0;
 }
 
 static int test_strcmp_case_sensitive(void) {
     if (strcmp("ABC", "abc") == 0) {
-        serial_puts("[MINILIBC test] strcmp(case) FAILED: should be case sensitive\n");
+        klog_error("MINILIBC_TEST", "strcmp(case) FAILED: should be case sensitive");
         return -1;
     }
-    serial_puts("[MINILIBC test] strcmp(case) PASSED\n");
+    klog_info("MINILIBC_TEST", "strcmp(case) PASSED");
     return 0;
 }
 
@@ -205,55 +206,55 @@ static int test_strcmp_case_sensitive(void) {
 
 static int test_strncmp_equal(void) {
     if (strncmp("hello", "hello", 10) != 0) {
-        serial_puts("[MINILIBC test] strncmp(equal) FAILED\n");
+        klog_error("MINILIBC_TEST", "strncmp(equal) FAILED");
         return -1;
     }
-    serial_puts("[MINILIBC test] strncmp(equal) PASSED\n");
+    klog_info("MINILIBC_TEST", "strncmp(equal) PASSED");
     return 0;
 }
 
 static int test_strncmp_equal_prefix(void) {
     if (strncmp("hello", "helium", 3) != 0) {
-        serial_puts("[MINILIBC test] strncmp(equal prefix) FAILED\n");
+        klog_error("MINILIBC_TEST", "strncmp(equal prefix) FAILED");
         return -1;
     }
-    serial_puts("[MINILIBC test] strncmp(equal prefix) PASSED\n");
+    klog_info("MINILIBC_TEST", "strncmp(equal prefix) PASSED");
     return 0;
 }
 
 static int test_strncmp_zero(void) {
     if (strncmp("abc", "xyz", 0) != 0) {
-        serial_puts("[MINILIBC test] strncmp(zero limit) FAILED\n");
+        klog_error("MINILIBC_TEST", "strncmp(zero limit) FAILED");
         return -1;
     }
-    serial_puts("[MINILIBC test] strncmp(zero limit) PASSED\n");
+    klog_info("MINILIBC_TEST", "strncmp(zero limit) PASSED");
     return 0;
 }
 
 static int test_strncmp_both_empty(void) {
     if (strncmp("", "", 10) != 0) {
-        serial_puts("[MINILIBC test] strncmp(both empty) FAILED\n");
+        klog_error("MINILIBC_TEST", "strncmp(both empty) FAILED");
         return -1;
     }
-    serial_puts("[MINILIBC test] strncmp(both empty) PASSED\n");
+    klog_info("MINILIBC_TEST", "strncmp(both empty) PASSED");
     return 0;
 }
 
 static int test_strncmp_limit_shorter(void) {
     if (strncmp("abc", "xyz", 1) == 0) {
-        serial_puts("[MINILIBC test] strncmp(limit shorter) FAILED\n");
+        klog_error("MINILIBC_TEST", "strncmp(limit shorter) FAILED");
         return -1;
     }
-    serial_puts("[MINILIBC test] strncmp(limit shorter) PASSED\n");
+    klog_info("MINILIBC_TEST", "strncmp(limit shorter) PASSED");
     return 0;
 }
 
 static int test_strncmp_one_is_prefix(void) {
     if (strncmp("abc", "abcd", 4) >= 0) {
-        serial_puts("[MINILIBC test] strncmp(prefix) FAILED\n");
+        klog_error("MINILIBC_TEST", "strncmp(prefix) FAILED");
         return -1;
     }
-    serial_puts("[MINILIBC test] strncmp(prefix) PASSED\n");
+    klog_info("MINILIBC_TEST", "strncmp(prefix) PASSED");
     return 0;
 }
 
@@ -268,11 +269,11 @@ static int test_memset_basic(void) {
 
     for (int i = 0; i < 10; i++) {
         if (buffer[i] != 'A') {
-            serial_puts("[MINILIBC test] memset FAILED: byte not 'A'\n");
+            klog_error("MINILIBC_TEST", "memset FAILED: byte not 'A'");
             return -1;
         }
     }
-    serial_puts("[MINILIBC test] memset(basic) PASSED\n");
+    klog_info("MINILIBC_TEST", "memset(basic) PASSED");
     return 0;
 }
 
@@ -281,10 +282,10 @@ static int test_memset_zero(void) {
     memset(buffer, 0, 0);  /* Should do nothing */
 
     if (buffer[0] != 'x') {
-        serial_puts("[MINILIBC test] memset(zero) FAILED: modified buffer\n");
+        klog_error("MINILIBC_TEST", "memset(zero) FAILED: modified buffer");
         return -1;
     }
-    serial_puts("[MINILIBC test] memset(zero) PASSED\n");
+    klog_info("MINILIBC_TEST", "memset(zero) PASSED");
     return 0;
 }
 
@@ -294,11 +295,11 @@ static int test_memset_zero_byte(void) {
 
     for (int i = 0; i < 10; i++) {
         if (buffer[i] != 0) {
-            serial_puts("[MINILIBC test] memset(zero byte) FAILED\n");
+            klog_error("MINILIBC_TEST", "memset(zero byte) FAILED");
             return -1;
         }
     }
-    serial_puts("[MINILIBC test] memset(zero byte) PASSED\n");
+    klog_info("MINILIBC_TEST", "memset(zero byte) PASSED");
     return 0;
 }
 
@@ -307,10 +308,10 @@ static int test_memset_return_value(void) {
     void *result = memset(buffer, 'X', 5);
 
     if (result != buffer) {
-        serial_puts("[MINILIBC test] memset(return) FAILED: wrong return value\n");
+        klog_error("MINILIBC_TEST", "memset(return) FAILED: wrong return value");
         return -1;
     }
-    serial_puts("[MINILIBC test] memset(return) PASSED\n");
+    klog_info("MINILIBC_TEST", "memset(return) PASSED");
     return 0;
 }
 
@@ -320,11 +321,11 @@ static int test_memset_odd_size(void) {
 
     for (int i = 0; i < 13; i++) {
         if (buffer[i] != 'Z') {
-            serial_puts("[MINILIBC test] memset(odd size) FAILED\n");
+            klog_error("MINILIBC_TEST", "memset(odd size) FAILED");
             return -1;
         }
     }
-    serial_puts("[MINILIBC test] memset(odd size) PASSED\n");
+    klog_info("MINILIBC_TEST", "memset(odd size) PASSED");
     return 0;
 }
 
@@ -335,11 +336,11 @@ static int test_memset_full_byte_range(void) {
 
     for (int i = 0; i < 128; i++) {
         if (buffer[i] != 0xAB) {
-            serial_puts("[MINILIBC test] memset(byte range) FAILED\n");
+            klog_error("MINILIBC_TEST", "memset(byte range) FAILED");
             return -1;
         }
     }
-    serial_puts("[MINILIBC test] memset(byte range) PASSED\n");
+    klog_info("MINILIBC_TEST", "memset(byte range) PASSED");
     return 0;
 }
 
@@ -354,14 +355,14 @@ static int test_memcpy_basic(void) {
     dest[11] = '\0';
 
     if (result != dest) {
-        serial_puts("[MINILIBC test] memcpy FAILED: wrong return value\n");
+        klog_error("MINILIBC_TEST", "memcpy FAILED: wrong return value");
         return -1;
     }
     if (strcmp(dest, "hello world") != 0) {
-        serial_puts("[MINILIBC test] memcpy FAILED: copy mismatch\n");
+        klog_error("MINILIBC_TEST", "memcpy FAILED: copy mismatch");
         return -1;
     }
-    serial_puts("[MINILIBC test] memcpy(basic) PASSED\n");
+    klog_info("MINILIBC_TEST", "memcpy(basic) PASSED");
     return 0;
 }
 
@@ -371,10 +372,10 @@ static int test_memcpy_zero(void) {
     memcpy(dest, src, 0);  /* Should do nothing */
 
     if (strcmp(dest, "dest") != 0) {
-        serial_puts("[MINILIBC test] memcpy(zero) FAILED\n");
+        klog_error("MINILIBC_TEST", "memcpy(zero) FAILED");
         return -1;
     }
-    serial_puts("[MINILIBC test] memcpy(zero) PASSED\n");
+    klog_info("MINILIBC_TEST", "memcpy(zero) PASSED");
     return 0;
 }
 
@@ -384,10 +385,10 @@ static int test_memcpy_single_byte(void) {
     memcpy(&dest, &src, 1);
 
     if (dest != 'X') {
-        serial_puts("[MINILIBC test] memcpy(single byte) FAILED\n");
+        klog_error("MINILIBC_TEST", "memcpy(single byte) FAILED");
         return -1;
     }
-    serial_puts("[MINILIBC test] memcpy(single byte) PASSED\n");
+    klog_info("MINILIBC_TEST", "memcpy(single byte) PASSED");
     return 0;
 }
 
@@ -397,10 +398,10 @@ static int test_memcpy_return_value(void) {
     void *result = memcpy(dest, src, 5);
 
     if (result != dest) {
-        serial_puts("[MINILIBC test] memcpy(return) FAILED: wrong return value\n");
+        klog_error("MINILIBC_TEST", "memcpy(return) FAILED: wrong return value");
         return -1;
     }
-    serial_puts("[MINILIBC test] memcpy(return) PASSED\n");
+    klog_info("MINILIBC_TEST", "memcpy(return) PASSED");
     return 0;
 }
 
@@ -422,11 +423,11 @@ static int test_memcpy_exact_count(void) {
 
     for (int i = 0; i < 10; i++) {
         if (dest[i] != (char)i) {
-            serial_puts("[MINILIBC test] memcpy(exact count) FAILED\n");
+            klog_error("MINILIBC_TEST", "memcpy(exact count) FAILED");
             return -1;
         }
     }
-    serial_puts("[MINILIBC test] memcpy(exact count) PASSED\n");
+    klog_info("MINILIBC_TEST", "memcpy(exact count) PASSED");
     return 0;
 }
 
@@ -437,10 +438,10 @@ static int test_memcpy_source_unchanged(void) {
     memcpy(dest, src, 12);
 
     if (strcmp(src, "preserve me") != 0) {
-        serial_puts("[MINILIBC test] memcpy(src unchanged) FAILED\n");
+        klog_error("MINILIBC_TEST", "memcpy(src unchanged) FAILED");
         return -1;
     }
-    serial_puts("[MINILIBC test] memcpy(src unchanged) PASSED\n");
+    klog_info("MINILIBC_TEST", "memcpy(src unchanged) PASSED");
     return 0;
 }
 
@@ -458,13 +459,11 @@ static int test_memcpy_all_bytes(void) {
 
     for (int i = 0; i < 128; i++) {
         if (dest[i] != (unsigned char)i) {
-            serial_puts("[MINILIBC test] memcpy(byte range) FAILED at index ");
-            serial_put_hex(i);
-            serial_puts("\n");
+            klog_error("MINILIBC_TEST", "memcpy(byte range) FAILED at index %x", i);
             return -1;
         }
     }
-    serial_puts("[MINILIBC test] memcpy(byte range) PASSED\n");
+    klog_info("MINILIBC_TEST", "memcpy(byte range) PASSED");
     return 0;
 }
 
@@ -477,10 +476,10 @@ static int test_snprintf_basic_string(void) {
     int ret = snprintf(buf, sizeof(buf), "hello");
 
     if (ret != 5 || strcmp(buf, "hello") != 0) {
-        serial_puts("[MINILIBC test] snprintf(basic string) FAILED\n");
+        klog_error("MINILIBC_TEST", "snprintf(basic string) FAILED");
         return -1;
     }
-    serial_puts("[MINILIBC test] snprintf(basic string) PASSED\n");
+    klog_info("MINILIBC_TEST", "snprintf(basic string) PASSED");
     return 0;
 }
 
@@ -490,14 +489,10 @@ static int test_snprintf_truncation(void) {
 
     /* C99: returns what WOULD be written (11), not truncated length */
     if (ret != 11 || strcmp(buf, "hell") != 0) {
-        serial_puts("[SNPRINTF test] truncation FAILED: ret=");
-        serial_put_hex(ret);
-        serial_puts(" buf='");
-        serial_puts(buf);
-        serial_puts("'\n");
+        klog_error("MINILIBC_TEST", "snprintf(truncation) FAILED: ret=%x buf='%s'", ret, buf);
         return -1;
     }
-    serial_puts("[MINILIBC test] snprintf(truncation) PASSED\n");
+    klog_info("MINILIBC_TEST", "snprintf(truncation) PASSED");
     return 0;
 }
 
@@ -506,10 +501,10 @@ static int test_snprintf_format_d(void) {
     int ret = snprintf(buf, sizeof(buf), "value: %d", 42);
 
     if (ret != 9 || strcmp(buf, "value: 42") != 0) {
-        serial_puts("[SNPRINTF test] %%d FAILED\n");
+        klog_error("MINILIBC_TEST", "snprintf(%%d) FAILED");
         return -1;
     }
-    serial_puts("[MINILIBC test] snprintf(%d) PASSED\n");
+    klog_info("MINILIBC_TEST", "snprintf(%%d) PASSED");
     return 0;
 }
 
@@ -518,10 +513,10 @@ static int test_snprintf_format_negative(void) {
     int ret = snprintf(buf, sizeof(buf), "%d", -123);
 
     if (ret != 4 || strcmp(buf, "-123") != 0) {
-        serial_puts("[SNPRINTF test] negative FAILED\n");
+        klog_error("MINILIBC_TEST", "snprintf(negative) FAILED");
         return -1;
     }
-    serial_puts("[MINILIBC test] snprintf(negative) PASSED\n");
+    klog_info("MINILIBC_TEST", "snprintf(negative) PASSED");
     return 0;
 }
 
@@ -530,10 +525,10 @@ static int test_snprintf_format_x(void) {
     int ret = snprintf(buf, sizeof(buf), "0x%x", 255);
 
     if (ret != 4 || strcmp(buf, "0xff") != 0) {
-        serial_puts("[SNPRINTF test] %%x FAILED\n");
+        klog_error("MINILIBC_TEST", "snprintf(%%x) FAILED");
         return -1;
     }
-    serial_puts("[MINILIBC test] snprintf(%x) PASSED\n");
+    klog_info("MINILIBC_TEST", "snprintf(%%x) PASSED");
     return 0;
 }
 
@@ -542,10 +537,10 @@ static int test_snprintf_format_X(void) {
     int ret = snprintf(buf, sizeof(buf), "0x%X", 255);
 
     if (ret != 4 || strcmp(buf, "0xFF") != 0) {
-        serial_puts("[SNPRINTF test] %%X FAILED\n");
+        klog_error("MINILIBC_TEST", "snprintf(%%X) FAILED");
         return -1;
     }
-    serial_puts("[MINILIBC test] snprintf(%X) PASSED\n");
+    klog_info("MINILIBC_TEST", "snprintf(%%X) PASSED");
     return 0;
 }
 
@@ -554,10 +549,10 @@ static int test_snprintf_format_s(void) {
     int ret = snprintf(buf, sizeof(buf), "msg: %s", "test");
 
     if (ret != 9 || strcmp(buf, "msg: test") != 0) {
-        serial_puts("[SNPRINTF test] %%s FAILED\n");
+        klog_error("MINILIBC_TEST", "snprintf(%%s) FAILED");
         return -1;
     }
-    serial_puts("[MINILIBC test] snprintf(%s) PASSED\n");
+    klog_info("MINILIBC_TEST", "snprintf(%%s) PASSED");
     return 0;
 }
 
@@ -566,10 +561,10 @@ static int test_snprintf_format_c(void) {
     int ret = snprintf(buf, sizeof(buf), "char: %c", 'Z');
 
     if (ret != 7 || strcmp(buf, "char: Z") != 0) {
-        serial_puts("[SNPRINTF test] %%c FAILED\n");
+        klog_error("MINILIBC_TEST", "snprintf(%%c) FAILED");
         return -1;
     }
-    serial_puts("[MINILIBC test] snprintf(%c) PASSED\n");
+    klog_info("MINILIBC_TEST", "snprintf(%%c) PASSED");
     return 0;
 }
 
@@ -578,10 +573,10 @@ static int test_snprintf_format_p(void) {
     int ret = snprintf(buf, sizeof(buf), "%p", (void *)0x1234);
 
     if (ret < 6 || buf[0] != '0' || buf[1] != 'x') {
-        serial_puts("[SNPRINTF test] %p FAILED\n");
+        klog_error("MINILIBC_TEST", "snprintf(%%p) FAILED");
         return -1;
     }
-    serial_puts("[MINILIBC test] snprintf(%p) PASSED\n");
+    klog_info("MINILIBC_TEST", "snprintf(%%p) PASSED");
     return 0;
 }
 
@@ -590,10 +585,10 @@ static int test_snprintf_format_percent(void) {
     int ret = snprintf(buf, sizeof(buf), "100%%");
 
     if (ret != 4 || strcmp(buf, "100%") != 0) {
-        serial_puts("[SNPRINTF test] %% FAILED\n");
+        klog_error("MINILIBC_TEST", "snprintf(%%) FAILED");
         return -1;
     }
-    serial_puts("[MINILIBC test] snprintf(%%) PASSED\n");
+    klog_info("MINILIBC_TEST", "snprintf(%%) PASSED");
     return 0;
 }
 
@@ -603,14 +598,10 @@ static int test_snprintf_multiple_specs(void) {
 
     /* "test: 10 (0xff)" = 15 chars */
     if (ret != 15 || strcmp(buf, "test: 10 (0xff)") != 0) {
-        serial_puts("[SNPRINTF test] multiple specs FAILED: ret=");
-        serial_put_hex(ret);
-        serial_puts(" buf='");
-        serial_puts(buf);
-        serial_puts("'\n");
+        klog_error("MINILIBC_TEST", "snprintf(multiple) FAILED: ret=%x buf='%s'", ret, buf);
         return -1;
     }
-    serial_puts("[MINILIBC test] snprintf(multiple) PASSED\n");
+    klog_info("MINILIBC_TEST", "snprintf(multiple) PASSED");
     return 0;
 }
 
@@ -620,10 +611,10 @@ static int test_snprintf_zero_size(void) {
 
     /* Should not write anything, return length */
     if (ret != 5 || strcmp(buf, "xxx") != 0) {
-        serial_puts("[SNPRINTF test] zero size FAILED\n");
+        klog_error("MINILIBC_TEST", "snprintf(zero size) FAILED");
         return -1;
     }
-    serial_puts("[MINILIBC test] snprintf(zero size) PASSED\n");
+    klog_info("MINILIBC_TEST", "snprintf(zero size) PASSED");
     return 0;
 }
 

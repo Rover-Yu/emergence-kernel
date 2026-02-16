@@ -3,13 +3,9 @@
 #include <stdint.h>
 #include "test_nk_invariants.h"
 #include "kernel/test.h"
+#include "kernel/klog.h"
 #include "arch/x86_64/serial.h"
 #include "kernel/pcd.h"
-
-/* External function prototypes */
-extern void serial_puts(const char *str);
-extern void serial_putc(char c);
-extern void serial_put_hex(uint64_t value);
 
 /* External monitor functions */
 extern void monitor_init(void);
@@ -28,60 +24,52 @@ extern volatile int bsp_init_done;
  * This test DOCUMENTS expected behavior - actual fault injection
  * is in nk_fault_injection tests. */
 static void test_ptp_write_detection(void) {
-    serial_puts("[NK-INV-NEG] Test: PTP write detection\n");
+    klog_info("NK_INV_TEST", "Test: PTP write detection");
 
     /* Verify boot_pml4 is protected (read-only in unpriv view) */
     uint64_t pml4_phys = (uint64_t)boot_pml4;
     uint8_t type = pcd_get_type(pml4_phys);
 
-    serial_puts("[NK-INV-NEG] boot_pml4 PCD type: ");
-    serial_put_hex(type);
-    serial_puts(" (expected NK_PGTABLE=2 or NK_NORMAL=1)\n");
+    klog_info("NK_INV_TEST", "boot_pml4 PCD type: %x (expected NK_PGTABLE=2 or NK_NORMAL=1)", type);
 
     if (type == PCD_TYPE_NK_PGTABLE || type == PCD_TYPE_NK_NORMAL) {
-        serial_puts("[NK-INV-NEG] PTP write detection: CONFIGURED (PASS)\n");
+        klog_info("NK_INV_TEST", "PTP write detection: CONFIGURED (PASS)");
     } else {
-        serial_puts("[NK-INV-NEG] PTP not properly tracked in PCD (WARN)\n");
+        klog_warn("NK_INV_TEST", "PTP not properly tracked in PCD (WARN)");
     }
 }
 
 /* Negative test: Verify arbitrary CR3 load detection
  * The monitor should only allow pre-declared CR3 values. */
 static void test_cr3_restriction(void) {
-    serial_puts("[NK-INV-NEG] Test: CR3 restriction\n");
+    klog_info("NK_INV_TEST", "Test: CR3 restriction");
 
     uint64_t current_cr3;
     asm volatile ("mov %%cr3, %0" : "=r"(current_cr3));
 
-    serial_puts("[NK-INV-NEG] Current CR3: ");
-    serial_put_hex(current_cr3);
-    serial_puts("\n");
-    serial_puts("[NK-INV-NEG] unpriv_pml4_phys: ");
-    serial_put_hex(unpriv_pml4_phys);
-    serial_puts("\n");
-    serial_puts("[NK-INV-NEG] monitor_pml4_phys: ");
-    serial_put_hex(monitor_pml4_phys);
-    serial_puts("\n");
+    klog_info("NK_INV_TEST", "Current CR3: %x", current_cr3);
+    klog_info("NK_INV_TEST", "unpriv_pml4_phys: %x", unpriv_pml4_phys);
+    klog_info("NK_INV_TEST", "monitor_pml4_phys: %x", monitor_pml4_phys);
 
     /* CR3 should be one of the pre-declared values */
     if (current_cr3 == unpriv_pml4_phys || current_cr3 == monitor_pml4_phys) {
-        serial_puts("[NK-INV-NEG] CR3 is pre-declared (PASS)\n");
+        klog_info("NK_INV_TEST", "CR3 is pre-declared (PASS)");
     } else {
-        serial_puts("[NK-INV-NEG] CR3 is not pre-declared (FAIL)\n");
+        klog_error("NK_INV_TEST", "CR3 is not pre-declared (FAIL)");
     }
 }
 
 /* Negative test: Verify writable NK mapping rejection
  * monitor_map_page should reject writable mappings to NK pages. */
 static void test_writable_nk_rejection(void) {
-    serial_puts("[NK-INV-NEG] Test: Writable NK mapping rejection\n");
+    klog_info("NK_INV_TEST", "Test: Writable NK mapping rejection");
 
     /* This test documents the expected behavior:
      * monitor_map_page should return -1 when asked to create
      * a writable mapping to an NK_NORMAL page. */
 
-    serial_puts("[NK-INV-NEG] Writable NK rejection: DOCUMENTED\n");
-    serial_puts("[NK-INV-NEG] (Actual enforcement tested via fault injection)\n");
+    klog_info("NK_INV_TEST", "Writable NK rejection: DOCUMENTED");
+    klog_info("NK_INV_TEST", "(Actual enforcement tested via fault injection)");
 }
 
 /**
@@ -109,53 +97,49 @@ int run_nk_invariants_tests(void) {
     serial_puts("\n");
 
     /* Test 1: Verify monitor initialization occurred */
-    serial_puts("[NK INV TEST] Test 1: Monitor initialization\n");
+    klog_info("NK_INV_TEST", "Test 1: Monitor initialization");
     /* Monitor is initialized in main.c before tests run */
-    serial_puts("[NK INV TEST] Monitor initialized in main (SKIP)\n");
+    klog_info("NK_INV_TEST", "Monitor initialized in main (SKIP)");
 
     /* Test 2: Verify CR3 switch to unprivileged mode */
-    serial_puts("[NK INV TEST] Test 2: CR3 unprivileged mode\n");
+    klog_info("NK_INV_TEST", "Test 2: CR3 unprivileged mode");
     unpriv_cr3 = monitor_get_unpriv_cr3();
-    serial_puts("[NK INV TEST] Unprivileged CR3: ");
-    serial_put_hex(unpriv_cr3);
-    serial_puts("\n");
+    klog_info("NK_INV_TEST", "Unprivileged CR3: %x", unpriv_cr3);
 
     if (unpriv_cr3 != 0) {
-        serial_puts("[NK INV TEST] CR3 switch complete (PASS)\n");
+        klog_info("NK_INV_TEST", "CR3 switch complete (PASS)");
     } else {
-        serial_puts("[NK INV TEST] CR3 NOT switched (FAIL)\n");
+        klog_error("NK_INV_TEST", "CR3 NOT switched (FAIL)");
         failures++;
     }
 
     /* Test 3: Verify BSP initialization (needed before invariants) */
-    serial_puts("[NK INV TEST] Test 3: BSP initialization\n");
+    klog_info("NK_INV_TEST", "Test 3: BSP initialization");
     if (bsp_init_done) {
-        serial_puts("[NK INV TEST] BSP initialized (PASS)\n");
+        klog_info("NK_INV_TEST", "BSP initialized (PASS)");
     } else {
-        serial_puts("[NK INV TEST] BSP NOT initialized (FAIL)\n");
+        klog_error("NK_INV_TEST", "BSP NOT initialized (FAIL)");
         failures++;
     }
 
     /* Test 4: Verify CPU index is valid */
-    serial_puts("[NK INV TEST] Test 4: CPU identification\n");
+    klog_info("NK_INV_TEST", "Test 4: CPU identification");
     extern int smp_get_cpu_index(void);
     cpu_index = smp_get_cpu_index();
-    serial_puts("[NK INV TEST] CPU index: ");
-    serial_put_hex(cpu_index);
-    serial_puts("\n");
+    klog_info("NK_INV_TEST", "CPU index: %d", cpu_index);
 
     if (cpu_index >= 0 && cpu_index < 4) {
-        serial_puts("[NK INV TEST] Valid CPU index (PASS)\n");
+        klog_info("NK_INV_TEST", "Valid CPU index (PASS)");
     } else {
-        serial_puts("[NK INV TEST] Invalid CPU index (FAIL)\n");
+        klog_error("NK_INV_TEST", "Invalid CPU index (FAIL)");
         failures++;
     }
 
     /* Test 5: Run Nested Kernel invariants verification */
-    serial_puts("[NK INV TEST] Test 5: Invariants verification\n");
-    serial_puts("[NK INV TEST] Verifying all 6 ASPLOS '15 invariants...\n");
+    klog_info("NK_INV_TEST", "Test 5: Invariants verification");
+    klog_info("NK_INV_TEST", "Verifying all 6 ASPLOS '15 invariants...");
     monitor_verify_invariants();
-    serial_puts("[NK INV TEST] Invariants verification complete (PASS)\n");
+    klog_info("NK_INV_TEST", "Invariants verification complete (PASS)");
 
     /* Run negative test cases */
     serial_puts("\n[NK INV TEST] Running negative test cases...\n");

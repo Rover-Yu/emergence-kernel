@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include "test_nk_monitor_trampoline.h"
 #include "kernel/test.h"
+#include "kernel/klog.h"
 #include "arch/x86_64/serial.h"
 #include "kernel/monitor/monitor.h"
 
@@ -10,73 +11,69 @@
 
 /* Test: Call monitor from unprivileged mode */
 void test_monitor_call_from_unprivileged(void) {
-    serial_puts("[NK-TRAMPOLINE TEST] Starting monitor call test\n");
+    klog_info("NK_MON_TRAMP_TEST", "Starting monitor call test");
 
     /* We should be in unprivileged mode at this point */
     if (monitor_is_privileged()) {
-        serial_puts("[NK-TRAMPOLINE TEST] FAIL: Already in privileged mode\n");
+        klog_error("NK_MON_TRAMP_TEST", "FAIL: Already in privileged mode");
         return;
     }
-    serial_puts("[NK-TRAMPOLINE TEST] Confirmed: Running in unprivileged mode\n");
+    klog_info("NK_MON_TRAMP_TEST", "Confirmed: Running in unprivileged mode");
 
     /* Test 1: Simple allocation through monitor call */
-    serial_puts("[NK-TRAMPOLINE TEST] Test 1: Allocate page via monitor_call\n");
+    klog_info("NK_MON_TRAMP_TEST", "Test 1: Allocate page via monitor_call");
     monitor_ret_t ret = monitor_call(MONITOR_CALL_ALLOC_PHYS, 0, 0, 0);
 
     if (ret.error != 0) {
-        serial_puts("[NK-TRAMPOLINE TEST] FAIL: Allocation returned error\n");
+        klog_error("NK_MON_TRAMP_TEST", "FAIL: Allocation returned error");
         return;
     }
 
     if (ret.result == 0) {
-        serial_puts("[NK-TRAMPOLINE TEST] FAIL: Allocation returned NULL\n");
+        klog_error("NK_MON_TRAMP_TEST", "FAIL: Allocation returned NULL");
         return;
     }
 
-    serial_puts("[NK-TRAMPOLINE TEST] PASS: Allocation succeeded, addr = 0x");
-    serial_put_hex(ret.result);
-    serial_puts("\n");
+    klog_info("NK_MON_TRAMP_TEST", "PASS: Allocation succeeded, addr = %x", ret.result);
 
     /* Test 2: Verify we're back in unprivileged mode */
     if (monitor_is_privileged()) {
-        serial_puts("[NK-TRAMPOLINE TEST] FAIL: Still in privileged mode after call\n");
+        klog_error("NK_MON_TRAMP_TEST", "FAIL: Still in privileged mode after call");
         return;
     }
-    serial_puts("[NK-TRAMPOLINE TEST] PASS: Returned to unprivileged mode\n");
+    klog_info("NK_MON_TRAMP_TEST", "PASS: Returned to unprivileged mode");
 
     /* Test 3: Free the allocation */
     monitor_call(MONITOR_CALL_FREE_PHYS, ret.result, 0, 0);
-    serial_puts("[NK-TRAMPOLINE TEST] PASS: Free succeeded\n");
+    klog_info("NK_MON_TRAMP_TEST", "PASS: Free succeeded");
 
     /* Test 4: Multiple allocations to verify trampoline works repeatedly */
-    serial_puts("[NK-TRAMPOLINE TEST] Test 4: Multiple allocations\n");
+    klog_info("NK_MON_TRAMP_TEST", "Test 4: Multiple allocations");
     monitor_ret_t allocs[3];
     for (int i = 0; i < 3; i++) {
         allocs[i] = monitor_call(MONITOR_CALL_ALLOC_PHYS, 0, 0, 0);
         if (allocs[i].error != 0 || allocs[i].result == 0) {
-            serial_puts("[NK-TRAMPOLINE TEST] FAIL: Allocation #");
-            serial_putc('0' + i);
-            serial_puts(" failed\n");
+            klog_error("NK_MON_TRAMP_TEST", "FAIL: Allocation #%d failed", i);
             return;
         }
     }
 
-    serial_puts("[NK-TRAMPOLINE TEST] PASS: All 3 allocations succeeded\n");
+    klog_info("NK_MON_TRAMP_TEST", "PASS: All 3 allocations succeeded");
 
     /* Free all allocations */
     for (int i = 0; i < 3; i++) {
         monitor_call(MONITOR_CALL_FREE_PHYS, allocs[i].result, 0, 0);
     }
-    serial_puts("[NK-TRAMPOLINE TEST] PASS: All allocations freed\n");
+    klog_info("NK_MON_TRAMP_TEST", "PASS: All allocations freed");
 
     /* Test 5: Verify final state is unprivileged */
     if (monitor_is_privileged()) {
-        serial_puts("[NK-TRAMPOLINE TEST] FAIL: Ended in privileged mode\n");
+        klog_error("NK_MON_TRAMP_TEST", "FAIL: Ended in privileged mode");
         return;
     }
-    serial_puts("[NK-TRAMPOLINE TEST] PASS: Still in unprivileged mode\n");
+    klog_info("NK_MON_TRAMP_TEST", "PASS: Still in unprivileged mode");
 
-    serial_puts("[NK-TRAMPOLINE TEST] All tests PASSED\n");
+    klog_info("NK_MON_TRAMP_TEST", "All tests PASSED");
 }
 
 #endif /* CONFIG_TESTS_NK_TRAMPOLINE */
@@ -87,7 +84,7 @@ void test_monitor_call_from_unprivileged(void) {
 
 #if CONFIG_TESTS_NK_TRAMPOLINE
 void test_nk_monitor_trampoline(void) {
-    serial_puts("KERNEL: Testing monitor trampoline...\n");
+    klog_info("KERN", "Testing monitor trampoline...");
     test_monitor_call_from_unprivileged();
 }
 #else

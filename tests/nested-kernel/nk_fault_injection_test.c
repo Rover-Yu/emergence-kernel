@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include "test_nk_fault_injection.h"
 #include "kernel/test.h"
+#include "kernel/klog.h"
 #include "arch/x86_64/serial.h"
 #include "arch/x86_64/paging.h"
 
@@ -29,48 +30,32 @@ extern void nk_entry_trampoline(void);
 
 /* Test: Write to protected page table */
 static void test_write_pagetable(const char *name, volatile uint64_t *addr) {
-    serial_puts("[NK-PROTECTION TEST] Writing to ");
-    serial_puts(name);
-    serial_puts(" at 0x");
-    serial_put_hex((uint64_t)addr);
-    serial_puts("\n");
+    klog_info("NK_FAULT_TEST", "Writing to %s at %p", name, addr);
     *addr = 0xDEADBEEF;  /* Should fault */
-    serial_puts("[NK-PROTECTION TEST] ERROR: Write succeeded!\n");
+    klog_error("NK_FAULT_TEST", "ERROR: Write succeeded!");
 }
 
 /* Test: Write to code segment */
 static void test_write_code_segment(const char *name, void *addr) {
-    serial_puts("[NK-PROTECTION TEST] Writing to code segment ");
-    serial_puts(name);
-    serial_puts(" at 0x");
-    serial_put_hex((uint64_t)addr);
-    serial_puts("\n");
+    klog_info("NK_FAULT_TEST", "Writing to code segment %s at %p", name, addr);
     volatile uint64_t *code_addr = (uint64_t *)addr;
     *code_addr = 0xDEADBEEF;  /* Should fault */
-    serial_puts("[NK-PROTECTION TEST] ERROR: Code write succeeded!\n");
+    klog_error("NK_FAULT_TEST", "ERROR: Code write succeeded!");
 }
 
 /* Test: Write to data segment */
 static void test_write_data_segment(const char *name, void *addr) {
-    serial_puts("[NK-PROTECTION TEST] Writing to data segment ");
-    serial_puts(name);
-    serial_puts(" at 0x");
-    serial_put_hex((uint64_t)addr);
-    serial_puts("\n");
+    klog_info("NK_FAULT_TEST", "Writing to data segment %s at %p", name, addr);
     volatile uint64_t *data_addr = (uint64_t *)addr;
     *data_addr = 0xDEADBEEF;  /* Should fault */
-    serial_puts("[NK-PROTECTION TEST] ERROR: Data write succeeded!\n");
+    klog_error("NK_FAULT_TEST", "ERROR: Data write succeeded!");
 }
 
 /* Test: Write to stack */
 static void test_write_stack(const char *name, volatile uint64_t *addr) {
-    serial_puts("[NK-PROTECTION TEST] Writing to stack ");
-    serial_puts(name);
-    serial_puts(" at 0x");
-    serial_put_hex((uint64_t)addr);
-    serial_puts("\n");
+    klog_info("NK_FAULT_TEST", "Writing to stack %s at %p", name, addr);
     *addr = 0xDEADBEEF;  /* Should fault */
-    serial_puts("[NK-PROTECTION TEST] ERROR: Stack write succeeded!\n");
+    klog_error("NK_FAULT_TEST", "ERROR: Stack write succeeded!");
 }
 
 /**
@@ -87,45 +72,44 @@ int run_nk_fault_injection_tests(void) {
     asm volatile ("mov %%cr3, %0" : "=r"(current_cr3));
 
     if (current_cr3 != unpriv_pml4_phys) {
-        serial_puts("NK-PROTECTION TEST: ERROR - Not in unprivileged mode\n");
+        klog_error("NK_FAULT_TEST", "ERROR - Not in unprivileged mode");
         return -1;
     }
-    serial_puts("NK-PROTECTION TEST: Running in UNPRIVILEGED mode\n");
+    klog_info("NK_FAULT_TEST", "Running in UNPRIVILEGED mode");
 
     /* ============================================================
      * Test 1: Outer kernel writing to page table pages
      * Expected: Critical page fault → system shutdown
      * ============================================================ */
-    serial_puts("\n--- Test 1: Write to boot PML4 (page table) ---\n");
+    klog_info("NK_FAULT_TEST", "Test 1: Write to boot PML4 (page table)");
     test_write_pagetable("boot PML4", boot_pml4);
 
     /* ============================================================
      * Test 2: Outer kernel writing to nested kernel code segment
      * Expected: Critical page fault → system shutdown
      * ============================================================ */
-    serial_puts("\n--- Test 2: Write to nested kernel code segment ---\n");
+    klog_info("NK_FAULT_TEST", "Test 2: Write to nested kernel code segment");
     test_write_code_segment("kernel_main", (void *)kernel_main);
 
     /* ============================================================
      * Test 3: Outer kernel writing to nested kernel data segment
      * Expected: Critical page fault → system shutdown
      * ============================================================ */
-    serial_puts("\n--- Test 3: Write to nested kernel data segment ---\n");
+    klog_info("NK_FAULT_TEST", "Test 3: Write to nested kernel data segment");
     test_write_data_segment("monitor_pml4_phys (data)", (void *)&monitor_pml4_phys);
 
     /* ============================================================
      * Test 4: Outer kernel writing to nested kernel boot stack
      * Expected: Critical page fault → system shutdown
      * ============================================================ */
-    serial_puts("\n--- Test 4: Write to nested kernel boot stack ---\n");
+    klog_info("NK_FAULT_TEST", "Test 4: Write to nested kernel boot stack");
     volatile uint64_t *stack_addr = (uint64_t *)nk_boot_stack_bottom;
     test_write_stack("nk_boot_stack", stack_addr);
 
     /* If we reach here, all protection tests failed */
     serial_puts("\n========================================\n");
-    serial_puts("NK-PROTECTION TEST: FAILED\n");
-    serial_puts("All tests passed without triggering faults!\n");
-    serial_puts("Nested kernel protection is NOT working.\n");
+    klog_error("NK_FAULT_TEST", "FAILED - All tests passed without triggering faults!");
+    klog_error("NK_FAULT_TEST", "Nested kernel protection is NOT working.");
     serial_puts("========================================\n");
     return -1;
 }

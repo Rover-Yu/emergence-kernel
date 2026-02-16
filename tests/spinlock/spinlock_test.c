@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include "test_spinlock.h"
 #include "kernel/test.h"
+#include "kernel/klog.h"
 #include "arch/x86_64/smp.h"
 #include "include/spinlock.h"
 #include "include/atomic.h"
@@ -11,7 +12,6 @@
 #include "arch/x86_64/serial.h"
 
 /* External functions */
-extern void serial_puts(const char *str);
 extern void serial_putc(char c);
 extern int smp_get_cpu_index(void);
 extern uint8_t smp_get_apic_id(void);
@@ -205,39 +205,11 @@ static int test_wait_for_flag(atomic_int *flag, int timeout_cycles) {
  * ============================================================================ */
 
 /**
- * test_put_hex - Print hex value to serial
- * @value: Value to print
- */
-static void test_put_hex(uint64_t value) {
-    const char hex_chars[] = "0123456789ABCDEF";
-    char buf[17];
-    int i;
-
-    if (value == 0) {
-        serial_putc('0');
-        return;
-    }
-
-    for (i = 15; i >= 0; i--) {
-        buf[i] = hex_chars[value & 0xF];
-        value >>= 4;
-        if (value == 0) break;
-    }
-
-    while (i < 15 && buf[i] == '0') i++;
-
-    while (i <= 15) {
-        serial_putc(buf[i++]);
-    }
-}
-
-/**
  * test_puts - Print test prefix + message
  * @msg: Message to print
  */
 static void test_puts(const char *msg) {
-    serial_puts("[ Spin lock tests ] ");
-    serial_puts(msg);
+    klog_info("SPINLOCK_TEST", "%s", msg);
 }
 
 /* ============================================================================
@@ -502,19 +474,11 @@ static int test6_lock_contention(int num_cpus) {
         }
 
         if (shared_counter == expected) {
-            test_puts("  PASS: Shared counter correct (");
-            test_put_hex(shared_counter);
-            test_puts(" == ");
-            test_put_hex(expected);
-            test_puts(")\n");
+            klog_info("SPINLOCK_TEST", "PASS: Shared counter correct (%x == %x)", shared_counter, expected);
             test_puts("Test 6 PASSED\n\n");
             return 0;
         } else {
-            test_puts("  FAIL: Shared counter incorrect (");
-            test_put_hex(shared_counter);
-            test_puts(" != ");
-            test_put_hex(expected);
-            test_puts(")\n");
+            klog_error("SPINLOCK_TEST", "FAIL: Shared counter incorrect (%x != %x)", shared_counter, expected);
             return -1;
         }
     }
@@ -589,9 +553,7 @@ static int test7_trylock_contention(int num_cpus) {
             test_puts("Test 7 PASSED\n\n");
             return 0;
         } else {
-            test_puts("  FAIL: ");
-            test_put_hex(total_success);
-            test_puts(" CPUs acquired lock (expected 1)\n");
+            klog_error("SPINLOCK_TEST", "FAIL: %x CPUs acquired lock (expected 1)", total_success);
             return -1;
         }
     }
@@ -834,17 +796,11 @@ static int test10_deadlock_prevention(int num_cpus) {
         int actual = atomic_load_explicit(&shared_counter, memory_order_acquire);
 
         if (actual == expected) {
-            test_puts("  PASS: No deadlock, counter correct (");
-            test_put_hex(actual);
-            test_puts(")\n");
+            klog_info("SPINLOCK_TEST", "PASS: No deadlock, counter correct (%x)", actual);
             test_puts("Test 10 PASSED\n\n");
             return 0;
         } else {
-            test_puts("  FAIL: Counter incorrect (");
-            test_put_hex(actual);
-            test_puts(" != ");
-            test_put_hex(expected);
-            test_puts(")\n");
+            klog_error("SPINLOCK_TEST", "FAIL: Counter incorrect (%x != %x)", actual, expected);
             return -1;
         }
     }
@@ -934,9 +890,7 @@ int run_spinlock_tests(void) {
     int failures = 0;
 
     test_puts("Starting spin lock test suite...\n");
-    test_puts("Number of CPUs: ");
-    test_put_hex(num_cpus);
-    test_puts("\n\n");
+    klog_info("SPINLOCK_TEST", "Number of CPUs: %d", num_cpus);
 
     /* ========================================================================
      * Single-CPU Tests (Run on BSP only)
@@ -1048,7 +1002,6 @@ int run_spinlock_tests(void) {
 
     test_puts("========================================\n");
     test_puts("Tests complete\n");
-    test_puts("Summary: ");
 
     int total_tests = 5;  /* Single-CPU tests */
     if (num_cpus > 1) {
@@ -1056,10 +1009,7 @@ int run_spinlock_tests(void) {
     }
 
     int passed = total_tests - failures;
-    test_put_hex(passed);
-    test_puts("/");
-    test_put_hex(total_tests);
-    test_puts(" tests passed\n");
+    klog_info("SPINLOCK_TEST", "Summary: %d/%d tests passed", passed, total_tests);
 
     if (failures == 0) {
         test_puts("Result: ALL TESTS PASSED\n");
