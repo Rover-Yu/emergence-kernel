@@ -343,8 +343,6 @@ int test_run_by_name(const char *name) {
     /* Run test */
     int result = test->run_func();
 
-    /* Add separator for output clarity and ensure buffer sync */
-    serial_puts("\n");
     serial_flush();
 
     if (result == 0) {
@@ -383,15 +381,11 @@ int test_run_unified(void) {
         return 0;
     }
 
-    serial_puts("\n");
-    serial_puts("========================================\n");
     if (test_mode == TEST_MODE_UNIFIED) {
-        serial_puts("UNIFIED TEST EXECUTION\n");
+        klog_info("TEST", "=== UNIFIED TEST EXECUTION ===");
     } else {
-        serial_puts("CSV TEST LIST EXECUTION\n");
+        klog_info("TEST", "=== CSV TEST LIST EXECUTION ===");
     }
-    serial_puts("========================================\n");
-    serial_puts("\n");
 
     /* Run tests based on mode */
     if (test_mode == TEST_MODE_UNIFIED || test_mode == TEST_MODE_ALL) {
@@ -479,14 +473,11 @@ int test_run_unified(void) {
     }
 
     /* Summary */
-    serial_puts("========================================\n");
     if (failures == 0) {
         klog_info("TEST", "UNIFIED: ALL TESTS PASSED");
     } else {
         klog_error("TEST", "UNIFIED: %d tests FAILED", failures);
     }
-    serial_puts("========================================\n");
-    serial_puts("\n");
 
     return failures;
 }

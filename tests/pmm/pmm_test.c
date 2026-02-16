@@ -16,10 +16,7 @@
  * Returns: 0 on success, -1 on failure
  */
 int run_pmm_tests(void) {
-    serial_puts("\n========================================\n");
-    serial_puts("  PMM Test Suite\n");
-    serial_puts("========================================\n");
-    serial_puts("\n");
+    klog_info("PMM_TEST", "=== PMM Test Suite ===");
 
     /* Test 1: Single page allocation */
     klog_info("PMM_TEST", "Test 1: Single page allocation");
@@ -65,10 +62,7 @@ int run_pmm_tests(void) {
 
     klog_info("PMM_TEST", "Allocated 2-page block at %p (should be same as page1 if coalesced)", page3);
 
-    serial_puts("\n========================================\n");
-    serial_puts("  PMM: All tests PASSED\n");
-    serial_puts("========================================\n");
-    serial_puts("\n");
+    klog_info("PMM_TEST", "PMM: All tests PASSED");
 
     return 0;
 }

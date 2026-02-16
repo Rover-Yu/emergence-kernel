@@ -630,10 +630,7 @@ static int test_snprintf_zero_size(void) {
  * Returns: 0 on success, -1 on failure
  */
 int run_minilibc_tests(void) {
-    serial_puts("\n========================================\n");
-    serial_puts("  Minilibc Test Suite (Extended)\n");
-    serial_puts("========================================\n");
-    serial_puts("\n");
+    klog_info("MINILIBC_TEST", "=== Minilibc Test Suite (Extended) ===");
 
     /* Run strlen tests */
     if (test_strlen_empty() != 0) return -1;
@@ -696,10 +693,7 @@ int run_minilibc_tests(void) {
     if (test_snprintf_multiple_specs() != 0) return -1;
     if (test_snprintf_zero_size() != 0) return -1;
 
-    serial_puts("\n========================================\n");
-    serial_puts("  Minilibc: All tests PASSED\n");
-    serial_puts("========================================\n");
-    serial_puts("\n");
+    klog_info("MINILIBC_TEST", "Minilibc: All tests PASSED");
 
     return 0;
 }

@@ -336,13 +336,11 @@ void slab_free_size(void *ptr, size_t size) {
 void slab_dump_stats(void) {
     int i;
 
-    serial_puts("\n=== SLAB Allocator Statistics ===\n");
+    klog_info("SLAB", "=== SLAB Allocator Statistics ===");
 
     for (i = 0; i < SLAB_NR_CACHES; i++) {
         slab_cache_t *cache = &slab_caches[i];
         klog_info("SLAB", "Cache[%d] size=%x total=%d free=%d",
                  i, cache->object_size, cache->total_objects, cache->free_objects);
     }
-
-    serial_puts("==================================\n\n");
 }

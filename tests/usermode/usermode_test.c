@@ -71,11 +71,7 @@ int run_usermode_tests(void) {
     int tests_run = 0;
     int tests_failed = 0;
 
-    serial_puts("\n");
-    serial_puts("========================================\n");
-    serial_puts("User Mode Syscall Tests\n");
-    serial_puts("========================================\n");
-    serial_puts("\n");
+    klog_info("USERMODE_TEST", "=== User Mode Syscall Tests ===");
 
     /* Initialize syscall MSRs */
     klog_info("USERMODE_TEST", "Initializing syscall support...");
@@ -97,11 +93,7 @@ int run_usermode_tests(void) {
     tests_failed++;
 
     /* Print summary */
-    serial_puts("\n");
-    serial_puts("========================================\n");
     klog_info("USERMODE_TEST", "User Mode Tests: %d/%d passed", tests_run - tests_failed, tests_run);
-    serial_puts("========================================\n");
-    serial_puts("\n");
 
     return (tests_failed > 0) ? -1 : 0;
 }

@@ -30,10 +30,7 @@ int run_smp_tests(void) {
     int expected_cpus;
     uint8_t apic_id;
 
-    serial_puts("\n========================================\n");
-    serial_puts("  SMP Boot Test Suite\n");
-    serial_puts("========================================\n");
-    serial_puts("\n");
+    klog_info("SMP_TEST", "=== SMP Boot Test Suite ===");
 
     /* Test 1: Verify a valid CPU has booted */
     klog_info("SMP_TEST", "Test 1: CPU boot verification");
@@ -102,16 +99,11 @@ int run_smp_tests(void) {
     }
 
     /* Print summary */
-    serial_puts("\n========================================\n");
     if (failures == 0) {
-        serial_puts("  SMP: All tests PASSED\n");
+        klog_info("SMP_TEST", "SMP: All tests PASSED");
     } else {
-        serial_puts("  SMP: Some tests FAILED (");
-        serial_put_hex(failures);
-        serial_puts(" failures)\n");
+        klog_error("SMP_TEST", "SMP: %d tests FAILED", failures);
     }
-    serial_puts("========================================\n");
-    serial_puts("\n");
 
     return (failures > 0) ? -1 : 0;
 }

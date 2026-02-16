@@ -91,10 +91,7 @@ int run_nk_invariants_tests(void) {
     uint64_t unpriv_cr3;
     int cpu_index;
 
-    serial_puts("\n========================================\n");
-    serial_puts("  Nested Kernel Invariants Test Suite\n");
-    serial_puts("========================================\n");
-    serial_puts("\n");
+    klog_info("NK_INV_TEST", "=== Nested Kernel Invariants Test Suite ===");
 
     /* Test 1: Verify monitor initialization occurred */
     klog_info("NK_INV_TEST", "Test 1: Monitor initialization");
@@ -142,22 +139,17 @@ int run_nk_invariants_tests(void) {
     klog_info("NK_INV_TEST", "Invariants verification complete (PASS)");
 
     /* Run negative test cases */
-    serial_puts("\n[NK INV TEST] Running negative test cases...\n");
+    klog_info("NK_INV_TEST", "Running negative test cases...");
     test_ptp_write_detection();
     test_cr3_restriction();
     test_writable_nk_rejection();
 
     /* Print summary */
-    serial_puts("\n========================================\n");
     if (failures == 0) {
-        serial_puts("  NESTED KERNEL INVARIANTS: All tests PASSED\n");
+        klog_info("NK_INV_TEST", "NESTED KERNEL INVARIANTS: All tests PASSED");
     } else {
-        serial_puts("  NESTED KERNEL INVARIANTS: Some tests FAILED (");
-        serial_put_hex(failures);
-        serial_puts(" failures)\n");
+        klog_error("NK_INV_TEST", "NESTED KERNEL INVARIANTS: Some tests FAILED (%d failures)", failures);
     }
-    serial_puts("========================================\n");
-    serial_puts("\n");
 
     return (failures > 0) ? -1 : 0;
 }

@@ -28,10 +28,7 @@ extern volatile int apic_timer_count;  /* Access timer state for verification */
  * Returns: 0 on success, -1 on failure
  */
 int run_apic_timer_tests(void) {
-    serial_puts("\n========================================\n");
-    serial_puts("  APIC Timer Test Suite\n");
-    serial_puts("========================================\n");
-    serial_puts("\n");
+    klog_info("TIMER_TEST", "=== APIC Timer Test Suite ===");
 
     /* Test 1: Initialize APIC timer */
     klog_info("TIMER_TEST", "Test 1: Initialize APIC timer");
@@ -63,10 +60,7 @@ int run_apic_timer_tests(void) {
         return -1;
     }
 
-    serial_puts("\n========================================\n");
-    serial_puts("  APIC TIMER: All tests PASSED\n");
-    serial_puts("========================================\n");
-    serial_puts("\n");
+    klog_info("TIMER_TEST", "APIC TIMER: All tests PASSED");
 
     return 0;
 }

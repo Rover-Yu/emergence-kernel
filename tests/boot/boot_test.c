@@ -28,10 +28,7 @@ int run_boot_tests(void) {
     int cpu_index;
     uint8_t apic_id;
 
-    serial_puts("\n========================================\n");
-    serial_puts("  Boot Test Suite\n");
-    serial_puts("========================================\n");
-    serial_puts("\n");
+    klog_info("BOOT_TEST", "=== Boot Test Suite ===");
 
     /* Test 1: Verify serial output is working (this test itself proves it) */
     klog_info("BOOT_TEST", "Test 1: Serial console output");
@@ -79,14 +76,11 @@ int run_boot_tests(void) {
     }
 
     /* Print summary */
-    serial_puts("\n========================================\n");
     if (failures == 0) {
         klog_info("BOOT_TEST", "BOOT: All tests PASSED");
     } else {
         klog_error("BOOT_TEST", "BOOT: %d tests FAILED", failures);
     }
-    serial_puts("========================================\n");
-    serial_puts("\n");
 
     return (failures > 0) ? -1 : 0;
 }

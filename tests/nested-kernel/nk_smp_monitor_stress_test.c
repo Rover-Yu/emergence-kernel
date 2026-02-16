@@ -114,9 +114,7 @@ int run_nk_smp_monitor_stress_tests(void) {
     int timeout;
     int all_done;
 
-    serial_puts("\n========================================\n");
-    serial_puts("  SMP Monitor Stress Test\n");
-    serial_puts("========================================\n\n");
+    klog_info("NK_SMP_STRESS_TEST", "=== SMP Monitor Stress Test ===");
 
     cpu_count = smp_get_cpu_count();
     cpu_id = smp_get_cpu_index();
@@ -198,13 +196,11 @@ int run_nk_smp_monitor_stress_tests(void) {
     }
 
     /* Report results */
-    serial_puts("\n========================================\n");
     if (errors_detected == 0) {
         klog_info("NK_SMP_STRESS_TEST", "SMP-STRESS: ALL PASSED");
     } else {
         klog_error("NK_SMP_STRESS_TEST", "SMP-STRESS: %d errors detected", errors_detected);
     }
-    serial_puts("========================================\n");
 
     return (errors_detected == 0) ? 0 : -1;
 }

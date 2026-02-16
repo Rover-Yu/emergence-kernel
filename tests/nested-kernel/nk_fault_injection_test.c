@@ -63,9 +63,7 @@ static void test_write_stack(const char *name, volatile uint64_t *addr) {
  * Returns: Never returns (system shuts down on first fault)
  */
 int run_nk_fault_injection_tests(void) {
-    serial_puts("\n========================================\n");
-    serial_puts("NESTED KERNEL FAULT INJECTION TESTS\n");
-    serial_puts("========================================\n");
+    klog_info("NK_FAULT_TEST", "=== NESTED KERNEL FAULT INJECTION TESTS ===");
 
     /* Verify unprivileged mode */
     uint64_t current_cr3;
@@ -107,10 +105,8 @@ int run_nk_fault_injection_tests(void) {
     test_write_stack("nk_boot_stack", stack_addr);
 
     /* If we reach here, all protection tests failed */
-    serial_puts("\n========================================\n");
     klog_error("NK_FAULT_TEST", "FAILED - All tests passed without triggering faults!");
     klog_error("NK_FAULT_TEST", "Nested kernel protection is NOT working.");
-    serial_puts("========================================\n");
     return -1;
 }
 

@@ -38,10 +38,7 @@ int run_nk_readonly_visibility_tests(void) {
     uint64_t max_pages;
     uint8_t page_type;
 
-    serial_puts("\n========================================\n");
-    serial_puts("  Read-Only Visibility Test Suite\n");
-    serial_puts("========================================\n");
-    serial_puts("\n");
+    klog_info("NK_RO_VIS_TEST", "=== Read-Only Visibility Test Suite ===");
 
     /* Test 1: Verify PCD initialization */
     klog_info("NK_RO_VIS_TEST", "Test 1: PCD initialization");
@@ -109,14 +106,11 @@ int run_nk_readonly_visibility_tests(void) {
     }
 
     /* Print summary */
-    serial_puts("\n========================================\n");
     if (failures == 0) {
         klog_info("NK_RO_VIS_TEST", "READ-ONLY VISIBILITY: All tests PASSED");
     } else {
         klog_error("NK_RO_VIS_TEST", "READ-ONLY VISIBILITY: %d tests FAILED", failures);
     }
-    serial_puts("========================================\n");
-    serial_puts("\n");
 
     return (failures > 0) ? -1 : 0;
 }

@@ -31,10 +31,7 @@ int run_pcd_tests(void) {
     uint8_t page_type;
     int test_page_addr = 0x1000;  /* Test a low memory page */
 
-    serial_puts("\n========================================\n");
-    serial_puts("  PCD Test Suite\n");
-    serial_puts("========================================\n");
-    serial_puts("\n");
+    klog_info("PCD_TEST", "=== PCD Test Suite ===");
 
     /* Test 1: Verify PCD initialization */
     klog_info("PCD_TEST", "Test 1: PCD initialization");
@@ -82,16 +79,11 @@ int run_pcd_tests(void) {
     klog_info("PCD_TEST", "Invariants verification complete (PASS)");
 
     /* Print summary */
-    serial_puts("\n========================================\n");
     if (failures == 0) {
-        serial_puts("  PCD: All tests PASSED\n");
+        klog_info("PCD_TEST", "PCD: All tests PASSED");
     } else {
-        serial_puts("  PCD: Some tests FAILED (");
-        serial_put_hex(failures);
-        serial_puts(" failures)\n");
+        klog_error("PCD_TEST", "PCD: Some tests FAILED (%d failures)", failures);
     }
-    serial_puts("========================================\n");
-    serial_puts("\n");
 
     return (failures > 0) ? -1 : 0;
 }

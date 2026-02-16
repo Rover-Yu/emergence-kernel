@@ -18,10 +18,6 @@ extern uint8_t nk_boot_stack_top[];
 extern bool pcd_is_initialized(void);
 extern void pcd_set_type(uint64_t phys_addr, uint8_t type);
 
-/* External serial functions */
-extern void serial_puts(const char *str);
-extern void serial_putc(char c);
-
 /* PMM state - global instance */
 static pmm_state_t pmm_state;
 

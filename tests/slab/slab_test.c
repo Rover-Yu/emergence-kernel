@@ -181,57 +181,42 @@ static int test_size_rounding(void) {
 int run_slab_tests(void) {
     int failures = 0;
 
-    serial_puts("\n");
-    serial_puts("========================================\n");
-    serial_puts("  SLAB Allocator Test Suite\n");
-    serial_puts("========================================\n");
-    serial_puts("\n");
+    klog_info("SLAB_TEST", "=== SLAB Allocator Test Suite ===");
 
     /* Test 1: Single allocation */
     if (test_single_alloc_free() != 0) {
         failures++;
     }
-    serial_puts("\n");
 
     /* Test 2: Multiple allocations */
     if (test_multiple_allocations() != 0) {
         failures++;
     }
-    serial_puts("\n");
 
     /* Test 3: Free and reuse */
     if (test_free_reuse() != 0) {
         failures++;
     }
-    serial_puts("\n");
 
     /* Test 4: All cache sizes */
     if (test_all_cache_sizes() != 0) {
         failures++;
     }
-    serial_puts("\n");
 
     /* Test 5: Size rounding */
     if (test_size_rounding() != 0) {
         failures++;
     }
-    serial_puts("\n");
 
     /* Dump statistics */
     slab_dump_stats();
 
     /* Summary */
-    serial_puts("========================================\n");
     if (failures == 0) {
-        serial_puts("  SLAB: All tests PASSED\n");
+        klog_info("SLAB_TEST", "SLAB: All tests PASSED");
     } else {
-        serial_puts("  SLAB: Some tests FAILED\n");
-        serial_puts("  Failures: ");
-        serial_put_hex(failures);
-        serial_puts("\n");
+        klog_error("SLAB_TEST", "SLAB: Some tests FAILED (%d failures)", failures);
     }
-    serial_puts("========================================\n");
-    serial_puts("\n");
 
     return failures;
 }
