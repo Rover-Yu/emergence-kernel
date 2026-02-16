@@ -4,7 +4,7 @@
 #include "kernel/slab.h"
 #include "kernel/pmm.h"
 #include "arch/x86_64/serial.h"
-#include "arch/x86_64/multiboot2.h"
+#include "kernel/klog.h"
 
 /* External monitor function for PCD-tracked allocations */
 extern void *monitor_pmm_alloc(uint8_t order);
@@ -71,7 +71,7 @@ static slab_t *slab_new(slab_cache_t *cache) {
      * Falls back to pmm_alloc if monitor not initialized (early boot) */
     page_addr = monitor_pmm_alloc(0);
     if (page_addr == NULL) {
-        serial_puts("SLAB: Failed to allocate page from PMM\n");
+        klog_error("SLAB", "Failed to allocate page from PMM");
         return NULL;
     }
 
@@ -100,15 +100,8 @@ static slab_t *slab_new(slab_cache_t *cache) {
     cache->total_objects += objects_per_slab;
     cache->free_objects += objects_per_slab;
 
-    if (!kernel_is_quiet()) {
-        serial_puts("SLAB: Created new slab at 0x");
-        serial_put_hex((uint64_t)slab);
-        serial_puts(" with ");
-        serial_put_hex(objects_per_slab);
-        serial_puts(" objects of size ");
-        serial_put_hex(cache->object_size);
-        serial_puts("\n");
-    }
+    klog_debug("SLAB", "Created new slab at %p with %lX objects of size %lX",
+              slab, objects_per_slab, cache->object_size);
 
     return slab;
 }
@@ -122,20 +115,15 @@ static slab_t *slab_new(slab_cache_t *cache) {
  */
 void slab_init(void) {
     int i;
-    int quiet = kernel_is_quiet();
 
-    if (!quiet) serial_puts("SLAB: Initializing slab allocator...\n");
+    klog_debug("SLAB", "Initializing slab allocator");
 
     /* Initialize each cache */
     for (i = 0; i < SLAB_NR_CACHES; i++) {
         slab_cache_create(&slab_caches[i], cache_sizes[i]);
     }
 
-    if (!quiet) {
-        serial_puts("SLAB: Initialized ");
-        serial_put_hex(SLAB_NR_CACHES);
-        serial_puts(" caches\n");
-    }
+    klog_info("SLAB", "Initialized %d caches", SLAB_NR_CACHES);
 }
 
 /**
@@ -148,9 +136,7 @@ int slab_cache_create(slab_cache_t *cache, size_t object_size) {
 
     /* Verify power of two */
     if (object_size & (object_size - 1)) {
-        serial_puts("SLAB: Object size not power of two: ");
-        serial_put_hex(object_size);
-        serial_puts("\n");
+        klog_warn("SLAB", "Object size not power of two: %lX", object_size);
         return -1;
     }
 
@@ -173,13 +159,8 @@ int slab_cache_create(slab_cache_t *cache, size_t object_size) {
     cache->total_objects = 0;
     cache->free_objects = 0;
 
-    if (!kernel_is_quiet()) {
-        serial_puts("SLAB: Created cache for size ");
-        serial_put_hex(object_size);
-        serial_puts(" (");
-        serial_put_hex(cache->objects_per_slab);
-        serial_puts(" objects/slab)\n");
-    }
+    klog_debug("SLAB", "Created cache for size %lX (%lX objects/slab)",
+              object_size, cache->objects_per_slab);
 
     return 0;
 }
@@ -279,7 +260,7 @@ void slab_free(slab_cache_t *cache, void *obj_ptr) {
 
     /* Verify slab belongs to cache */
     if (slab->cache != cache) {
-        serial_puts("SLAB: Warning - object freed to wrong cache\n");
+        klog_warn("SLAB", "Object freed to wrong cache");
         return;
     }
 
@@ -324,9 +305,7 @@ void *slab_alloc_size(size_t size) {
 
     idx = size_to_cache_index(size);
     if (idx < 0) {
-        serial_puts("SLAB: Size too large: ");
-        serial_put_hex(size);
-        serial_puts("\n");
+        klog_warn("SLAB", "Size too large: %lX", size);
         return NULL;
     }
 

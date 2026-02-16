@@ -97,7 +97,7 @@ MULTIBOOT_HEADER_OBJ := $(BUILD_DIR)/multiboot_header.o
 # Architecture-independent kernel sources
 KERNEL_DIR := kernel
 KERNEL_C_SRCS := $(KERNEL_DIR)/device.c $(KERNEL_DIR)/pmm.c $(KERNEL_DIR)/pcd.c \
-                 $(KERNEL_DIR)/slab.c $(KERNEL_DIR)/test.c \
+                 $(KERNEL_DIR)/slab.c $(KERNEL_DIR)/test.c $(KERNEL_DIR)/klog.c \
                  $(KERNEL_DIR)/monitor/monitor.c
 
 # Minilibc sources

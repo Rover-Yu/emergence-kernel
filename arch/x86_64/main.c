@@ -17,6 +17,7 @@
 #include "arch/x86_64/power.h"
 #include "arch/x86_64/multiboot2.h"
 #include "kernel/test.h"
+#include "kernel/klog.h"
 #include "arch/x86_64/include/syscall.h"
 
 /* Test wrapper headers */
@@ -138,10 +139,13 @@ void kernel_main(uint32_t multiboot_info_addr) {
 
     /* Initialize Physical Memory Manager (must be early, before any dynamic allocation) */
     pmm_init(multiboot_info_addr);
-    serial_puts("PMM: Initialized\n");
+    klog_info("KERN", "PMM initialized");
 
     /* Parse and display kernel command line */
     multiboot_get_cmdline();
+
+    /* Initialize logging subsystem (after cmdline is available) */
+    klog_init();
 
     /* Initialize test framework (parses test= parameter from cmdline) */
     test_framework_init();
@@ -168,18 +172,14 @@ void kernel_main(uint32_t multiboot_info_addr) {
     smp_set_gs_base(&per_cpu_data[cpu_id]);
 
     if (cpu_id == 0) {
-        serial_puts("BSP: Initializing...\n");
+        klog_info("SMP", "BSP initializing");
         idt_init();
         lapic_init();
-        serial_puts("BSP: Initialization complete\n");
+        klog_info("SMP", "BSP initialization complete");
     }
 
     /* Print CPU boot message in English */
-    serial_puts("CPU ");
-    serial_putc('0' + cpu_id);
-    serial_puts(" (APIC ID ");
-    serial_putc('0' + smp_get_apic_id());
-    serial_puts("): Successfully booted\n");
+    klog_info("SMP", "CPU %d (APIC ID %d) booted successfully", cpu_id, smp_get_apic_id());
 
     /* BSP specific initialization */
     if (cpu_id == 0) {
@@ -191,7 +191,7 @@ void kernel_main(uint32_t multiboot_info_addr) {
          * - Disables monitor init when running usermode test
          * - Pre-allocates user stack before CR3 switch
          */
-        serial_puts("KERNEL: Initializing monitor...\n");
+        klog_info("KERN", "Initializing monitor");
         skip_cr3_switch = test_usermode_prepare();
         if (!skip_cr3_switch) {
             monitor_init();
@@ -201,20 +201,20 @@ void kernel_main(uint32_t multiboot_info_addr) {
         if (!skip_cr3_switch) {
             uint64_t unpriv_cr3 = monitor_get_unpriv_cr3();
             if (unpriv_cr3 != 0) {
-                serial_puts("KERNEL: Switching to unprivileged mode\n");
+                klog_info("KERN", "Switching to unprivileged mode");
 
                 /* Enable write protection enforcement */
                 /* Set CR0.WP=1 so outer kernel cannot modify read-only PTEs */
                 uint64_t cr0 = arch_cr0_read();
                 cr0 |= (1 << 16);  /* Set CR0.WP bit */
                 arch_cr0_write(cr0);
-                serial_puts("KERNEL: CR0.WP enabled (write protection enforced)\n");
+                klog_info("KERN", "CR0.WP enabled (write protection enforced)");
 
                 /* Switch to unprivileged page tables
                  * The monitor has set up these tables with proper U/S bits
                  * User code pages are marked as user-accessible (U/S=1) */
                 arch_cr3_write(unpriv_cr3);
-                serial_puts("KERNEL: Page table switch complete\n");
+                klog_info("KERN", "Page table switch complete");
 
                 /* Verify NK invariants after CR3 switch */
                 test_nk_invariants_verify();
@@ -231,11 +231,11 @@ void kernel_main(uint32_t multiboot_info_addr) {
                 /* Monitor trampoline test */
                 test_nk_monitor_trampoline();
             } else {
-                serial_puts("KERNEL: Monitor initialization failed\n");
+                klog_error("KERN", "Monitor initialization failed");
             }
         } else {
             /* Usermode tests need full access for ring 3 transition testing */
-            serial_puts("KERNEL: Skipping CR3 switch for usermode tests\n");
+            klog_info("KERN", "Skipping CR3 switch for usermode tests");
         }
 
         /* Enable interrupts */
@@ -248,7 +248,7 @@ void kernel_main(uint32_t multiboot_info_addr) {
         smp_mark_cpu_ready(0);
 
         /* Start all APs */
-        serial_puts("SMP: Starting APs...\n");
+        klog_info("SMP", "Starting APs");
         serial_unlock();
         smp_start_all_aps();
 
@@ -264,9 +264,7 @@ void kernel_main(uint32_t multiboot_info_addr) {
         system_shutdown();
     } else {
         /* AP: print boot message and halt */
-        serial_puts("SMP: AP ");
-        serial_putc('0' + cpu_id);
-        serial_puts(" initialization complete\n");
+        klog_info("SMP", "AP %d initialization complete", cpu_id);
 
         /* Mark CPU as ready */
         smp_mark_cpu_ready(cpu_id);

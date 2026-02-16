@@ -5,7 +5,7 @@
 #include "arch/x86_64/paging.h"
 #include "arch/x86_64/cr.h"
 #include "arch/x86_64/serial.h"
-#include "arch/x86_64/multiboot2.h"
+#include "kernel/klog.h"
 #include "kernel/pcd.h"
 #include "kernel/pmm.h"
 
@@ -73,8 +73,7 @@ static int monitor_find_pd_entry(uint64_t phys_addr) {
  * - Discovers ALL NK_PGTABLE pages via PCD
  * - Makes them read-only in unprivileged page tables */
 static void monitor_protect_all_ptps(void) {
-    int quiet = kernel_is_quiet();
-    if (!quiet) serial_puts("MONITOR: Protecting all PTPs via PCD discovery\n");
+    klog_debug("MON", "Protecting all PTPs via PCD discovery");
     int protected_count = 0;
 
     /* Iterate through all PCD-tracked pages */
@@ -100,11 +99,7 @@ static void monitor_protect_all_ptps(void) {
         }
     }
 
-    if (!quiet) {
-        serial_puts("MONITOR: Protected ");
-        serial_put_hex(protected_count);
-        serial_puts(" PTP pages\n");
-    }
+    klog_debug("MON", "Protected %lX PTP pages", protected_count);
 }
 
 /* Protect monitor state pages in unprivileged view
@@ -112,9 +107,8 @@ static void monitor_protect_all_ptps(void) {
  * - PTPs are marked read-only while outer kernel executes
  * - All mappings to PTPs are marked read-only */
 static void monitor_protect_state(void) {
-    int quiet = kernel_is_quiet();
-    if (!quiet) serial_puts("MONITOR: Enforcing Nested Kernel invariants\n");
-    if (!quiet) serial_puts("MONITOR: Protecting page table pages (Invariant 5)\n");
+    klog_debug("MON", "Enforcing Nested Kernel invariants");
+    klog_debug("MON", "Protecting page table pages (Invariant 5)");
 
     /* Get physical addresses of all 6 monitor page table pages
      * These are the PTPs that must be write-protected (Invariant 5) */
@@ -134,10 +128,8 @@ static void monitor_protect_state(void) {
     for (int i = 1; i < 6; i++) {
         int idx = monitor_find_pd_entry(monitor_pages[i]);
         if (idx != pd_index) {
-            if (!quiet) {
-                serial_puts("MONITOR: WARNING: Monitor pages span multiple 2MB regions\n");
-                serial_puts("MONITOR: Only protecting first region\n");
-            }
+            klog_warn("MON", "Monitor pages span multiple 2MB regions");
+            klog_warn("MON", "Only protecting first region");
             break;
         }
     }
@@ -151,19 +143,19 @@ static void monitor_protect_state(void) {
      * the kernel region (0x400000+) and mark individual PTP PTEs as read-only.
      * This is tracked as TODO for future improvement.
      */
-    if (!quiet) serial_puts("MONITOR: Skipping PD entry protection (kernel region overlap)\n");
-    if (!quiet) serial_puts("MONITOR: Relying on 4KB PTE protection via PCD discovery\n");
+    klog_debug("MON", "Skipping PD entry protection (kernel region overlap)");
+    klog_debug("MON", "Relying on 4KB PTE protection via PCD discovery");
 
     /* Invalidate TLB for the affected 2MB region */
     monitor_invalidate_page((void *)monitor_pages[0]);
 
-    if (!quiet) serial_puts("MONITOR: TLB invalidated (Invariant 2 enforcement active)\n");
+    klog_debug("MON", "TLB invalidated (Invariant 2 enforcement active)");
 
     /* Protect all PTPs discovered via PCD - this handles individual page protection */
     monitor_protect_all_ptps();
 
-    if (!quiet) serial_puts("MONITOR: Nested Kernel invariants enforced\n");
-    if (!quiet) serial_puts("MONITOR: Note: Boot page tables protected via 4KB page tables\n");
+    klog_debug("MON", "Nested Kernel invariants enforced");
+    klog_debug("MON", "Note: Boot page tables protected via 4KB page tables");
 }
 
 /* Verify Nested Kernel invariants are correctly configured
@@ -184,9 +176,7 @@ void monitor_verify_invariants(void) {
     int cpu_id = smp_get_cpu_index();
 
 #if CONFIG_DEBUG_NK_INVARIANTS_VERBOSE
-    serial_puts("\n=== Nested Kernel Invariant Verification (CPU ");
-    serial_putc('0' + cpu_id);
-    serial_puts(") ===\n");
+    klog_debug("MON", "=== Nested Kernel Invariant Verification (CPU %d) ===", cpu_id);
 #endif
 
     /* Get physical address of unpriv_pd to find PD entry */
@@ -209,15 +199,9 @@ void monitor_verify_invariants(void) {
 
 #if CONFIG_DEBUG_NK_INVARIANTS_VERBOSE
     /* === Invariant 1: Protected data is read-only in outer kernel === */
-    serial_puts("VERIFY: [Inv 1] PTPs read-only in outer kernel:\n");
-    serial_puts("VERIFY:   unpriv_pd writable bit: ");
-    serial_putc(unpriv_writable ? '1' : '0');
-    serial_puts(" (expected: 0) - ");
-    if (!unpriv_writable) {
-        serial_puts("PASS\n");
-    } else {
-        serial_puts("FAIL\n");
-    }
+    klog_debug("MON", "[Inv 1] PTPs read-only in outer kernel:");
+    klog_debug("MON", "  unpriv_pd writable bit: %d (expected: 0) - %s",
+              unpriv_writable ? 1 : 0, !unpriv_writable ? "PASS" : "FAIL");
 #endif
 
     /* === Invariant 2: Write-protection permissions enforced === */
@@ -227,15 +211,9 @@ void monitor_verify_invariants(void) {
     }
 
 #if CONFIG_DEBUG_NK_INVARIANTS_VERBOSE
-    serial_puts("VERIFY: [Inv 2] CR0.WP enforcement active:\n");
-    serial_puts("VERIFY:   CR0.WP bit: ");
-    serial_putc(cr0_wp_enabled ? '1' : '0');
-    serial_puts(" (expected: 1) - ");
-    if (cr0_wp_enabled) {
-        serial_puts("PASS\n");
-    } else {
-        serial_puts("FAIL\n");
-    }
+    klog_debug("MON", "[Inv 2] CR0.WP enforcement active:");
+    klog_debug("MON", "  CR0.WP bit: %d (expected: 1) - %s",
+              cr0_wp_enabled ? 1 : 0, cr0_wp_enabled ? "PASS" : "FAIL");
 #endif
 
     /* === Invariant 3: Global mappings accessible in both views === */
@@ -266,19 +244,9 @@ void monitor_verify_invariants(void) {
     }
 
 #if CONFIG_DEBUG_NK_INVARIANTS_VERBOSE
-    serial_puts("VERIFY: [Inv 3] Global mappings accessible in both views:\n");
-    serial_puts("VERIFY:   PML4 entries compared: 512 entries, mismatches: ");
-    if (mismatch_count == 0) {
-        serial_puts("0");
-    } else {
-        serial_put_hex(mismatch_count);
-    }
-    serial_puts(" - ");
-    if (global_mappings_match) {
-        serial_puts("PASS\n");
-    } else {
-        serial_puts("FAIL\n");
-    }
+    klog_debug("MON", "[Inv 3] Global mappings accessible in both views:");
+    klog_debug("MON", "  PML4 entries compared: 512 entries, mismatches: %d - %s",
+              mismatch_count, global_mappings_match ? "PASS" : "FAIL");
 #endif
 
     /* === Invariant 4: Context switch consistency === */
@@ -286,26 +254,16 @@ void monitor_verify_invariants(void) {
     context_switch_available = (monitor_pml4_phys != 0 && unpriv_pml4_phys != 0);
 
 #if CONFIG_DEBUG_NK_INVARIANTS_VERBOSE
-    serial_puts("VERIFY: [Inv 4] Context switch mechanism:\n");
-    serial_puts("VERIFY:   nk_entry_trampoline available - ");
-    if (context_switch_available) {
-        serial_puts("PASS\n");
-    } else {
-        serial_puts("FAIL\n");
-    }
+    klog_debug("MON", "[Inv 4] Context switch mechanism:");
+    klog_debug("MON", "  nk_entry_trampoline available - %s",
+              context_switch_available ? "PASS" : "FAIL");
 #endif
 
     /* === Invariant 5: All PTPs marked read-only in outer kernel === */
 #if CONFIG_DEBUG_NK_INVARIANTS_VERBOSE
-    serial_puts("VERIFY: [Inv 5] PTPs writable in nested kernel:\n");
-    serial_puts("VERIFY:   monitor_pd writable bit: ");
-    serial_putc(monitor_writable ? '1' : '0');
-    serial_puts(" (expected: 1) - ");
-    if (monitor_writable) {
-        serial_puts("PASS\n");
-    } else {
-        serial_puts("FAIL\n");
-    }
+    klog_debug("MON", "[Inv 5] PTPs writable in nested kernel:");
+    klog_debug("MON", "  monitor_pd writable bit: %d (expected: 1) - %s",
+              monitor_writable ? 1 : 0, monitor_writable ? "PASS" : "FAIL");
 #endif
 
     /* === Invariant 6: CR3 only loaded with pre-declared PTP === */
@@ -315,20 +273,11 @@ void monitor_verify_invariants(void) {
                          (current_cr3 == unpriv_pml4_phys);
 
 #if CONFIG_DEBUG_NK_INVARIANTS_VERBOSE
-    serial_puts("VERIFY: [Inv 6] CR3 loaded with pre-declared PTP:\n");
-    serial_puts("VERIFY:   Current CR3: 0x");
-    serial_put_hex(current_cr3);
-    serial_puts("\n");
-    serial_puts("VERIFY:   monitor_pml4_phys: 0x");
-    serial_put_hex(monitor_pml4_phys);
-    serial_puts(", unpriv_pml4_phys: 0x");
-    serial_put_hex(unpriv_pml4_phys);
-    serial_puts(" - ");
-    if (cr3_is_predeclared) {
-        serial_puts("PASS\n");
-    } else {
-        serial_puts("FAIL\n");
-    }
+    klog_debug("MON", "[Inv 6] CR3 loaded with pre-declared PTP:");
+    klog_debug("MON", "  Current CR3: %p", (void *)current_cr3);
+    klog_debug("MON", "  monitor_pml4_phys: %p, unpriv_pml4_phys: %p - %s",
+              (void *)monitor_pml4_phys, (void *)unpriv_pml4_phys,
+              cr3_is_predeclared ? "PASS" : "FAIL");
 #endif
 
     /* === Final Verdict === */
@@ -337,38 +286,34 @@ void monitor_verify_invariants(void) {
                    context_switch_available;
 
 #if CONFIG_DEBUG_NK_INVARIANTS_VERBOSE
-    serial_puts("=== Verification Complete ===\n\n");
+    klog_debug("MON", "=== Verification Complete ===");
 #endif
 
     /* Always print final result (both verbose and quiet modes) */
     if (all_pass) {
-        serial_puts("[CPU ");
-        serial_putc('0' + cpu_id);
-        serial_puts("] Nested Kernel invariants: PASS\n");
+        klog_info("MON", "[CPU %d] Nested Kernel invariants: PASS", cpu_id);
     } else {
-        serial_puts("[CPU ");
-        serial_putc('0' + cpu_id);
-        serial_puts("] Nested Kernel invariants: FAIL!\n");
+        klog_error("MON", "[CPU %d] Nested Kernel invariants: FAIL!", cpu_id);
 
 #if !CONFIG_INVARIANTS_VERBOSE
         /* In quiet mode, show which invariants failed */
         if (unpriv_writable) {
-            serial_puts("  [Inv 1] FAIL: PTPs not read-only in outer kernel\n");
+            klog_error("MON", "  [Inv 1] FAIL: PTPs not read-only in outer kernel");
         }
         if (!cr0_wp_enabled) {
-            serial_puts("  [Inv 2] FAIL: CR0.WP not enforced\n");
+            klog_error("MON", "  [Inv 2] FAIL: CR0.WP not enforced");
         }
         if (!global_mappings_match) {
-            serial_puts("  [Inv 3] FAIL: Global mappings don't match\n");
+            klog_error("MON", "  [Inv 3] FAIL: Global mappings don't match");
         }
         if (!context_switch_available) {
-            serial_puts("  [Inv 4] FAIL: Context switch unavailable\n");
+            klog_error("MON", "  [Inv 4] FAIL: Context switch unavailable");
         }
         if (!monitor_writable) {
-            serial_puts("  [Inv 5] FAIL: PTPs not writable in nested kernel\n");
+            klog_error("MON", "  [Inv 5] FAIL: PTPs not writable in nested kernel");
         }
         if (!cr3_is_predeclared) {
-            serial_puts("  [Inv 6] FAIL: CR3 not pre-declared\n");
+            klog_error("MON", "  [Inv 6] FAIL: CR3 not pre-declared");
         }
 #endif
     }
@@ -402,9 +347,7 @@ static uint64_t *create_or_get_table(uint64_t *phys_out) {
         (uint64_t)table == (uint64_t)monitor_pd ||
         (uint64_t)table == (uint64_t)monitor_pdpt ||
         (uint64_t)table == (uint64_t)monitor_pml4) {
-        serial_puts("MONITOR: FATAL - PMM returned already-used page table page (0x");
-        serial_put_hex((uint64_t)table);
-        serial_puts(")! PMM corruption detected.\n");
+        klog_error("MON", "PMM returned already-used page table page (%p)! PMM corruption detected", table);
         /* Don't zero the page - it's already in use! */
         return NULL;
     }
@@ -472,7 +415,7 @@ static int create_ro_mapping(uint64_t phys_addr, uint64_t virt_addr) {
         } else {
             /* Validate address before use */
             if (pdpt_addr == 0 || pdpt_addr < 0x100000) {
-                serial_puts("MONITOR: Invalid PDPT address\n");
+                klog_error("MON", "Invalid PDPT address");
                 return -1;
             }
             pdpt = (uint64_t *)pdpt_addr;
@@ -509,7 +452,7 @@ static int create_ro_mapping(uint64_t phys_addr, uint64_t virt_addr) {
         } else {
             /* Validate address before use */
             if (pd_addr == 0 || pd_addr < 0x100000) {
-                serial_puts("MONITOR: Invalid PD address\n");
+                klog_error("MON", "Invalid PD address");
                 return -1;
             }
             pd = (uint64_t *)pd_addr;
@@ -522,13 +465,8 @@ static int create_ro_mapping(uint64_t phys_addr, uint64_t virt_addr) {
 
     /* Debug: Check if we're about to corrupt unpriv_pd */
     if ((uint64_t)pd == virt_to_phys(unpriv_pd)) {
-        serial_puts("MONITOR: ERROR - pd is unpriv_pd in step 3! pd_idx=0x");
-        serial_put_hex(pd_idx);
-        serial_puts(", pml4_idx=0x");
-        serial_put_hex(pml4_idx);
-        serial_puts(", pdpt_idx=0x");
-        serial_put_hex(pdpt_idx);
-        serial_puts("\n");
+        klog_error("MON", "pd is unpriv_pd in step 3! pd_idx=0x%X, pml4_idx=0x%X, pdpt_idx=0x%X",
+                  pd_idx, pml4_idx, pdpt_idx);
         return -1;  /* Prevent corruption */
     }
 
@@ -546,13 +484,13 @@ static int create_ro_mapping(uint64_t phys_addr, uint64_t virt_addr) {
         /* Existing PT - check if it's a 2MB page */
         if (pd_entry & X86_PTE_PS) {
             /* Existing 2MB page - need to split it (not implemented yet) */
-            serial_puts("MONITOR: WARNING - Cannot split 2MB page for RO mapping\n");
+            klog_warn("MON", "Cannot split 2MB page for RO mapping");
             return -1;
         }
         /* Validate PT address before use */
         uint64_t pt_addr = pd_entry & ~0xFFF;
         if (pt_addr == 0 || pt_addr < 0x100000) {
-            serial_puts("MONITOR: Invalid PT address\n");
+            klog_error("MON", "Invalid PT address");
             return -1;
         }
         pt = (uint64_t *)pt_addr;
@@ -577,9 +515,8 @@ static int create_ro_mapping(uint64_t phys_addr, uint64_t virt_addr) {
  */
 int monitor_create_ro_mappings(void) {
     uint64_t ro_page_count = 0;
-    int quiet = kernel_is_quiet();
 
-    if (!quiet) serial_puts("MONITOR: Creating read-only mappings for outer kernel\n");
+    klog_debug("MON", "Creating read-only mappings for outer kernel");
 
     for (uint64_t i = 0; i < pcd_get_max_pages(); i++) {
         uint64_t phys_addr = i << PAGE_SHIFT;
@@ -594,37 +531,25 @@ int monitor_create_ro_mappings(void) {
         }
     }
 
-    if (!quiet) {
-        serial_puts("MONITOR: Created ");
-        serial_put_hex(ro_page_count);
-        serial_puts(" read-only mappings\n");
-    }
+    klog_debug("MON", "Created %lX read-only mappings", ro_page_count);
 
     return 0;
 }
 
 /* Initialize monitor page tables */
 void monitor_init(void) {
-    int quiet = kernel_is_quiet();
-    if (!quiet) serial_puts("MONITOR: Initializing nested kernel architecture\n");
+    klog_debug("MON", "Initializing nested kernel architecture");
 
     /* Allocate page tables for monitor (privileged) view */
     monitor_pml4 = (uint64_t *)pmm_alloc(0);  /* 1 page */
     monitor_pdpt = (uint64_t *)pmm_alloc(0);
     monitor_pd = (uint64_t *)pmm_alloc(0);
 
-    if (!quiet) {
-        serial_puts("MONITOR: Allocations: monitor_pml4=0x");
-        serial_put_hex((uint64_t)monitor_pml4);
-        serial_puts(" monitor_pdpt=0x");
-        serial_put_hex((uint64_t)monitor_pdpt);
-        serial_puts(" monitor_pd=0x");
-        serial_put_hex((uint64_t)monitor_pd);
-        serial_puts("\n");
-    }
+    klog_debug("MON", "Allocations: monitor_pml4=%p monitor_pdpt=%p monitor_pd=%p",
+              monitor_pml4, monitor_pdpt, monitor_pd);
 
     if (!monitor_pml4 || !monitor_pdpt || !monitor_pd) {
-        serial_puts("MONITOR: Failed to allocate monitor page tables\n");
+        klog_error("MON", "Failed to allocate monitor page tables");
         return;
     }
 
@@ -633,18 +558,11 @@ void monitor_init(void) {
     unpriv_pdpt = (uint64_t *)pmm_alloc(0);
     unpriv_pd = (uint64_t *)pmm_alloc(0);
 
-    if (!quiet) {
-        serial_puts("MONITOR: Allocations: unpriv_pml4=0x");
-        serial_put_hex((uint64_t)unpriv_pml4);
-        serial_puts(" unpriv_pdpt=0x");
-        serial_put_hex((uint64_t)unpriv_pdpt);
-        serial_puts(" unpriv_pd=0x");
-        serial_put_hex((uint64_t)unpriv_pd);
-        serial_puts("\n");
-    }
+    klog_debug("MON", "Allocations: unpriv_pml4=%p unpriv_pdpt=%p unpriv_pd=%p",
+              unpriv_pml4, unpriv_pdpt, unpriv_pd);
 
     if (!unpriv_pml4 || !unpriv_pdpt || !unpriv_pd) {
-        serial_puts("MONITOR: Failed to allocate unprivileged page tables\n");
+        klog_error("MON", "Failed to allocate unprivileged page tables");
         return;
     }
 
@@ -657,7 +575,7 @@ void monitor_init(void) {
     unpriv_pt_0_2mb = (uint64_t *)pmm_alloc(0);
 
     if (!monitor_pt_0_2mb || !unpriv_pt_0_2mb) {
-        serial_puts("MONITOR: Failed to allocate 4KB page tables\n");
+        klog_error("MON", "Failed to allocate 4KB page tables");
         return;
     }
 
@@ -678,7 +596,7 @@ void monitor_init(void) {
      * Note: With kernel at 4MB, GRUB2 gap is 1MB-4MB
      * PMM allocations start above 4MB, so we map 4MB-6MB region */
     unpriv_pd[1] |= X86_PTE_USER;
-    if (!quiet) serial_puts("MONITOR: User stack region (0x200000-0x3FFFFF) is now user-accessible\n");
+    klog_debug("MON", "User stack region (0x200000-0x3FFFFF) is now user-accessible");
     /* TODO: After kernel moves to 4MB, update this to map region above kernel */
 
     /* Set up 4KB page tables for first 2MB region */
@@ -715,14 +633,12 @@ void monitor_init(void) {
     uint64_t stack_start = ((uint64_t)nk_boot_stack_bottom) & ~0xFFF;
     uint64_t stack_end = ((uint64_t)nk_boot_stack_top) & ~0xFFF;
 
-    if (!quiet) serial_puts("MONITOR: Verifying stack pages are writable in unprivileged view\n");
+    klog_debug("MON", "Verifying stack pages are writable in unprivileged view");
     for (uint64_t addr = stack_start; addr <= stack_end; addr += 0x1000) {
         int pte_index = addr >> 12;
         uint64_t pte = unpriv_pt_0_2mb[pte_index];
         if (!(pte & X86_PTE_WRITABLE)) {
-            serial_puts("MONITOR: ERROR - Stack page at 0x");
-            serial_put_hex(addr);
-            serial_puts(" is read-only! Fixing...\n");
+            klog_error("MON", "Stack page at %p is read-only! Fixing...", (void *)addr);
             unpriv_pt_0_2mb[pte_index] = addr | X86_PTE_PRESENT | X86_PTE_WRITABLE;
         }
     }
@@ -757,55 +673,31 @@ void monitor_init(void) {
     monitor_pdpt[0] = (boot_pdpt_entry0 & 0xFFF) | monitor_pd_phys;
 
     /* Debug: Verify the hierarchy update worked */
-    if (!quiet) {
-        serial_puts("MONITOR: After hierarchy update:\n");
-        serial_puts("  monitor_pml4[0] = 0x");
-        serial_put_hex(monitor_pml4[0]);
-        serial_puts(" (should be monitor_pdpt)\n");
-        serial_puts("  monitor_pdpt[0] = 0x");
-        serial_put_hex(monitor_pdpt[0]);
-        serial_puts(" (should be monitor_pd)\n");
-        serial_puts("  unpriv_pml4[0] = 0x");
-        serial_put_hex(unpriv_pml4[0]);
-        serial_puts(" (should be unpriv_pdpt)\n");
-        serial_puts("  unpriv_pdpt[0] = 0x");
-        serial_put_hex(unpriv_pdpt[0]);
-        serial_puts(" (should be unpriv_pd)\n");
-    }
+    klog_debug("MON", "After hierarchy update:");
+    klog_debug("MON", "  monitor_pml4[0] = %p (should be monitor_pdpt)", (void *)monitor_pml4[0]);
+    klog_debug("MON", "  monitor_pdpt[0] = %p (should be monitor_pd)", (void *)monitor_pdpt[0]);
+    klog_debug("MON", "  unpriv_pml4[0] = %p (should be unpriv_pdpt)", (void *)unpriv_pml4[0]);
+    klog_debug("MON", "  unpriv_pdpt[0] = %p (should be unpriv_pd)", (void *)unpriv_pdpt[0]);
 
     /* Save physical addresses */
     monitor_pml4_phys = virt_to_phys(monitor_pml4);
     unpriv_pml4_phys = virt_to_phys(unpriv_pml4);
 
     /* Debug: Print page table structure */
-    if (!quiet) {
-        serial_puts("MONITOR: Page table structure:\n");
-        serial_puts("  boot_pml4 phys = 0x");
-        serial_put_hex(virt_to_phys(boot_pml4));
-        serial_puts("\n  unpriv_pml4 phys = 0x");
-        serial_put_hex(unpriv_pml4_phys);
-        serial_puts("\n  boot_pd phys = 0x");
-        serial_put_hex(virt_to_phys(boot_pd));
-        serial_puts("\n  boot_pd[0] = 0x");
-        serial_put_hex(boot_pd[0]);
-        serial_puts("\n  boot_pd[1] = 0x");
-        serial_put_hex(boot_pd[1]);
-        serial_puts("\n  monitor_pd[0] = 0x");
-        serial_put_hex(monitor_pd[0]);
-        serial_puts("\n  g_unpriv_pd_ptr[0] = 0x");
-        serial_put_hex(g_unpriv_pd_ptr[0]);
-        serial_puts("\n  g_unpriv_pd_ptr[1] = 0x");
-        serial_put_hex(g_unpriv_pd_ptr[1]);
-        serial_puts("\n  unpriv_pd[2] (kernel at 4MB) = 0x");
-        serial_put_hex(unpriv_pd[2]);
-        serial_puts("\n  boot_pd[2] (kernel at 4MB) = 0x");
-        serial_put_hex(boot_pd[2]);
-        serial_puts("\n  unpriv_pdpt[0] (points to pd) = 0x");
-        serial_put_hex(unpriv_pdpt[0]);
-        serial_puts("\n  unpriv_pml4[0] (points to pdpt) = 0x");
-        serial_put_hex(unpriv_pml4[0]);
-        serial_puts("\n  Using 4KB pages for first 2MB\n");
-    }
+    klog_debug("MON", "Page table structure:");
+    klog_debug("MON", "  boot_pml4 phys = %p", (void *)virt_to_phys(boot_pml4));
+    klog_debug("MON", "  unpriv_pml4 phys = %p", (void *)unpriv_pml4_phys);
+    klog_debug("MON", "  boot_pd phys = %p", (void *)virt_to_phys(boot_pd));
+    klog_debug("MON", "  boot_pd[0] = %p", (void *)boot_pd[0]);
+    klog_debug("MON", "  boot_pd[1] = %p", (void *)boot_pd[1]);
+    klog_debug("MON", "  monitor_pd[0] = %p", (void *)monitor_pd[0]);
+    klog_debug("MON", "  g_unpriv_pd_ptr[0] = %p", (void *)g_unpriv_pd_ptr[0]);
+    klog_debug("MON", "  g_unpriv_pd_ptr[1] = %p", (void *)g_unpriv_pd_ptr[1]);
+    klog_debug("MON", "  unpriv_pd[2] (kernel at 4MB) = %p", (void *)unpriv_pd[2]);
+    klog_debug("MON", "  boot_pd[2] (kernel at 4MB) = %p", (void *)boot_pd[2]);
+    klog_debug("MON", "  unpriv_pdpt[0] (points to pd) = %p", (void *)unpriv_pdpt[0]);
+    klog_debug("MON", "  unpriv_pml4[0] (points to pdpt) = %p", (void *)unpriv_pml4[0]);
+    klog_debug("MON", "  Using 4KB pages for first 2MB");
 
     /* Mark page table pages as NK_PGTABLE for PCD tracking */
     /* These pages should not be accessible to outer kernel for mapping */
@@ -825,45 +717,26 @@ void monitor_init(void) {
     _pcd_set_type_internal(virt_to_phys(unpriv_pdpt), PCD_TYPE_NK_PGTABLE);
     _pcd_set_type_internal(virt_to_phys(unpriv_pd), PCD_TYPE_NK_PGTABLE);
 
-    if (!quiet) serial_puts("MONITOR: Page tables initialized\n");
+    klog_debug("MON", "Page tables initialized");
 
     /* Debug: Verify GDT is accessible */
-    if (!quiet) {
-        serial_puts("MONITOR: GDT at 0x");
-        serial_put_hex((uint64_t)gdt64);
-        serial_puts(" (size ");
-        serial_put_hex(sizeof(gdt64));
-        serial_puts(" bytes)\n");
-    }
+    klog_debug("MON", "GDT at %p (size %lX bytes)", gdt64, sizeof(gdt64));
     /* Check if GDT is in first 2MB region */
     if ((uint64_t)gdt64 < 0x200000) {
         uint64_t gdt_page = (uint64_t)gdt64 & ~0xFFF;
         int gdt_pte_index = gdt_page >> 12;
-        if (!quiet) {
-            serial_puts("MONITOR: GDT page at 0x");
-            serial_put_hex(gdt_page);
-            serial_puts(", PTE = 0x");
-            serial_put_hex(unpriv_pt_0_2mb[gdt_pte_index]);
-            serial_puts("\n");
-        }
+        klog_debug("MON", "GDT page at %p, PTE = %p",
+                  (void *)gdt_page, (void *)unpriv_pt_0_2mb[gdt_pte_index]);
     }
 
     /* Debug: Verify TSS is accessible */
     extern void tss_desc(void);
     extern void tss(void);
-    if (!quiet) {
-        serial_puts("MONITOR: TSS structure at 0x");
-        serial_put_hex((uint64_t)tss);
-        serial_puts("\n");
-    }
+    klog_debug("MON", "TSS structure at %p", tss);
     if ((uint64_t)tss < 0x200000) {
         uint64_t tss_page = (uint64_t)tss & ~0xFFF;
         int tss_pte_index = tss_page >> 12;
-        if (!quiet) {
-            serial_puts("MONITOR: TSS page PTE = 0x");
-            serial_put_hex(unpriv_pt_0_2mb[tss_pte_index]);
-            serial_puts("\n");
-        }
+        klog_debug("MON", "TSS page PTE = %p", (void *)unpriv_pt_0_2mb[tss_pte_index]);
     }
 
     /* Enforce Nested Kernel invariants by write-protecting PTPs */
@@ -883,7 +756,7 @@ void monitor_init(void) {
      * in main.c, not here during monitor_init(). This ensures we verify
      * the final state where all invariants should be enforced. */
 
-    if (!quiet) serial_puts("MONITOR: APIC accessible from unprivileged mode\n");
+    klog_debug("MON", "APIC accessible from unprivileged mode");
 }
 
 /* Get unprivileged CR3 value */
@@ -899,45 +772,21 @@ bool monitor_is_privileged(void) {
 
 /* Debug: Dump page table hierarchy */
 void monitor_dump_page_tables(void) {
-    serial_puts("MONITOR: Page table dump:\n");
-    serial_puts("  unpriv_pml4 at 0x");
-    serial_put_hex((uint64_t)unpriv_pml4);
-    serial_puts(" (phys 0x");
-    serial_put_hex(unpriv_pml4_phys);
-    serial_puts(")\n");
-    serial_puts("    [0] = 0x");
-    serial_put_hex(unpriv_pml4[0]);
-    serial_puts(" [1] = 0x");
-    serial_put_hex(unpriv_pml4[1]);
-    serial_puts(" [2] = 0x");
-    serial_put_hex(unpriv_pml4[2]);
-    serial_puts("\n");
+    klog_debug("MON", "Page table dump:");
+    klog_debug("MON", "  unpriv_pml4 at %p (phys %p)",
+              unpriv_pml4, (void *)unpriv_pml4_phys);
+    klog_debug("MON", "    [0] = %p [1] = %p [2] = %p",
+              (void *)unpriv_pml4[0], (void *)unpriv_pml4[1], (void *)unpriv_pml4[2]);
 
-    serial_puts("  unpriv_pdpt at 0x");
-    serial_put_hex((uint64_t)unpriv_pdpt);
-    serial_puts("\n");
-    serial_puts("    [0] = 0x");
-    serial_put_hex(unpriv_pdpt[0]);
-    serial_puts(" [1] = 0x");
-    serial_put_hex(unpriv_pdpt[1]);
-    serial_puts(" [2] = 0x");
-    serial_put_hex(unpriv_pdpt[2]);
-    serial_puts(" [3] = 0x");
-    serial_put_hex(unpriv_pdpt[3]);
-    serial_puts("\n");
+    klog_debug("MON", "  unpriv_pdpt at %p", unpriv_pdpt);
+    klog_debug("MON", "    [0] = %p [1] = %p [2] = %p [3] = %p",
+              (void *)unpriv_pdpt[0], (void *)unpriv_pdpt[1],
+              (void *)unpriv_pdpt[2], (void *)unpriv_pdpt[3]);
 
-    serial_puts("  unpriv_pd at 0x");
-    serial_put_hex((uint64_t)unpriv_pd);
-    serial_puts("\n");
-    serial_puts("    [0] = 0x");
-    serial_put_hex(unpriv_pd[0]);
-    serial_puts(" [1] = 0x");
-    serial_put_hex(unpriv_pd[1]);
-    serial_puts(" [2] = 0x");
-    serial_put_hex(unpriv_pd[2]);
-    serial_puts(" [3] = 0x");
-    serial_put_hex(unpriv_pd[3]);
-    serial_puts("\n");
+    klog_debug("MON", "  unpriv_pd at %p", unpriv_pd);
+    klog_debug("MON", "    [0] = %p [1] = %p [2] = %p [3] = %p",
+              (void *)unpriv_pd[0], (void *)unpriv_pd[1],
+              (void *)unpriv_pd[2], (void *)unpriv_pd[3]);
 }
 
 /* Internal monitor call handler (called from privileged context only) */
@@ -949,7 +798,7 @@ monitor_ret_t monitor_call_handler(monitor_call_t call, uint64_t arg1,
     extern uint64_t monitor_pml4_phys;
     uint64_t current_cr3 = arch_cr3_read();
     if (current_cr3 != monitor_pml4_phys) {
-        serial_puts("MONITOR: ERROR - monitor_call_handler called from unprivileged context!\n");
+        klog_error("MON", "monitor_call_handler called from unprivileged context!");
         ret.error = -1;
         return ret;
     }
@@ -973,7 +822,7 @@ monitor_ret_t monitor_call_handler(monitor_call_t call, uint64_t arg1,
         case MONITOR_CALL_SET_PAGE_TYPE:
             /* Set PCD type (monitor only) - enforce privilege check */
             if (!monitor_is_privileged()) {
-                serial_puts("MONITOR: ERROR - PCD set type rejected (not privileged)\n");
+                klog_error("MON", "PCD set type rejected (not privileged)");
                 ret.error = -1;
                 break;
             }
@@ -1125,15 +974,9 @@ int monitor_map_page(uint64_t phys_addr, uint64_t virt_addr, uint64_t flags) {
             /* Allow read-only access to NK_NORMAL and NK_PGTABLE pages
              * Reject writable requests for these types */
             if (flags & X86_PTE_WRITABLE) {
-                serial_puts("MONITOR: Reject writable mapping for ");
-                if (type == PCD_TYPE_NK_NORMAL) {
-                    serial_puts("NK_NORMAL");
-                } else {
-                    serial_puts("NK_PGTABLE");
-                }
-                serial_puts(" page at 0x");
-                serial_put_hex(phys_addr);
-                serial_puts("\n");
+                klog_warn("MON", "Reject writable mapping for %s page at %p",
+                         type == PCD_TYPE_NK_NORMAL ? "NK_NORMAL" : "NK_PGTABLE",
+                         (void *)phys_addr);
                 return -1;
             }
             /* Force read-only (clear WRITABLE bit even if not set) */
@@ -1143,9 +986,7 @@ int monitor_map_page(uint64_t phys_addr, uint64_t virt_addr, uint64_t flags) {
         case PCD_TYPE_NK_IO:
             /* TRACKING ONLY: Allow mapping, log for visibility */
             /* Per user requirement: don't enforce APIC isolation */
-            serial_puts("MONITOR: Note - mapping I/O page at 0x");
-            serial_put_hex(phys_addr);
-            serial_puts(" (allowed)\n");
+            klog_debug("MON", "Note - mapping I/O page at %p (allowed)", (void *)phys_addr);
             break;
     }
 
