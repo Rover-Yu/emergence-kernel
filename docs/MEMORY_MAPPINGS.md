@@ -115,40 +115,70 @@ PD index   = bits 21-29 = 0x1F8 (504)
 
 ### 3.1 Purpose
 
-The nested kernel architecture maintains **two views** of memory:
-- **Monitor View:** Privileged, full access to kernel structures
-- **Unprivileged View:** Restricted access for user-mode code execution
+The nested kernel architecture uses a **CR0.WP toggle design** for privilege separation:
+- **OK Mode (Outer Kernel):** CR0.WP=1, write protection enforced for read-only pages
+- **NK Mode (Nested Kernel):** CR0.WP=0, can write to read-only pages (privileged)
 
-### 3.2 Monitor Page Tables
+### 3.2 Design: Single Shared Page Table with CR0.WP Toggle
+
+**Key Insight:** Instead of dual page tables with CR3 switching, we use a single shared page table with CR0.WP bit toggling:
+
+| Mode | CR0.WP | Page Table | Write to Read-Only |
+|------|--------|------------|-------------------|
+| OK (unprivileged) | 1 | unpriv_pml4 | **Blocked by hardware** |
+| NK (privileged) | 0 | unpriv_pml4 | **Allowed by hardware** |
+
+**Benefits:**
+- Eliminates TLB flushes on every monitor call (no CR3 switch)
+- Simpler implementation with single page table
+- Better performance for NK/OK transitions
+
+**Limitation:**
+- Privileged register integrity (CR0, CR3, CR4, etc.) is NOT enforced
+- Protection focuses on page table integrity only
+
+### 3.3 Shared Page Table Structure
 
 **File:** `kernel/monitor/monitor.c`
 
 | Symbol | Purpose | Location |
 |---------|---------|----------|
-| monitor_pml4 | Monitor PML4 | Allocated via PMM |
-| monitor_pdpt | Monitor PDPT | Allocated via PMM |
-| monitor_pd | Monitor PD | Allocated via PMM |
-| monitor_pt_0_2mb | 4KB PT for 0-2MB | Fine-grained control |
+| unpriv_pml4 | Shared PML4 (NK & OK) | Allocated via PMM |
+| unpriv_pdpt | Shared PDPT | Allocated via PMM |
+| unpriv_pd | Shared PD | Allocated via PMM |
+| unpriv_pt_0_2mb | 4KB PT for 0-2MB | Fine-grained protection |
 
-**Monitor View Characteristics:**
-- Copied from boot page tables at initialization
-- All mappings writable and accessible
-- Used during kernel execution (ring 0)
-
-### 3.3 Unprivileged Page Tables
+**Monitor Page Tables (allocated but not used for CR3 switching):**
 
 | Symbol | Purpose | Location |
 |---------|---------|----------|
-| unpriv_pml4 | Unprivileged PML4 | Allocated via PMM |
-| unpriv_pdpt | Unprivileged PDPT | Allocated via PMM |
-| unpriv_pd | Unprivileged PD | Allocated via PMM |
-| unpriv_pt_0_2mb | 4KB PT for 0-2MB | Fine-grained protection |
+| monitor_pml4 | Monitor PML4 (reference) | Allocated via PMM |
+| monitor_pdpt | Monitor PDPT (reference) | Allocated via PMM |
+| monitor_pd | Monitor PD (reference) | Allocated via PMM |
+| monitor_pt_0_2mb | 4KB PT for 0-2MB | Writable reference |
 
-**Unprivileged View Characteristics:**
-- Page table pages: **Read-only, supervisor-only** (protection)
-- Kernel code/data: **User-accessible** (for syscall execution)
-- User stack region: **User-accessible, writable**
-- Critical structures: **Read-only** (nested kernel protection)
+**Note:** Monitor page tables are kept as writable reference copies for NK operations. The trampoline toggles CR0.WP instead of switching CR3.
+
+### 3.4 Protection Mechanism
+
+**PTP (Page Table Page) Protection:**
+- PTPs are marked **read-only** in the shared page table
+- In OK mode (CR0.WP=1): Hardware blocks writes to read-only pages
+- In NK mode (CR0.WP=0): Hardware allows writes to read-only pages
+
+**4KB Page Table for First 2MB Region:**
+```
+unpriv_pt_0_2mb[0-511]:
+  - Boot page tables (boot_pml4, boot_pdpt, etc.): Read-only
+  - Monitor page tables: Read-only
+  - Other pages: Writable
+```
+
+**Shared Page Table Characteristics:**
+- Page table pages (PTPs): **Read-only, supervisor-only** (protection)
+- Kernel code/data: **Supervisor-only, RW** (normal operation)
+- User stack region: **User-accessible, writable** (for user mode)
+- APIC MMIO: **User-accessible** (for I/O in user mode)
 
 ---
 
@@ -292,20 +322,52 @@ pmm_reserve_region(0x100000, 0x300000);  // 3MB gap (1MB-4MB)
 
 ## 7. Virtual Memory Protection Zones
 
-### 7.1 Nested Kernel Protection
+### 7.1 Nested Kernel Protection (CR0.WP Toggle Design)
 
-**File:** `kernel/monitor/monitor.c:597-614`
+**File:** `kernel/monitor/monitor.c`
 
-| Region | Monitor View | Unprivileged View | Purpose |
-|---------|---------------|-------------------|---------|
-| Page Tables | RW | Read-only, Supervisor | Protect page table integrity |
-| Kernel Code | RW | User-accessible, RO | Allow syscall execution |
+| Region | OK Mode (CR0.WP=1) | NK Mode (CR0.WP=0) | Purpose |
+|---------|-------------------|-------------------|---------|
+| Page Tables (PTPs) | Read-only, Supervisor | Writable | Protect page table integrity |
+| Kernel Code | Supervisor, RO | Writable | Allow syscall execution |
 | Stacks | RW | RW | Allow normal operation |
-| Critical Data | RW | Read-only | Nested kernel protection |
+| Critical Data | Read-only | Writable | Nested kernel protection |
 
-### 7.2 User Stack Region
+**Protection Mechanism:**
+1. PTPs are marked read-only in the shared page table PTEs
+2. Hardware enforces write protection when CR0.WP=1 (OK mode)
+3. Trampoline clears CR0.WP for NK mode operations
+4. Trampoline restores CR0.WP when returning to OK mode
 
-**File:** `kernel/monitor/monitor.c:550-554`
+### 7.2 Monitor Trampoline (CR0.WP Toggle)
+
+**File:** `arch/x86_64/monitor/monitor_call.S`
+
+```
+NK Entry (monitor_call):
+  1. Save CR0 to per-CPU data (gs:40)
+  2. Clear CR0.WP (bit 16) → Enter NK mode
+  3. Call monitor_call_handler()
+  4. Restore CR0 from per-CPU data → Return to OK mode
+  5. Return to caller
+```
+
+**Per-CPU Data Structure:**
+```c
+// arch/x86_64/smp.h
+typedef struct {
+    uint64_t saved_rsp;     /* Offset 0 */
+    uint64_t saved_cr3;     /* Offset 8 - for future use */
+    int cpu_index;          /* Offset 16 */
+    uint64_t saved_rax;     /* Offset 24 */
+    uint64_t saved_rdx;     /* Offset 32 */
+    uint64_t saved_cr0;     /* Offset 40 - CR0.WP state */
+} per_cpu_data_t;
+```
+
+### 7.3 User Stack Region
+
+**File:** `kernel/monitor/monitor.c`
 
 ```c
 // Make 0x200000-0x3FFFFF user-accessible
@@ -406,10 +468,11 @@ typedef struct {
 
 | Version | Date | Changes |
 |---------|--------|---------|
+| 1.2 | 2026-03-03 | Updated nested kernel section for CR0.WP toggle design (single shared page table) |
 | 1.1 | 2025-02-12 | Updated to reflect completed kernel relocation to 4MB (was "proposed", now implemented) |
 | 1.0 | 2025-01-XX | Initial documentation |
 
 ---
 
-*Document Version: 1.0*
-*Last Updated: 2025-01-XX*
+*Document Version: 1.2*
+*Last Updated: 2026-03-03*
