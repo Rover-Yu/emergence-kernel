@@ -61,6 +61,21 @@ int test_should_run(const char *name);
 int test_run_by_name(const char *name);
 
 /**
+ * test_did_run() - Check if a test has already been run
+ * @name: Test name
+ *
+ * Returns: 1 if test already ran, 0 otherwise
+ */
+int test_did_run(const char *name);
+
+/**
+ * test_mark_run() - Mark a test as having been run
+ * @name: Test name
+ * @result: Test result (0 = pass, non-zero = fail)
+ */
+void test_mark_run(const char *name, int result);
+
+/**
  * test_run_unified() - Run all selected tests at unified point
  *
  * Executes all selected tests that haven't run yet.

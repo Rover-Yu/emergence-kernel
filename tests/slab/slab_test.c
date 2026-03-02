@@ -6,6 +6,7 @@
 #include "kernel/slab.h"
 #include "kernel/klog.h"
 #include "arch/x86_64/serial.h"
+#include "arch/x86_64/power.h"
 
 #if CONFIG_TESTS_SLAB
 
@@ -229,8 +230,22 @@ int run_slab_tests(void) {
 
 #if CONFIG_TESTS_SLAB
 void test_slab(void) {
+    /* Run directly if selected via tests=slab CSV mode
+     * We bypass test_run_by_name() to avoid address space issues
+     * that occur when the test framework runs from a different
+     * virtual address context than the slab allocator. */
     if (test_should_run("slab")) {
-        test_run_by_name("slab");
+        /* Check if test already ran via unified mode */
+        if (!test_did_run("slab")) {
+            int result = run_slab_tests();
+            test_mark_run("slab", result);
+            if (result == 0) {
+                klog_info("TEST", "PASSED: slab");
+            } else {
+                klog_error("TEST", "FAILED: slab (failures: %d)", result);
+                system_shutdown();
+            }
+        }
     }
 }
 #else

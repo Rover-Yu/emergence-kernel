@@ -27,7 +27,26 @@
 
 .PHONY: tests tests-boot tests-apic-timer tests-smp tests-pcd tests-slab \
         tests-nk tests-nk-invariants tests-nk-fault-injection tests-nk-readonly-visibility \
-        tests-nk-smp-monitor-stress tests-usermode tests-multiboot tests-minilibc
+        tests-nk-smp-monitor-stress tests-usermode tests-multiboot tests-minilibc \
+        test test-boot test-apic-timer test-smp test-pcd test-slab \
+        test-nk test-nk-invariants test-nk-fault-injection test-nk-readonly-visibility \
+        test-nk-smp-monitor-stress test-usermode test-multiboot test-minilibc
+
+# Backward-compatible aliases (singular form)
+test: tests
+test-boot: tests-boot
+test-apic-timer: tests-apic-timer
+test-smp: tests-smp
+test-pcd: tests-pcd
+test-slab: tests-slab
+test-nk: tests-nk
+test-nk-invariants: tests-nk-invariants
+test-nk-fault-injection: tests-nk-fault-injection
+test-nk-readonly-visibility: tests-nk-readonly-visibility
+test-nk-smp-monitor-stress: tests-nk-smp-monitor-stress
+test-usermode: tests-usermode
+test-multiboot: tests-multiboot
+test-minilibc: tests-minilibc
 
 # Default target: run all tests
 tests:
@@ -61,8 +80,8 @@ tests-nk:
 	@$(MAKE) \
 		CONFIG_TESTS_NK_FAULT_INJECTION=1 \
 		CONFIG_TESTS_NK_READONLY_VISIBILITY=1 \
-		CONFIG_TESTS_SMP_MONITOR_STRESS=1 \
-		KERNEL_CMDLINE="tests=nk_invariants,nk_fault_injection,nk_readonly_visibility,nk_smp_monitor_stress" \
+		CONFIG_TESTS_NK_TRAMPOLINE=1 \
+		KERNEL_CMDLINE="tests=nk_invariants,nk_fault_injection,nk_readonly_visibility,nk_trampoline" \
 		all run
 
 tests-nk-invariants:
@@ -88,7 +107,8 @@ tests-usermode:
 
 tests-multiboot:
 	@echo "Running Multiboot2 Header Test..."
-	@$(MAKE) KERNEL_CMDLINE="tests=multiboot" all run
+	@$(MAKE) all
+	@python3 tests/multiboot/multiboot_header_test.py
 
 tests-minilibc:
 	@echo "Running Minilibc String Library Test..."

@@ -170,6 +170,7 @@ void smp_init(void) {
         per_cpu_data[i].cpu_index = i;
         per_cpu_data[i].saved_rax = 0;
         per_cpu_data[i].saved_rdx = 0;
+        per_cpu_data[i].saved_cr0 = 0;
     }
 }
 
@@ -322,17 +323,19 @@ void ap_start(void) {
      * This enables the monitor trampoline to use GS-relative addressing */
     smp_set_gs_base(&per_cpu_data[my_index]);
 
-    /* Switch to unprivileged page tables */
+    /* Load shared page table with CR0.WP protection */
     uint64_t unpriv_cr3 = monitor_get_unpriv_cr3();
     if (unpriv_cr3 != 0) {
-        /* Enable write protection enforcement for AP */
-        /* Set CR0.WP=1 so outer kernel cannot modify read-only PTEs */
+        /* Enable write protection enforcement for AP
+         * Set CR0.WP=1 so outer kernel cannot modify read-only PTEs
+         * The monitor trampoline will toggle CR0.WP for NK/OK transitions */
         uint64_t cr0 = arch_cr0_read();
         cr0 |= (1 << 16);  /* Set CR0.WP bit */
         arch_cr0_write(cr0);
 
+        /* Load shared page table (single page table for both NK and OK modes) */
         arch_cr3_write(unpriv_cr3);
-        klog_info("SMP", "[AP] CPU%d switched to unprivileged mode", my_index);
+        klog_info("SMP", "[AP] CPU%d loaded shared page table with CR0.WP protection", my_index);
 
         /* Verify NK invariants on AP as well */
         test_nk_invariants_verify_ap();

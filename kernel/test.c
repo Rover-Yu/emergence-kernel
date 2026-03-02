@@ -15,8 +15,8 @@ extern const char *cmdline_get_value(const char *key);
 static enum {
     TEST_MODE_NONE,      /* No tests= parameter (default) */
     TEST_MODE_ALL,       /* tests=all: Run all auto_run tests */
-    TEST_MODE_UNIFIED    /* tests=unified: Run all selected at end */
-    /* Note: TEST_MODE_SPECIFIC removed - tests=NAME1,NAME2,... uses CSV parsing */
+    TEST_MODE_UNIFIED,   /* tests=unified: Run all selected at end */
+    TEST_MODE_CSV        /* tests=NAME1,NAME2,...: Run specific tests at init time */
 } test_mode = TEST_MODE_NONE;
 
 /* Selected test names (CSV list for tests=NAME1,NAME2,...) */
@@ -49,6 +49,7 @@ extern int run_nk_readonly_visibility_tests(void);
 extern int run_usermode_tests(void);
 extern int run_nk_smp_monitor_stress_tests(void);
 extern int run_minilibc_tests(void);
+extern int run_nk_trampoline_tests(void);
 
 /* Test registry array */
 const test_case_t test_registry[] = {
@@ -138,6 +139,15 @@ const test_case_t test_registry[] = {
         .name = "nk_readonly_visibility",
         .description = "Read-only mapping visibility for nested kernel",
         .run_func = run_nk_readonly_visibility_tests,
+        .enabled = 1,
+        .auto_run = 1  /* Auto-run in test-all */
+    },
+#endif
+#if CONFIG_TESTS_NK_TRAMPOLINE
+    {
+        .name = "nk_trampoline",
+        .description = "Monitor trampoline CR0.WP toggle verification",
+        .run_func = run_nk_trampoline_tests,
         .enabled = 1,
         .auto_run = 1  /* Auto-run in test-all */
     },
@@ -256,6 +266,7 @@ void test_framework_init(void) {
         /* Parse CSV list of test names */
         selected_test_count = parse_test_csv(tests_value);
         if (selected_test_count > 0) {
+            test_mode = TEST_MODE_CSV;
             klog_info("TEST", "Mode: CSV LIST (%d test(s))", selected_test_count);
             for (int i = 0; i < selected_test_count; i++) {
                 klog_info("TEST", "  [%d/%d] %s", i + 1, selected_test_count, selected_test_names[i]);
@@ -306,6 +317,33 @@ int test_should_run(const char *name) {
     }
 
     return 0;
+}
+
+/**
+ * test_did_run() - Check if a test has already been run
+ * @name: Test name
+ *
+ * Returns: 1 if test already ran, 0 otherwise
+ */
+int test_did_run(const char *name) {
+    for (int i = 0; i < tests_run_count; i++) {
+        if (tests_run_names[i] && strcmp(tests_run_names[i], name) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/**
+ * test_mark_run() - Mark a test as having been run
+ * @name: Test name
+ * @result: Test result (0 = pass, non-zero = fail)
+ */
+void test_mark_run(const char *name, int result) {
+    if (tests_run_count < MAX_TESTS) {
+        tests_run_names[tests_run_count++] = name;
+    }
+    (void)result;  /* Result is tracked by caller for fail-fast */
 }
 
 /**

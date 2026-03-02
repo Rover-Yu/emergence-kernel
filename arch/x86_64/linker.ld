@@ -13,12 +13,16 @@ PHDRS
 SECTIONS
 {
     /* ============================================================
-     * Kernel code starts at 4MB
+     * Kernel code starts at 4MB (physical address)
      * ============================================================
      * Multiboot2 header is placed at the beginning of .text section.
      * For ELF files, GRUB 2.06 can find the header beyond the first 8KB
      * by using ELF program headers.
      * Moved from 1MB to 4MB to avoid GRUB2's reserved memory gap.
+     *
+     * The kernel is linked at the physical load address. After the boot
+     * code enables paging and jumps to higher-half, all code uses
+     * RIP-relative addressing which works at any virtual address.
      */
     . = 4M;
     _kernel_start = .;

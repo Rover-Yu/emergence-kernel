@@ -120,13 +120,10 @@ void kernel_main(uint32_t multiboot_info_addr) {
 
     /* Initialize Physical Memory Manager (must be early, before any dynamic allocation) */
     pmm_init(multiboot_info_addr);
+    klog_info("KERN", "PMM initialized");
 
     /* Step 3: Initialize all devices in priority order */
     device_init_all();
-
-    /* Initialize Physical Memory Manager (must be early, before any dynamic allocation) */
-    pmm_init(multiboot_info_addr);
-    klog_info("KERN", "PMM initialized");
 
     /* Parse and display kernel command line */
     multiboot_get_cmdline();
@@ -150,6 +147,9 @@ void kernel_main(uint32_t multiboot_info_addr) {
 
     /* Slab Allocator Tests */
     test_slab();
+
+    /* Initialize SMP subsystem (detects CPU count from ACPI/CPUID) */
+    smp_init();
 
     /* BSP specific initialization - must complete BEFORE starting APs */
     /* Get CPU ID first to determine if we're BSP or AP */
@@ -184,24 +184,27 @@ void kernel_main(uint32_t multiboot_info_addr) {
             monitor_init();
         }
 
-        /* Switch to unprivileged page tables (unless usermode test is running) */
+        /* Load shared page table with CR0.WP protection (unless usermode test is running) */
         if (!skip_cr3_switch) {
             uint64_t unpriv_cr3 = monitor_get_unpriv_cr3();
             if (unpriv_cr3 != 0) {
-                klog_info("KERN", "Switching to unprivileged mode");
+                klog_info("KERN", "Loading shared page table with CR0.WP protection");
 
                 /* Enable write protection enforcement */
-                /* Set CR0.WP=1 so outer kernel cannot modify read-only PTEs */
+                /* Set CR0.WP=1 so outer kernel cannot modify read-only PTEs
+                 * The monitor trampoline will toggle CR0.WP for NK/OK transitions:
+                 * - NK entry: Clear CR0.WP to allow writes to read-only pages
+                 * - NK exit: Restore CR0.WP to enforce protection */
                 uint64_t cr0 = arch_cr0_read();
                 cr0 |= (1 << 16);  /* Set CR0.WP bit */
                 arch_cr0_write(cr0);
                 klog_info("KERN", "CR0.WP enabled (write protection enforced)");
 
-                /* Switch to unprivileged page tables
-                 * The monitor has set up these tables with proper U/S bits
-                 * User code pages are marked as user-accessible (U/S=1) */
+                /* Load shared page table (unpriv_pml4) with PTPs marked read-only
+                 * This single page table is used for both NK and OK modes
+                 * Privilege separation is via CR0.WP toggle, not CR3 switch */
                 arch_cr3_write(unpriv_cr3);
-                klog_info("KERN", "Page table switch complete");
+                klog_info("KERN", "Shared page table loaded");
 
                 /* Verify NK invariants after CR3 switch */
                 test_nk_invariants_verify();

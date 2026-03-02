@@ -3,6 +3,40 @@
 
 #include <stdint.h>
 
+/* ============================================================
+ * Higher-Half Kernel Address Layout
+ * ============================================================
+ * The kernel is loaded by GRUB at physical address 4MB (0x400000).
+ * We use dual mapping during boot:
+ *   - Identity map (VA == PA) for early boot and AP trampoline
+ *   - Higher-half map at 0xFFFFFFFF80000000 for kernel proper
+ *
+ * Virtual Address Layout:
+ *   0x0000000000000000 - 0x00007FFFFFFFFFFF  User space (128 TB)
+ *   0xFFFFFFFF80000000+                       Higher-half kernel
+ */
+
+/* Higher-half kernel base addresses */
+#define KERNEL_BASE_VA    0xFFFFFFFF80000000ULL  /* Kernel virtual base */
+#define KERNEL_BASE_PA    0x00400000ULL          /* 4MB physical (linker load address) */
+#define KERNEL_OFFSET     KERNEL_BASE_VA         /* Simple offset: VA = PA + 0xFFFFFFFF80000000 */
+
+/* Address conversion macros */
+#define PA_TO_VA(pa)      ((void*)((uint64_t)(pa) + KERNEL_OFFSET))
+#define VA_TO_PA(va)      ((uint64_t)(va) - KERNEL_OFFSET)
+
+/* User space bounds */
+#define USER_SPACE_MAX    0x00007FFFFFFFFFFFULL
+
+/* PML4 indices for higher-half mapping
+ * For VA 0xFFFFFFFF80000000:
+ *   PML4 index = (0xFFFFFFFF80000000 >> 39) & 0x1FF = 511 (0x1FF)
+ *   PDPT index = (0xFFFFFFFF80000000 >> 30) & 0x1FF = 510 (0x1FE)
+ *   PD index   = (0xFFFFFFFF80000000 >> 21) & 0x1FF = 0
+ */
+#define PML4_INDEX_HH     511    /* Higher-half PML4 entry */
+#define PDPT_INDEX_HH     510    /* Higher-half PDPT entry */
+
 /* Page Table Entry (PTE) flags for x86_64 - from Nested Kernel paper */
 #define X86_PTE_PRESENT    (1ULL << 0)   /* Bit 0: Present */
 #define X86_PTE_WRITABLE   (1ULL << 1)   /* Bit 1: Read/Write (0 = read-only for protection) */

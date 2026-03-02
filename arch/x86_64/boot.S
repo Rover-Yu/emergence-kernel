@@ -73,6 +73,16 @@ boot_pdpt:
 boot_pd:
     .skip 4096
 
+/* Higher-half page tables for kernel at 0xFFFFFFFF80000000 */
+.section .bss
+.align 4096
+.global boot_pdpt_hh
+.global boot_pd_hh
+boot_pdpt_hh:
+    .skip 4096
+boot_pd_hh:
+    .skip 4096
+
 /* Monitor page tables for nested kernel architecture */
 .section .bss
 .align 4096
@@ -285,6 +295,46 @@ boot_is_bsp:
     movl $0, boot_pd + 503*8 + 4  /* High 32 bits */
 
     /* ============================================================
+     * Higher-Half Kernel Mapping at 0xFFFFFFFF80000000
+     * ============================================================
+     * Virtual address 0xFFFFFFFF80000000 breakdown:
+     *   PML4 index = (0xFFFFFFFF80000000 >> 39) & 0x1FF = 511
+     *   PDPT index = (0xFFFFFFFF80000000 >> 30) & 0x1FF = 510
+     *   PD index   = (0xFFFFFFFF80000000 >> 21) & 0x1FF = 0
+     *
+     * We map the same physical memory (starting at 0) at this high VA.
+     * The kernel at physical 0x400000 is thus accessible at
+     * virtual 0xFFFFFFFF80400000.
+     */
+
+    /* Set up PML4[511] -> boot_pdpt_hh for higher-half */
+    movl $boot_pdpt_hh, %eax
+    orl $0x7, %eax              /* Present + Writable + User */
+    movl %eax, boot_pml4 + 511*8  /* PML4[511] */
+    movl $0, boot_pml4 + 511*8 + 4  /* High 32 bits */
+
+    /* Set up PDPT[510] -> boot_pd_hh for higher-half */
+    movl $boot_pd_hh, %eax
+    orl $0x7, %eax              /* Present + Writable + User */
+    movl %eax, boot_pdpt_hh + 510*8  /* PDPT[510] */
+    movl $0, boot_pdpt_hh + 510*8 + 4  /* High 32 bits */
+
+    /* Set up boot_pd_hh entries for first 1GB (mapped at higher-half)
+     * This maps physical 0x00000000 - 0x3FFFFFFF to virtual 0xFFFFFFFF80000000+ */
+    leal boot_pd_hh, %esi       /* PD base address for higher-half */
+    movl $512, %ecx             /* 512 entries for 1GB */
+    xorl %edx, %edx             /* Running physical address */
+
+2:
+    movl %edx, %eax
+    orl $0x187, %eax            /* Present | Writable | User | PS (2MB page) */
+    movl %eax, (%esi)           /* Store low 32 bits of PD entry */
+    movl $0, 4(%esi)            /* Store high 32 bits */
+    addl $8, %esi               /* Next PD entry */
+    addl $0x200000, %edx        /* Next 2MB physical address */
+    loop 2b                     /* Loop for all 512 entries */
+
+    /* ============================================================
      * AP Trampoline is linked into kernel at physical 0x7000
      * ============================================================
      * No runtime patching needed - symbols resolved by linker via GOT.
@@ -344,8 +394,33 @@ halt_loop:
 .type long_mode_start, @function
 
 long_mode_start:
-    /* Set up 64-bit stack */
-    mov $nk_boot_stack_top, %rsp
+    /* ============================================================
+     * Transition to Higher-Half Kernel
+     * ============================================================
+     * We're now in 64-bit mode at an identity-mapped address.
+     * Jump to the higher-half virtual address.
+     */
+
+    /* Flush the TLB by reloading CR3 */
+    mov %cr3, %rax
+    mov %rax, %cr3
+
+    /* Load the physical address of higher_half_entry */
+    movabs $higher_half_entry, %rax
+    /* Add KERNEL_OFFSET to get the higher-half virtual address
+     * KERNEL_OFFSET = 0xFFFFFFFF80000000 */
+    movabs $0xFFFFFFFF80000000, %rcx
+    add %rcx, %rax
+
+    /* Jump to higher-half */
+    jmp *%rax
+
+/* Higher-half entry point - after the transition */
+.global higher_half_entry
+higher_half_entry:
+    /* Set up 64-bit stack (RIP-relative for higher-half) */
+    lea nk_boot_stack_top(%rip), %rax
+    mov %rax, %rsp
 
     /* Clear segment registers */
     mov $0, %ax
@@ -355,20 +430,25 @@ long_mode_start:
     mov %ax, %fs
     mov %ax, %gs
 
+    /* Reload GDT with RIP-relative address */
+    lea gdt64_ptr(%rip), %rax
+    lgdt (%rax)
+
     /* ============================================================
      * Patch AP Trampoline Placeholders
      * ============================================================
-     * The GOT-based approach has a linker bug where addresses get corrupted.
-     * Instead, we patch placeholders in the trampoline with the correct
-     * addresses at runtime. The trampoline is at physical 0x7000.
+     * AP trampoline needs PHYSICAL addresses because it runs
+     * before paging is enabled. Convert from higher-half VA to PA.
+     * VA_TO_PA(va) = va - KERNEL_OFFSET = va - 0xFFFFFFFF80000000
      */
-    /* Patch ap_start_placeholder with actual ap_start address */
-    movabs $ap_start, %rax          /* Load actual ap_start address */
-    mov %rax, ap_start_placeholder  /* Patch the placeholder */
+    lea ap_start(%rip), %rax
+    movabs $0xFFFFFFFF80000000, %rcx  /* KERNEL_OFFSET */
+    sub %rcx, %rax                  /* Convert VA to PA */
+    mov %rax, ap_start_placeholder
 
-    /* Patch idt_ptr_placeholder with actual idt_ptr address */
-    movabs $idt_ptr, %rax           /* Load actual idt_ptr address */
-    mov %rax, idt_ptr_placeholder   /* Patch the placeholder */
+    lea idt_ptr(%rip), %rax
+    sub %rcx, %rax                  /* Convert VA to PA */
+    mov %rax, idt_ptr_placeholder
 
     /* Set up TSS for privilege level transitions
      * TSS descriptor format (64-bit):
@@ -414,17 +494,13 @@ long_mode_start:
 
     /* Store kernel stack pointer in TSS.RSP0 for ring 3 -> ring 0 transitions
      * IMPORTANT: RSP0 should point to the TOP of the stack (highest address)
-     * The stack grows downward, so we want RSP0 to be at nk_boot_stack_top
-     * But nk_boot_stack_top might be at the wrong location, so calculate it:
-     * Stack bottom = nk_boot_stack_bottom
-     * Stack size = 16KB = 0x4000
-     * Stack top = Stack bottom + 0x4000 = 0x10D010 + 0x4000 = 0x111010 */
+     * The stack grows downward, so we want RSP0 to be at nk_boot_stack_top */
     mov $nk_boot_stack_bottom, %rax
     add $16384, %rax                    /* Add 16KB to get stack top */
-    and $~0xF, %rax                    /* Ensure 16-byte alignment */
-    mov %rax, tss+4                      /* TSS.RSP0 offset */
+    and $~0xF, %rax                     /* Ensure 16-byte alignment */
+    mov %rax, tss+4                     /* TSS.RSP0 offset */
 
-    /* Call kernel main */
+    /* Call kernel main (RIP-relative call works at any virtual address) */
     /* Note: bsp_init_done will be set by kernel code when ready */
     /* %rdi already contains the MBI address from boot (no overwrite needed) */
     call kernel_main

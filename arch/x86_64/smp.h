@@ -28,10 +28,11 @@ typedef enum {
  * Must be at fixed offsets for assembly access via GS segment */
 typedef struct {
     uint64_t saved_rsp;     /* Offset 0: Saved RSP during monitor call */
-    uint64_t saved_cr3;     /* Offset 8: Saved CR3 during monitor call */
+    uint64_t saved_cr3;     /* Offset 8: Saved CR3 (kept for future use) */
     int cpu_index;          /* Offset 16: CPU index for debugging */
     uint64_t saved_rax;     /* Offset 24: Saved return value (result) from monitor call */
     uint64_t saved_rdx;     /* Offset 32: Saved return value (error) from monitor call */
+    uint64_t saved_cr0;     /* Offset 40: Saved CR0.WP state for NK entry/exit */
 } per_cpu_data_t;
 
 /* Per-CPU data array - indexed by CPU index */

@@ -75,10 +75,15 @@ Create or integrate an LLM-based open source file system (e.g., specfs).
 Adopt a nested kernel architecture for enhanced isolation and security.
 
 **Deliverables:**
-- Separation of privileged kernel and unprivileged kernel layers
-- Memory isolation between kernel layers using page protection
-- Secure IPC mechanism for cross-layer communication
+- Separation of privileged kernel (NK) and unprivileged kernel (OK) layers
+- Memory isolation between kernel layers using CR0.WP toggle for page table protection
+- Secure IPC mechanism for cross-layer communication via monitor calls
 - Monitored system call path from unprivileged to privileged layer
+
+**Design Decisions:**
+- **CR0.WP Toggle:** Uses single shared page table with CR0.WP bit toggling instead of dual page tables with CR3 switching, eliminating TLB flushes on monitor calls
+- **Page Table Focus:** Protection focuses on page table integrity (PTPs marked read-only in OK mode); privileged register integrity (CR0, CR3, CR4, etc.) is not enforced by the monitor
+- **Simplified Model:** Prioritizes performance and simplicity over comprehensive hardware state protection
 
 **Rationale:** Nested kernel architecture provides stronger isolation guarantees by enforcing memory protection even within kernel mode. The unprivileged kernel handles most operations while the privileged kernel validates sensitive operations, reducing the attack surface and containing bugs.
 
@@ -88,4 +93,4 @@ This roadmap represents the strategic direction of the project. Contributions th
 
 ---
 
-*Last Updated: 2026-02-08*
+*Last Updated: 2026-03-03*

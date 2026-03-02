@@ -10,7 +10,13 @@ This is a research kernel project aimed at exploring the boundaries of LLM capab
 
 ## Recent Developments
 
-**Latest: Minilibc & Kernel Relocation (February 2025)**
+**Latest: Nested Kernel CR0.WP Toggle (March 2026)**
+- Simplified nested kernel architecture using single shared page table
+- CR0.WP toggle replaces dual page table CR3 switching for NK/OK transitions
+- Eliminates TLB flushes on every monitor call, improving performance
+- Updated test framework with new NK trampoline test verification
+
+**Previous: Minilibc & Kernel Relocation (February 2025)**
 - Minimal C library for essential string and memory operations
 - Kernel relocated to 4MB to avoid GRUB2 reserved memory gap
 - 37 comprehensive minilibc tests with Python QEMU automation

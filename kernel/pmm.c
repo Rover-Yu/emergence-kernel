@@ -132,13 +132,22 @@ static void coalesce_block(block_info_t *block) {
     uint64_t buddy_addr;
     block_info_t *buddy;
     struct list_head *pos;
+    int list_iterations;
 
     while (block->order < MAX_ORDER) {
         buddy_addr = get_buddy_addr(block->base_addr, block->order);
 
         /* Search for buddy in free list */
         buddy = 0;
+        list_iterations = 0;
         list_for_each(pos, &pmm_state.free_lists[block->order].list) {
+            list_iterations++;
+            /* Safety: prevent infinite loop if list is corrupted */
+            if (list_iterations > 1000) {
+                klog_warn("PMM", "Free list corruption detected at order %d", block->order);
+                buddy = 0;
+                break;
+            }
             block_info_t *b = list_entry(pos, block_info_t, list);
             if (b->base_addr == buddy_addr && !b->allocated) {
                 buddy = b;

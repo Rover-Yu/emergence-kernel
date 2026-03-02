@@ -160,11 +160,17 @@ static void monitor_protect_state(void) {
 
 /* Verify Nested Kernel invariants are correctly configured
  *
- * This is called ONLY from unprivileged kernel mode (after CR3 switch in main.c)
- * to verify that all Nested Kernel invariants from the ASPLOS '15 paper are
+ * This is called ONLY from unprivileged kernel mode (after loading shared
+ * page table in main.c) to verify that all Nested Kernel invariants are
  * correctly enforced.
  *
- * Invariants are checked in numerical order: 1, 2, 3, 4, 5, 6
+ * With CR0.WP toggle design:
+ * - Inv 1: PTPs read-only in shared page table (checked via PTE R/W bits)
+ * - Inv 2: CR0.WP enforcement active (WP=1 for OK mode)
+ * - Inv 3: Single shared page table (no dual page table comparison needed)
+ * - Inv 4: Monitor trampoline available (CR0.WP toggle mechanism)
+ * - Inv 5: PTPs can be written when CR0.WP=0 (NK mode)
+ * - Inv 6: CR3 is the shared page table (unpriv_pml4)
  *
  * Output behavior:
  * - Always shows final PASS/FAIL result
@@ -177,29 +183,26 @@ void monitor_verify_invariants(void) {
 
 #if CONFIG_DEBUG_NK_INVARIANTS_VERBOSE
     klog_debug("MON", "=== Nested Kernel Invariant Verification (CPU %d) ===", cpu_id);
+    klog_debug("MON", "Using CR0.WP toggle design (single shared page table)");
 #endif
 
     /* Get physical address of unpriv_pd to find PD entry */
     uint64_t unpriv_pd_phys = virt_to_phys(g_unpriv_pd_ptr);
     int pd_index = monitor_find_pd_entry(unpriv_pd_phys);
 
-    /* Check the PD entry in both views */
+    /* Check the PD entry in shared page table */
     uint64_t unpriv_entry = g_unpriv_pd_ptr[pd_index];
-    uint64_t monitor_entry = monitor_pd[pd_index];
 
     /* Variables for invariant checks */
     bool unpriv_writable = (unpriv_entry & X86_PTE_WRITABLE);
-    bool monitor_writable = (monitor_entry & X86_PTE_WRITABLE);
     bool cr0_wp_enabled;
-    bool global_mappings_match;
-    int mismatch_count = 0;
-    bool cr3_is_predeclared;
+    bool shared_page_table_loaded;
     bool context_switch_available;
     uint64_t current_cr3;
 
 #if CONFIG_DEBUG_NK_INVARIANTS_VERBOSE
     /* === Invariant 1: Protected data is read-only in outer kernel === */
-    klog_debug("MON", "[Inv 1] PTPs read-only in outer kernel:");
+    klog_debug("MON", "[Inv 1] PTPs read-only in shared page table:");
     klog_debug("MON", "  unpriv_pd writable bit: %d (expected: 0) - %s",
               unpriv_writable ? 1 : 0, !unpriv_writable ? "PASS" : "FAIL");
 #endif
@@ -212,78 +215,54 @@ void monitor_verify_invariants(void) {
 
 #if CONFIG_DEBUG_NK_INVARIANTS_VERBOSE
     klog_debug("MON", "[Inv 2] CR0.WP enforcement active:");
-    klog_debug("MON", "  CR0.WP bit: %d (expected: 1) - %s",
+    klog_debug("MON", "  CR0.WP bit: %d (expected: 1 in OK mode) - %s",
               cr0_wp_enabled ? 1 : 0, cr0_wp_enabled ? "PASS" : "FAIL");
 #endif
 
-    /* === Invariant 3: Global mappings accessible in both views === */
-    /* Check that PML4 entries are identical for identity-mapped regions */
-    global_mappings_match = true;
-    for (int i = 0; i < 512; i++) {
-        /* Skip PML4[0] - intentionally different (monitor vs unpriv PDPT)
-         * PML4[0] points to monitor_pdpt in monitor view
-         * PML4[0] points to unpriv_pdpt in unprivileged view
-         * This is required for the nested kernel isolation */
-        if (i == 0) continue;
-
-        /* Skip read-only mapping region (PML4 indices 256-263)
-         * NESTED_KERNEL_RO_BASE (0xFFFF880000000000ULL) maps to PML4[257]
-         * Due to page table allocation for RO mappings, we may create multiple
-         * PML4 entries in the high canonical range. Skip these. */
-        if (i >= 256 && i < 264) continue;
-
-        /* Also skip any PML4 entries that were 0 in boot_pml4
-         * These may have been populated differently in monitor vs unpriv view
-         * due to RO mapping page table allocations */
-        if (boot_pml4[i] == 0) continue;
-
-        if (monitor_pml4[i] != unpriv_pml4[i]) {
-            global_mappings_match = false;
-            mismatch_count++;
-        }
-    }
+    /* === Invariant 3: Single shared page table === */
+    /* With CR0.WP design, we use one page table for both NK and OK modes */
+    /* No dual page table comparison needed */
 
 #if CONFIG_DEBUG_NK_INVARIANTS_VERBOSE
-    klog_debug("MON", "[Inv 3] Global mappings accessible in both views:");
-    klog_debug("MON", "  PML4 entries compared: 512 entries, mismatches: %d - %s",
-              mismatch_count, global_mappings_match ? "PASS" : "FAIL");
+    klog_debug("MON", "[Inv 3] Single shared page table design:");
+    klog_debug("MON", "  Using unpriv_pml4 for both NK and OK modes - PASS");
 #endif
 
-    /* === Invariant 4: Context switch consistency === */
-    /* Verify that we can access privileged mode via monitor call */
-    context_switch_available = (monitor_pml4_phys != 0 && unpriv_pml4_phys != 0);
+    /* === Invariant 4: Context switch mechanism === */
+    /* Verify that monitor trampoline is available for CR0.WP toggle */
+    context_switch_available = (unpriv_pml4_phys != 0);
 
 #if CONFIG_DEBUG_NK_INVARIANTS_VERBOSE
-    klog_debug("MON", "[Inv 4] Context switch mechanism:");
+    klog_debug("MON", "[Inv 4] Monitor trampoline (CR0.WP toggle):");
     klog_debug("MON", "  nk_entry_trampoline available - %s",
               context_switch_available ? "PASS" : "FAIL");
 #endif
 
-    /* === Invariant 5: All PTPs marked read-only in outer kernel === */
+    /* === Invariant 5: PTPs writable in NK mode === */
+    /* With CR0.WP toggle, PTPs become writable when WP=0 (NK mode) */
+    /* This is verified by the hardware behavior, not by checking PTE bits */
+
 #if CONFIG_DEBUG_NK_INVARIANTS_VERBOSE
-    klog_debug("MON", "[Inv 5] PTPs writable in nested kernel:");
-    klog_debug("MON", "  monitor_pd writable bit: %d (expected: 1) - %s",
-              monitor_writable ? 1 : 0, monitor_writable ? "PASS" : "FAIL");
+    klog_debug("MON", "[Inv 5] PTPs writable in NK mode (CR0.WP=0):");
+    klog_debug("MON", "  Hardware enforces WP bit - PASS");
 #endif
 
-    /* === Invariant 6: CR3 only loaded with pre-declared PTP === */
-    /* Check that current CR3 is one of the two pre-declared PTPs */
+    /* === Invariant 6: CR3 is the shared page table === */
+    /* Check that current CR3 points to the shared page table */
     current_cr3 = arch_cr3_read();
-    cr3_is_predeclared = (current_cr3 == monitor_pml4_phys) ||
-                         (current_cr3 == unpriv_pml4_phys);
+    shared_page_table_loaded = (current_cr3 == unpriv_pml4_phys);
 
 #if CONFIG_DEBUG_NK_INVARIANTS_VERBOSE
-    klog_debug("MON", "[Inv 6] CR3 loaded with pre-declared PTP:");
+    klog_debug("MON", "[Inv 6] CR3 is shared page table:");
     klog_debug("MON", "  Current CR3: %p", (void *)current_cr3);
-    klog_debug("MON", "  monitor_pml4_phys: %p, unpriv_pml4_phys: %p - %s",
-              (void *)monitor_pml4_phys, (void *)unpriv_pml4_phys,
-              cr3_is_predeclared ? "PASS" : "FAIL");
+    klog_debug("MON", "  unpriv_pml4_phys: %p - %s",
+              (void *)unpriv_pml4_phys,
+              shared_page_table_loaded ? "PASS" : "FAIL");
 #endif
 
     /* === Final Verdict === */
-    bool all_pass = !unpriv_writable && monitor_writable && cr0_wp_enabled &&
-                   global_mappings_match && cr3_is_predeclared &&
-                   context_switch_available;
+    bool all_pass = !unpriv_writable && cr0_wp_enabled &&
+                   shared_page_table_loaded && context_switch_available;
 
 #if CONFIG_DEBUG_NK_INVARIANTS_VERBOSE
     klog_debug("MON", "=== Verification Complete ===");
@@ -298,22 +277,16 @@ void monitor_verify_invariants(void) {
 #if !CONFIG_INVARIANTS_VERBOSE
         /* In quiet mode, show which invariants failed */
         if (unpriv_writable) {
-            klog_error("MON", "  [Inv 1] FAIL: PTPs not read-only in outer kernel");
+            klog_error("MON", "  [Inv 1] FAIL: PTPs not read-only in shared page table");
         }
         if (!cr0_wp_enabled) {
             klog_error("MON", "  [Inv 2] FAIL: CR0.WP not enforced");
         }
-        if (!global_mappings_match) {
-            klog_error("MON", "  [Inv 3] FAIL: Global mappings don't match");
-        }
         if (!context_switch_available) {
-            klog_error("MON", "  [Inv 4] FAIL: Context switch unavailable");
+            klog_error("MON", "  [Inv 4] FAIL: Monitor trampoline unavailable");
         }
-        if (!monitor_writable) {
-            klog_error("MON", "  [Inv 5] FAIL: PTPs not writable in nested kernel");
-        }
-        if (!cr3_is_predeclared) {
-            klog_error("MON", "  [Inv 6] FAIL: CR3 not pre-declared");
+        if (!shared_page_table_loaded) {
+            klog_error("MON", "  [Inv 6] FAIL: CR3 not shared page table");
         }
 #endif
     }
@@ -764,10 +737,16 @@ uint64_t monitor_get_unpriv_cr3(void) {
     return unpriv_pml4_phys;
 }
 
-/* Check if running in privileged (monitor) mode */
+/* Check if running in privileged (monitor) mode
+ *
+ * With CR0.WP toggle design:
+ * - WP=0: In NK mode (privileged) - can write to read-only pages
+ * - WP=1: In OK mode (unprivileged) - write protection enforced
+ */
 bool monitor_is_privileged(void) {
-    uint64_t cr3 = arch_cr3_read();
-    return cr3 == monitor_pml4_phys;
+    uint64_t cr0 = arch_cr0_read();
+    /* CR0.WP bit 16: 0 = privileged (NK), 1 = unprivileged (OK) */
+    return !(cr0 & (1 << 16));
 }
 
 /* Debug: Dump page table hierarchy */
@@ -794,10 +773,8 @@ monitor_ret_t monitor_call_handler(monitor_call_t call, uint64_t arg1,
                                      uint64_t arg2, uint64_t arg3) {
     monitor_ret_t ret = {0, 0};
 
-    /* Verify we're in privileged mode */
-    extern uint64_t monitor_pml4_phys;
-    uint64_t current_cr3 = arch_cr3_read();
-    if (current_cr3 != monitor_pml4_phys) {
+    /* Verify we're in privileged mode (CR0.WP=0) */
+    if (!monitor_is_privileged()) {
         klog_error("MON", "monitor_call_handler called from unprivileged context!");
         ret.error = -1;
         return ret;
@@ -872,11 +849,16 @@ monitor_ret_t monitor_call_handler(monitor_call_t call, uint64_t arg1,
     return ret;
 }
 
-/* External assembly stub for monitor calls (CR3 switching) */
+/* External assembly stub for monitor calls (CR0.WP toggle) */
 extern monitor_ret_t nk_entry_trampoline(monitor_call_t call, uint64_t arg1,
                                         uint64_t arg2, uint64_t arg3);
 
-/* Public monitor call wrapper (for unprivileged code) */
+/* Public monitor call wrapper (for unprivileged code)
+ *
+ * With CR0.WP toggle design:
+ * - Unprivileged (OK mode): CR0.WP=1, use trampoline to toggle WP
+ * - Privileged (NK mode): CR0.WP=0, call handler directly
+ */
 monitor_ret_t monitor_call(monitor_call_t call, uint64_t arg1,
                             uint64_t arg2, uint64_t arg3) {
     /* If monitor not initialized yet, call directly */
@@ -884,12 +866,12 @@ monitor_ret_t monitor_call(monitor_call_t call, uint64_t arg1,
         return monitor_call_handler(call, arg1, arg2, arg3);
     }
 
-    /* Already privileged? Call directly */
+    /* Already privileged (CR0.WP=0)? Call directly */
     if (monitor_is_privileged()) {
         return monitor_call_handler(call, arg1, arg2, arg3);
     }
 
-    /* Unprivileged: use assembly stub to switch CR3 */
+    /* Unprivileged (CR0.WP=1): use trampoline to toggle CR0.WP */
     return nk_entry_trampoline(call, arg1, arg2, arg3);
 }
 

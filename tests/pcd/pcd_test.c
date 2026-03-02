@@ -9,7 +9,6 @@
 
 /* External monitor functions */
 extern void monitor_init(void);
-extern void monitor_verify_invariants(void);
 
 /**
  * run_pcd_tests - Run Page Control Data (PCD) tests
@@ -21,7 +20,8 @@ extern void monitor_verify_invariants(void);
  * 2. PCD has a valid page count (> 0)
  * 3. Can query PCD type for a valid address
  * 4. Monitor initialization still works after PCD
- * 5. Nested Kernel invariants still pass
+ *
+ * Note: NK invariants are tested separately by the nk_invariants test.
  *
  * Returns: 0 on success, -1 on failure
  */
@@ -70,13 +70,8 @@ int run_pcd_tests(void) {
     /* Test 4: Verify monitor still initializes after PCD */
     klog_info("PCD_TEST", "Test 4: Monitor initialization");
     /* Note: Monitor is already initialized by main.c, so we just verify it worked */
-    /* We can't call monitor_init() again, so we verify Nested Kernel invariants */
-    klog_info("PCD_TEST", "Monitor already initialized in main (SKIP - verify invariants)");
-
-    /* Test 5: Verify Nested Kernel invariants */
-    klog_info("PCD_TEST", "Test 5: Nested Kernel invariants");
-    monitor_verify_invariants();
-    klog_info("PCD_TEST", "Invariants verification complete (PASS)");
+    /* We can't call monitor_init() again, and invariants have their own dedicated test */
+    klog_info("PCD_TEST", "Monitor already initialized in main (SKIP)");
 
     /* Print summary */
     if (failures == 0) {
