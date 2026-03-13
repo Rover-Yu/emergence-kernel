@@ -9,6 +9,7 @@
 #include "kernel/pmm.h"
 #include "kernel/thread.h"
 #include "arch/x86_64/smp.h"
+#include "arch/x86_64/include/cpu_context.h"
 #include "include/spinlock.h"
 #include "include/string.h"
 
@@ -37,11 +38,11 @@ void thread_init(void) {
     klog_info("THREAD", "Initializing thread subsystem");
 
     /* Initialize slab cache for thread_t structures
-     * sizeof(thread_t) is 248 bytes, which is not a power of two.
-     * Round up to 256 bytes (next power of two) for the slab cache.
+     * sizeof(thread_t) is 288 bytes, which is not a power of two.
+     * Round up to 512 bytes (next power of two) for the slab cache.
      */
     static slab_cache_t thread_cache_data;
-    size_t cache_size = 256;  /* Next power of two after 248 */
+    size_t cache_size = 512;  /* Next power of two after 288 */
 
     if (slab_cache_create(&thread_cache_data, cache_size) < 0) {
         klog_error("THREAD", "Failed to create thread slab cache (size=%zu)", cache_size);
@@ -129,9 +130,9 @@ thread_t *thread_create(const char *name,
     list_init(&thread->run_list);
     list_init(&thread->all_list);
 
-    /* Set up initial context for new thread
-     * When a new thread is first scheduled, it will start executing at thread_entry_wrapper
-     * which will then call the thread's entry function.
+    /* Set up initial context for new thread using architecture abstraction
+     * When a new thread is first scheduled, it will start executing at
+     * thread_entry_wrapper which will then call the thread's entry function.
      *
      * Stack layout for new thread:
      *   top of stack (initial RSP)
@@ -147,25 +148,9 @@ thread_t *thread_create(const char *name,
         /* Align stack top to 16 bytes */
         stack_top = (uint8_t *)((uintptr_t)stack_top & ~0xFUL);
 
-        /* Set up context */
-        cpu_context_t *ctx = &thread->context;
-
-        /* Set initial register values */
-        ctx->r15 = ctx->r14 = ctx->r13 = ctx->r12 = 0;
-        ctx->r11 = ctx->r10 = ctx->r9 = ctx->r8 = 0;
-        ctx->rbp = (uint64_t)stack_top;  /* Frame pointer = stack top */
-        ctx->rdi = 0;  /* First argument (will be set to thread pointer in wrapper) */
-        ctx->rsi = ctx->rdx = ctx->rcx = ctx->rbx = 0;
-        ctx->rax = 0;
-
-        /* Set instruction pointer to entry wrapper */
-        ctx->rip = (uint64_t)thread_entry_wrapper;
-
-        /* Set stack pointer (will be adjusted by context_switch) */
-        ctx->rsp = (uint64_t)stack_top;
-
-        /* Enable interrupts for kernel threads */
-        ctx->rflags = 0x200;  /* IF bit set (bit 9) */
+        /* Initialize context using architecture abstraction */
+        arch_context_init(&thread->context, stack_top,
+                         thread_entry_wrapper, RFLAGS_IF);
     }
 
     /* Add to all-threads list */
@@ -212,7 +197,7 @@ void thread_exit(void) {
     /* Should never reach here */
     klog_error("THREAD", "thread_exit() returned!");
     while (1) {
-        __asm__ volatile ("hlt");
+        arch_cpu_halt();
     }
 }
 
@@ -245,10 +230,7 @@ void thread_yield(void) {
  * Returns: Pointer to current thread, or NULL if none
  */
 thread_t *thread_get_current(void) {
-    /* Read from per-CPU data at GS offset 48 */
-    thread_t *current;
-    __asm__ volatile ("mov %%gs:48, %0" : "=r"(current));
-    return current;
+    return (thread_t *)arch_get_current_thread();
 }
 
 /**
@@ -256,8 +238,7 @@ thread_t *thread_get_current(void) {
  * @t: Thread to set as current
  */
 void thread_set_current(thread_t *t) {
-    /* Write to per-CPU data at GS offset 48 */
-    __asm__ volatile ("mov %0, %%gs:48" :: "r"(t));
+    arch_set_current_thread(t);
 }
 
 /**
@@ -285,4 +266,34 @@ void thread_destroy(thread_t *t) {
 
     /* Free thread structure */
     slab_free(thread_cache, t);
+}
+
+/**
+ * thread_get_tid - Get thread ID
+ * @t: Thread to query
+ *
+ * Returns: Thread ID, or -1 if t is NULL
+ */
+int thread_get_tid(thread_t *t) {
+    return t ? t->tid : -1;
+}
+
+/**
+ * thread_get_state - Get thread state
+ * @t: Thread to query
+ *
+ * Returns: Thread state, or THREAD_TERMINATED if t is NULL
+ */
+thread_state_t thread_get_state(thread_t *t) {
+    return t ? t->state : THREAD_TERMINATED;
+}
+
+/**
+ * thread_get_name - Get thread name
+ * @t: Thread to query
+ *
+ * Returns: Thread name string, or NULL if t is NULL
+ */
+const char *thread_get_name(thread_t *t) {
+    return t ? t->name : NULL;
 }

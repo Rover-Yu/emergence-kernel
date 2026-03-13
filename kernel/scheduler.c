@@ -11,6 +11,7 @@
 #include "include/spinlock.h"
 #include "include/string.h"
 #include "arch/x86_64/smp.h"
+#include "arch/x86_64/include/cpu_context.h"
 
 /* Global runqueue */
 static runqueue_t runqueue;
@@ -63,7 +64,6 @@ void scheduler_init(void) {
         klog_info("SCHED", "Created idle thread for CPU %d (tid=%d)", i, idle->tid);
     }
 
-    klog_info("SCHED", "Scheduler initialized");
 }
 
 /**
@@ -79,7 +79,7 @@ void idle_thread_func(void *arg) {
 
     /* Idle loop - HLT halts until next interrupt */
     while (1) {
-        __asm__ volatile ("hlt");
+        arch_cpu_halt();
     }
 }
 
@@ -107,11 +107,11 @@ void scheduler_start(void) {
     }
 
     /* Enable interrupts and enter scheduling loop */
-    __asm__ volatile ("sti");
+    arch_enable_interrupts();
 
     /* This point should never be reached */
     while (1) {
-        __asm__ volatile ("hlt");
+        arch_cpu_halt();
     }
 }
 
@@ -187,6 +187,9 @@ void scheduler_tick(void) {
 /**
  * scheduler_add_thread - Add a thread to the runqueue
  * @t: Thread to add (must be in READY state)
+ *
+ * Adds the thread to the back of the FIFO queue.
+ * Safe to call from interrupt context.
  */
 void scheduler_add_thread(thread_t *t) {
     irq_flags_t flags;
@@ -211,9 +214,9 @@ void scheduler_add_thread(thread_t *t) {
 }
 
  /**
-  * scheduler_remove_thread - Remove a thread from the runqueue
-  * @t: Thread to remove
-  */
+ * scheduler_remove_thread - Remove a thread from the runqueue
+ * @t: Thread to remove
+ */
 void scheduler_remove_thread(thread_t *t) {
     irq_flags_t flags;
 
@@ -239,7 +242,6 @@ void scheduler_remove_thread(thread_t *t) {
 int scheduler_get_nr_running(void) {
     return runqueue.nr_running;
 }
-
 /**
  * scheduler_get_runqueue - Get the global runqueue
  *
@@ -248,7 +250,6 @@ int scheduler_get_nr_running(void) {
 runqueue_t *scheduler_get_runqueue(void) {
     return &runqueue;
 }
-
 /**
  * scheduler_get_idle_thread - Get the idle thread for a CPU
  * @cpu: CPU index
@@ -261,7 +262,6 @@ thread_t *scheduler_get_idle_thread(int cpu) {
     }
     return runqueue.idle_threads[cpu];
 }
-
 /**
  * pick_next_thread - Pick next thread from runqueue (FIFO order)
  *
@@ -281,18 +281,11 @@ static thread_t *pick_next_thread(void) {
     }
 
     /* Get next thread from front of queue (FIFO) */
-        struct list_head *node = list_pop_front(&runqueue.thread_list);
-        next = list_entry(node, thread_t, run_list);
-        runqueue.nr_running--;
+    struct list_head *node = list_pop_front(&runqueue.thread_list);
+    next = list_entry(node, thread_t, run_list);
+    runqueue.nr_running--;
 
     spin_unlock_irqrestore(&runqueue.lock, flags);
 
     return next;
 }
-
-
-
-
-
-
-

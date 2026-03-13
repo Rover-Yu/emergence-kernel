@@ -107,7 +107,8 @@ KERNEL_C_SRCS := $(KERNEL_DIR)/device.c $(KERNEL_DIR)/pmm.c $(KERNEL_DIR)/pcd.c 
                  $(KERNEL_DIR)/thread.c \
                  $(KERNEL_DIR)/scheduler.c \
                  $(KERNEL_DIR)/vm.c \
-                 $(KERNEL_DIR)/process.c
+                 $(KERNEL_DIR)/process.c \
+                 $(KERNEL_DIR)/kmap.c
 
 # Minilibc sources
 MINILIBC_C_SRCS := lib/minilibc/string.c \

@@ -1,57 +1,26 @@
-/* Emergence Kernel - Thread Management */
+/* Emergence Kernel - Thread Internal Implementation
+ *
+ * This header contains internal thread implementation details.
+ * Public API is in include/kernel/thread.h
+ * Architecture-specific context is in arch/x86_64/include/cpu_context.h
+ */
 
-#ifndef _KERNEL_THREAD_H
-#define _KERNEL_THREAD_H
+#ifndef _KERNEL_THREAD_INTERNAL_H
+#define _KERNEL_THREAD_INTERNAL_H
 
-#include <stdint.h>
-#include <stddef.h>
+/* Include public API first */
+#include "include/kernel/thread.h"
+
+/* Include architecture-specific context */
+#include "arch/x86_64/include/cpu_context.h"
+
+/* Internal dependencies */
 #include "kernel/list.h"
 
-/* Forward declaration */
-typedef struct address_space address_space_t;
-typedef struct process process_t;
+/* Page size for stack allocation */
+#define PAGE_SIZE 4096
 
-/* Thread states */
-typedef enum {
-    THREAD_CREATED,     /* Thread created but not yet runnable */
-    THREAD_READY,       /* Thread is ready to run */
-    THREAD_RUNNING,     /* Thread is currently running */
-    THREAD_BLOCKED,     /* Thread is blocked (waiting for I/O, etc.) */
-    THREAD_TERMINATED   /* Thread has exited */
-} thread_state_t;
-
-/* CPU context - saved register state
- * Must match assembly layout in context.S exactly!
- * Total size: 144 bytes (18 * 8) */
-typedef struct cpu_context {
-    uint64_t r15;       /* Offset 0: Callee-saved */
-    uint64_t r14;       /* Offset 8: Callee-saved */
-    uint64_t r13;       /* Offset 16: Callee-saved */
-    uint64_t r12;       /* Offset 24: Callee-saved */
-    uint64_t r11;       /* Offset 32: Caller-saved */
-    uint64_t r10;       /* Offset 40: Caller-saved */
-    uint64_t r9;        /* Offset 48: Caller-saved */
-    uint64_t r8;        /* Offset 56: Caller-saved */
-    uint64_t rbp;       /* Offset 64: Frame pointer */
-    uint64_t rdi;       /* Offset 72: First argument */
-    uint64_t rsi;       /* Offset 80: Second argument */
-    uint64_t rdx;       /* Offset 88: Third argument */
-    uint64_t rcx;       /* Offset 96: Fourth argument */
-    uint64_t rbx;       /* Offset 104: Callee-saved */
-    uint64_t rax;       /* Offset 112: Return value */
-    uint64_t rip;       /* Offset 120: Instruction pointer */
-    uint64_t rsp;       /* Offset 128: Stack pointer */
-    uint64_t rflags;    /* Offset 136: CPU flags */
-} __attribute__((packed)) cpu_context_t;
-
-/* Thread flags */
-#define THREAD_FLAG_KERNEL  0x0001  /* Kernel thread (vs user thread) */
-#define THREAD_FLAG_USER    0x0002  /* User thread (ring 3) */
-
-/* Default stack size (16KB = 4 pages) */
-#define THREAD_DEFAULT_STACK_SIZE 16384
-
-/* Thread Control Block
+/* Thread Control Block - Full internal definition
  *
  * Layout (verified offsets):
  *   0-15:      run_list (16 bytes)
@@ -69,11 +38,11 @@ typedef struct cpu_context {
  *   232-235:   cpu (4 bytes)
  *   236-239:   padding (4 bytes)
  *   240-247:   ticks (8 bytes)
- *   248-255:   process pointer (8 bytes) [NEW]
- *   256-263:   address_space pointer (8 bytes) [NEW]
- *   264-271:   user_stack pointer (8 bytes) [NEW]
- *   272-279:   user_stack_size (8 bytes) [NEW]
- *   280-287:   user_rsp (8 bytes) [NEW]
+ *   248-255:   process pointer (8 bytes)
+ *   256-263:   address_space pointer (8 bytes)
+ *   264-271:   user_stack pointer (8 bytes)
+ *   272-279:   user_stack_size (8 bytes)
+ *   280-287:   user_rsp (8 bytes)
  * Total: 288 bytes (fits in 512B slab cache)
  */
 struct thread {
@@ -85,7 +54,7 @@ struct thread {
     int flags;                      /* Thread flags */
     const char *name;               /* Debug name */
 
-    cpu_context_t context;          /* Saved register state */
+    cpu_context_t context;          /* Saved register state (arch-specific) */
 
     void *kernel_stack;             /* Stack base (from PMM) */
     size_t kernel_stack_size;       /* Stack size in bytes */
@@ -106,74 +75,10 @@ struct thread {
     uint64_t user_rsp;              /* Saved user RSP during syscall */
 };
 
-typedef struct thread thread_t;
-
-/* Thread API */
-
-/**
- * thread_init - Initialize the thread subsystem
- *
- * Creates slab cache for thread_t structures.
- * Must be called after slab_init().
- */
-void thread_init(void);
-
-/**
- * thread_create - Create a new thread
- * @name: Debug name for the thread
- * @func: Entry function
- * @arg: Argument to pass to entry function
- * @stack_size: Stack size in bytes (0 = default 16KB)
- * @flags: Thread creation flags (THREAD_FLAG_KERNEL, etc.)
- *
- * Returns: Pointer to new thread, or NULL on failure
- */
-thread_t *thread_create(const char *name,
-                        void (*func)(void *), void *arg,
-                        size_t stack_size, int flags);
-
-/**
- * thread_exit - Terminate the current thread
- *
- * Marks the current thread as terminated and triggers a context switch.
- * This function does not return.
- */
-void thread_exit(void) __attribute__((noreturn));
-
-/**
- * thread_yield - Voluntarily yield the CPU
- *
- * Moves the current thread to the back of the runqueue
- * and triggers a context switch to the next ready thread.
- */
-void thread_yield(void);
-
-/**
- * thread_get_current - Get the currently running thread
- *
- * Returns: Pointer to current thread, or NULL if no thread is running
- */
-thread_t *thread_get_current(void);
-
-/**
- * thread_set_current - Set the current thread for this CPU
- * @t: Thread to set as current
- */
-void thread_set_current(thread_t *t);
-
-/**
- * thread_destroy - Free thread resources
- * @t: Thread to destroy
- *
- * Frees the thread's stack and returns the thread_t to the slab cache.
- * The thread must be in TERMINATED state.
- */
-void thread_destroy(thread_t *t);
-
 /* Assembly context switch function - implemented in context.S */
 void context_switch(cpu_context_t *prev, cpu_context_t *next);
 
 /* Assembly entry wrapper - implemented in context.S */
 void thread_entry_wrapper(void);
 
-#endif /* _KERNEL_THREAD_H */
+#endif /* _KERNEL_THREAD_INTERNAL_H */
