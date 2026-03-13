@@ -12,6 +12,7 @@
 #   tests-smp             - SMP startup and multi-CPU verification
 #   tests-pcd             - Page Control Data tests
 #   tests-slab            - Slab allocator tests
+#   tests-kmap            - KMAP memory region tracking tests
 #   tests-sched           - Thread creation and FIFO scheduling tests
 #   tests-nk              - Run all Nested Kernel tests
 #   tests-nk-invariants   - Nested Kernel invariants (ASPLOS '15)
@@ -26,11 +27,11 @@
 # The 'tests=' parameter is parsed by kernel/test.c
 # Since this file is included from the main Makefile, we run in the project root
 
-.PHONY: tests tests-boot tests-apic-timer tests-smp tests-pcd tests-slab tests-sched \
+.PHONY: tests tests-boot tests-apic-timer tests-smp tests-pcd tests-slab tests-kmap tests-sched \
         tests-syscall \
         tests-nk tests-nk-invariants tests-nk-fault-injection tests-nk-readonly-visibility \
         tests-nk-smp-monitor-stress tests-usermode tests-multiboot tests-minilibc \
-        test test-boot test-apic-timer test-smp test-pcd test-slab test-sched \
+        test test-boot test-apic-timer test-smp test-pcd test-slab test-kmap test-sched \
         test-syscall \
         test-nk test-nk-invariants test-nk-fault-injection test-nk-readonly-visibility \
         test-nk-smp-monitor-stress test-usermode test-multiboot test-minilibc
@@ -42,6 +43,7 @@ test-apic-timer: tests-apic-timer
 test-smp: tests-smp
 test-pcd: tests-pcd
 test-slab: tests-slab
+test-kmap: tests-kmap
 test-sched: tests-sched
 test-syscall: tests-syscall
 test-nk: tests-nk
@@ -78,6 +80,10 @@ tests-pcd:
 tests-slab:
 	@echo "Running Slab Allocator Test..."
 	@$(MAKE) KERNEL_CMDLINE="tests=slab" all run
+
+tests-kmap:
+	@echo "Running KMAP Memory Region Tracking Test..."
+	@$(MAKE) KERNEL_CMDLINE="tests=kmap" all run
 
 tests-sched:
 	@echo "Running Scheduler Test..."
