@@ -23,8 +23,9 @@
 /* Test wrapper headers */
 #include "tests/testcases.h"
 
-/* External driver initialization functions */
-extern int serial_driver_init(void);
+/* Forward declarations for thread and scheduler */
+extern void thread_init(void);
+extern void scheduler_init(void);
 
 /* External monitor functions */
 extern void monitor_init(void);
@@ -141,6 +142,10 @@ void kernel_main(uint32_t multiboot_info_addr) {
     extern void slab_init(void);
     slab_init();
 
+    /* Initialize Thread subsystem (requires slab allocator) */
+    thread_init();
+    klog_info("KERN", "Thread subsystem initialized");
+
     /* Initialize Page Control Data (PCD) system */
     extern void pcd_init(void);
     pcd_init();
@@ -150,6 +155,14 @@ void kernel_main(uint32_t multiboot_info_addr) {
 
     /* Initialize SMP subsystem (detects CPU count from ACPI/CPUID) */
     smp_init();
+
+    /* Initialize Scheduler (requires smp_init for CPU count) */
+    scheduler_init();
+    klog_info("KERN", "Scheduler initialized");
+
+    /* Scheduler Tests */
+    extern void test_sched(void);
+    test_sched();
 
     /* BSP specific initialization - must complete BEFORE starting APs */
     /* Get CPU ID first to determine if we're BSP or AP */

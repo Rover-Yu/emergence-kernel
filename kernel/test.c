@@ -50,6 +50,7 @@ extern int run_usermode_tests(void);
 extern int run_nk_smp_monitor_stress_tests(void);
 extern int run_minilibc_tests(void);
 extern int run_nk_trampoline_tests(void);
+extern int run_sched_tests(void);
 
 /* Test registry array */
 const test_case_t test_registry[] = {
@@ -150,6 +151,15 @@ const test_case_t test_registry[] = {
         .run_func = run_nk_trampoline_tests,
         .enabled = 1,
         .auto_run = 1  /* Auto-run in test-all */
+    },
+#endif
+#if CONFIG_TESTS_SCHED
+    {
+        .name = "sched",
+        .description = "Thread creation and FIFO scheduling tests",
+        .run_func = run_sched_tests,
+        .enabled = 1,
+        .auto_run = 1  /* Auto-run after scheduler init */
     },
 #endif
 #if CONFIG_TESTS_MINILIBC

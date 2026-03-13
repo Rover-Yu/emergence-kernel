@@ -37,6 +37,10 @@ void apic_timer_handler(void) {
         /* Increment interrupt counter */
         apic_timer_interrupt_count++;
 
+        /* Call scheduler tick for preemptive scheduling */
+        extern void scheduler_tick(void);
+        scheduler_tick();
+
         /* Increment quote counter every INTERRUPTS_PER_QUOTE interrupts */
         if (apic_timer_interrupt_count >= INTERRUPTS_PER_QUOTE &&
             apic_timer_count < (int)NUM_QUOTES) {

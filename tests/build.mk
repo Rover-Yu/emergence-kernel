@@ -85,6 +85,10 @@ NK_MONITOR_TRAMPOLINE_TEST_OBJ := $(BUILD_DIR)/nk_monitor_trampoline_test.o
 NK_INVARIANTS_VERIFY_TEST_SRC := tests/nested-kernel/nk_invariants_verify_test.c
 NK_INVARIANTS_VERIFY_TEST_OBJ := $(BUILD_DIR)/nk_invariants_verify_test.o
 
+# Scheduler test (conditionally compiled)
+SCHED_TEST_SRC := tests/sched/sched_test.c
+SCHED_TEST_OBJ := $(BUILD_DIR)/kernel_sched_test.o
+
 # ============================================================================
 # Test Objects Assembly
 # ============================================================================
@@ -120,6 +124,10 @@ TESTS_OBJS += $(PCD_TEST_OBJ)
 endif
 ifeq ($(CONFIG_TESTS_NK_INVARIANTS),1)
 TESTS_OBJS += $(NK_INVARIANTS_TEST_OBJ)
+endif
+
+ifeq ($(CONFIG_TESTS_SCHED),1)
+TESTS_OBJS += $(SCHED_TEST_OBJ)
 endif
 
 # ============================================================================
@@ -198,6 +206,12 @@ endif
 
 ifeq ($(CONFIG_TESTS_NK_INVARIANTS),1)
 $(NK_INVARIANTS_TEST_OBJ): $(NK_INVARIANTS_TEST_SRC) $(CONFIG_DEP) | $(BUILD_DIR)
+	@echo "  CC      $<"
+	$(Q)$(CC) $(CFLAGS) -c $< -o $@
+endif
+
+ifeq ($(CONFIG_TESTS_SCHED),1)
+$(SCHED_TEST_OBJ): $(SCHED_TEST_SRC) $(CONFIG_DEP) | $(BUILD_DIR)
 	@echo "  CC      $<"
 	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 endif

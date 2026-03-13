@@ -52,6 +52,7 @@ CFLAGS += -DCONFIG_TESTS_NK_FAULT_INJECTION=$(CONFIG_TESTS_NK_FAULT_INJECTION)
 CFLAGS += -DCONFIG_TESTS_NK_TRAMPOLINE=$(CONFIG_TESTS_NK_TRAMPOLINE)
 CFLAGS += -DCONFIG_TESTS_NK_INVARIANTS_VERIFY=$(CONFIG_TESTS_NK_INVARIANTS_VERIFY)
 CFLAGS += -DCONFIG_TESTS_SMP_MONITOR_STRESS=$(CONFIG_TESTS_SMP_MONITOR_STRESS)
+CFLAGS += -DCONFIG_TESTS_SCHED=$(CONFIG_TESTS_SCHED)
 
 # Debug configuration options (sorted by kernel.config order)
 CFLAGS += -DCONFIG_DEBUG_SMP_AP=$(CONFIG_DEBUG_SMP_AP)
@@ -79,7 +80,7 @@ CONFIG_DEP := $(CONFIG_HASH_FILE)
 
 # Architecture-specific sources (x86_64)
 ARCH_DIR := arch/x86_64
-ARCH_BOOT_SRC := $(ARCH_DIR)/boot.S $(ARCH_DIR)/isr.S $(ARCH_DIR)/monitor/monitor_call.S $(ARCH_DIR)/userprog.S $(ARCH_DIR)/syscall_entry.S
+ARCH_BOOT_SRC := $(ARCH_DIR)/boot.S $(ARCH_DIR)/isr.S $(ARCH_DIR)/monitor/monitor_call.S $(ARCH_DIR)/userprog.S $(ARCH_DIR)/syscall_entry.S $(ARCH_DIR)/context.S
 ARCH_LINKER := $(ARCH_DIR)/linker.ld
 ARCH_C_SRCS := $(ARCH_DIR)/main.c $(ARCH_DIR)/smp.c $(ARCH_DIR)/multiboot2.c \
                $(ARCH_DIR)/vga.c $(ARCH_DIR)/serial_driver.c $(ARCH_DIR)/apic.c \
@@ -98,7 +99,9 @@ MULTIBOOT_HEADER_OBJ := $(BUILD_DIR)/multiboot_header.o
 KERNEL_DIR := kernel
 KERNEL_C_SRCS := $(KERNEL_DIR)/device.c $(KERNEL_DIR)/pmm.c $(KERNEL_DIR)/pcd.c \
                  $(KERNEL_DIR)/slab.c $(KERNEL_DIR)/test.c $(KERNEL_DIR)/klog.c \
-                 $(KERNEL_DIR)/monitor/monitor.c
+                 $(KERNEL_DIR)/monitor/monitor.c \
+                 $(KERNEL_DIR)/thread.c \
+                 $(KERNEL_DIR)/scheduler.c
 
 # Minilibc sources
 MINILIBC_C_SRCS := lib/minilibc/string.c \
@@ -116,7 +119,8 @@ ARCH_BOOT_OBJ := $(patsubst $(ARCH_DIR)/%.S,$(BUILD_DIR)/boot_%.o,$(ARCH_DIR)/bo
                 $(patsubst $(ARCH_DIR)/%.S,$(BUILD_DIR)/isr_%.o,$(ARCH_DIR)/isr.S) \
                 $(BUILD_DIR)/boot_monitor_monitor_call.o \
                 $(BUILD_DIR)/boot_syscall_entry.o \
-                $(BUILD_DIR)/boot_userprog.o
+                $(BUILD_DIR)/boot_userprog.o \
+                $(BUILD_DIR)/boot_context.o
 ARCH_OBJS := $(patsubst $(ARCH_DIR)/%.c,$(BUILD_DIR)/arch_%.o,$(ARCH_C_SRCS))
 KERNEL_OBJS := $(patsubst $(KERNEL_DIR)/%.c,$(BUILD_DIR)/kernel_%.o,$(KERNEL_C_SRCS))
 
@@ -156,6 +160,7 @@ help:
 	@echo "  tests-smp        - SMP boot test (2 CPUs)"
 	@echo "  tests-pcd        - Page Control Data test"
 	@echo "  tests-slab       - Slab allocator test"
+	@echo "  tests-sched      - Thread creation and FIFO scheduling test"
 	@echo "  tests-minilibc   - Minilibc string library test"
 	@echo "  tests-usermode   - User mode syscall test (KVM enabled)"
 	@echo "  tests-multiboot  - Multiboot2 header test"
@@ -221,6 +226,11 @@ $(BUILD_DIR)/boot_syscall_entry.o: $(ARCH_DIR)/syscall_entry.S | $(BUILD_DIR)
 
 # Compile userprog assembly
 $(BUILD_DIR)/boot_userprog.o: $(ARCH_DIR)/userprog.S | $(BUILD_DIR)
+	@echo "  AS      $<"
+	$(Q)$(CC) $(CFLAGS) -c $< -o $@
+
+# Compile context switch assembly
+$(BUILD_DIR)/boot_context.o: $(ARCH_DIR)/context.S | $(BUILD_DIR)
 	@echo "  AS      $<"
 	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 

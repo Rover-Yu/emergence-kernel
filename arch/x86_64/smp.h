@@ -24,7 +24,7 @@ typedef enum {
     CPU_READY         /* CPU completed initialization */
 } smp_cpu_state_t;
 
-/* Per-CPU data for monitor trampoline
+/* Per-CPU data for monitor trampoline and scheduler
  * Must be at fixed offsets for assembly access via GS segment */
 typedef struct {
     uint64_t saved_rsp;     /* Offset 0: Saved RSP during monitor call */
@@ -33,6 +33,8 @@ typedef struct {
     uint64_t saved_rax;     /* Offset 24: Saved return value (result) from monitor call */
     uint64_t saved_rdx;     /* Offset 32: Saved return value (error) from monitor call */
     uint64_t saved_cr0;     /* Offset 40: Saved CR0.WP state for NK entry/exit */
+    struct thread *current_thread;  /* Offset 48: Currently running thread */
+    struct thread *idle_thread;     /* Offset 56: Per-CPU idle thread */
 } per_cpu_data_t;
 
 /* Per-CPU data array - indexed by CPU index */
