@@ -14,11 +14,20 @@ The following goals represent the strategic direction of the Emergence Kernel. T
 
 Implement essential kernel capabilities for task management and system operation.
 
-**Deliverables:**
-- User and kernel multitasking support
-- Virtual memory management
-- Complete interrupt handling framework
-- Basic system call interface
+**Status: 🟡 In Progress (60% Complete)**
+
+**Completed Deliverables:**
+- ✅ User and kernel multitasking support (thread scheduler, FIFO scheduling)
+- ✅ Complete interrupt handling framework (APIC timer, IDT, ISR stubs)
+- ✅ Basic system call interface (SYSCALL/SYSRET, 6 syscalls implemented)
+- ✅ Process control block (fork, exit, wait, getpid)
+- ✅ Memory isolation foundation (copy_from_user, VM structures)
+
+**Remaining Work:**
+- ⏳ Virtual memory management (page tables, per-process address spaces)
+- ⏳ Complete fork implementation (register state copying)
+- ⏳ Signal support (kill, signal handlers)
+- ⏳ Expanded syscall API (read, mmap, brk, execve)
 
 **Note:** This goal focuses on core kernel functionality without building a complete drivers framework. The existing device driver framework will serve as the foundation for future expansion.
 
@@ -93,4 +102,4 @@ This roadmap represents the strategic direction of the project. Contributions th
 
 ---
 
-*Last Updated: 2026-03-03*
+*Last Updated: 2026-03-13*
