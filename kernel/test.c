@@ -52,6 +52,7 @@ extern int run_minilibc_tests(void);
 extern int run_nk_trampoline_tests(void);
 extern int run_sched_tests(void);
 extern int run_syscall_tests(void);
+extern int run_kmap_tests(void);
 
 /* Test registry array */
 const test_case_t test_registry[] = {
@@ -195,6 +196,15 @@ const test_case_t test_registry[] = {
         .name = "nk_smp_monitor_stress",
         .description = "SMP monitor stress test - concurrent monitor calls from multiple CPUs",
         .run_func = run_nk_smp_monitor_stress_tests,
+        .enabled = 1,
+        .auto_run = 1  /* Auto-run in test-all */
+    },
+#endif
+#if CONFIG_TESTS_KMAP
+    {
+        .name = "kmap",
+        .description = "KMAP memory region tracking and virtual memory mapping",
+        .run_func = run_kmap_tests,
         .enabled = 1,
         .auto_run = 1  /* Auto-run in test-all */
     },

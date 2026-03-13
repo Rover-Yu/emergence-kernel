@@ -13,6 +13,7 @@
 #   tests/pcd/               - Page Control Data tests
 #   tests/minilibc/          - Minilibc tests
 #   tests/usermode/          - User mode tests
+#   tests/kmap/              - KMAP memory region tracking tests
 #   tests/nested-kernel/     - All Nested Kernel tests
 
 TESTS_DIR := tests
@@ -97,6 +98,10 @@ SCHED_TEST_OBJ := $(BUILD_DIR)/kernel_sched_test.o
 SYSCALL_C_TEST_SRC := tests/syscall/syscall_test.c
 SYSCALL_C_TEST_OBJ := $(BUILD_DIR)/kernel_syscall_test.o
 
+# KMAP test (conditionally compiled)
+KMAP_TEST_SRC := tests/kmap/kmap_test.c
+KMAP_TEST_OBJ := $(BUILD_DIR)/kernel_kmap_test.o
+
 # ============================================================================
 # Test Objects Assembly
 # ============================================================================
@@ -142,6 +147,10 @@ endif
 
 ifeq ($(CONFIG_TESTS_SYSCALL),1)
 TESTS_OBJS += $(SYSCALL_C_TEST_OBJ)
+endif
+
+ifeq ($(CONFIG_TESTS_KMAP),1)
+TESTS_OBJS += $(KMAP_TEST_OBJ)
 endif
 
 # ============================================================================
@@ -238,6 +247,12 @@ endif
 
 ifeq ($(CONFIG_TESTS_SYSCALL),1)
 $(SYSCALL_C_TEST_OBJ): $(SYSCALL_C_TEST_SRC) $(CONFIG_DEP) | $(BUILD_DIR)
+	@echo "  CC      $<"
+	$(Q)$(CC) $(CFLAGS) -c $< -o $@
+endif
+
+ifeq ($(CONFIG_TESTS_KMAP),1)
+$(KMAP_TEST_OBJ): $(KMAP_TEST_SRC) $(CONFIG_DEP) | $(BUILD_DIR)
 	@echo "  CC      $<"
 	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 endif

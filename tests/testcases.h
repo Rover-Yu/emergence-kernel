@@ -18,6 +18,7 @@
 #include "tests/minilibc/test_minilibc.h"
 #include "tests/usermode/test_usermode.h"
 #include "tests/syscall/test_syscall.h"
+#include "tests/kmap/test_kmap.h"
 
 /* Nested Kernel tests */
 #include "tests/nested-kernel/test_nk_invariants.h"

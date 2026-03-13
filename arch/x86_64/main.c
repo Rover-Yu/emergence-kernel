@@ -163,6 +163,9 @@ void kernel_main(uint32_t multiboot_info_addr) {
     /* Slab Allocator Tests */
     test_slab();
 
+    /* KMAP Tests */
+    test_kmap();
+
     /* Initialize SMP subsystem (detects CPU count from ACPI/CPUID) */
     smp_init();
 
