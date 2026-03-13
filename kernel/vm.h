@@ -10,6 +10,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include "kernel/list.h"
+#include "include/spinlock.h"
 
 /* Forward declarations */
 typedef struct address_space address_space_t;
@@ -91,7 +92,7 @@ struct address_space {
     uint64_t *pml4;             /* Virtual address of PML4 (kernel mapping) */
     struct list_head regions;   /* List of vm_region structures */
     int region_count;           /* Number of regions */
-    uint64_t lock;              /* Simple spinlock for regions (TODO: use spinlock_t) */
+    spinlock_t lock;            /* Spinlock for regions list */
     uint64_t brk;               /* Current heap break */
     uint64_t start_brk;         /* Initial heap break */
 };

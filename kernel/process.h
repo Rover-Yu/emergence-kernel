@@ -12,6 +12,7 @@
 #include "kernel/list.h"
 #include "kernel/thread.h"
 #include "kernel/vm.h"
+#include "include/spinlock.h"
 
 /* Forward declaration */
 typedef struct process process_t;
@@ -106,7 +107,7 @@ struct process {
 
     /* Wait/exit synchronization */
     thread_t *waiter;               /* Thread waiting for exit */
-    uint64_t exit_lock;             /* Lock for exit fields */
+    spinlock_t exit_lock;           /* Lock for exit fields */
 };
 
 /* Process flags */

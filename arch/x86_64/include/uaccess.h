@@ -19,6 +19,7 @@
 #define EFAULT  -14      /* Bad address */
 #define ENOMEM  -12      /* Out of memory */
 #define EINVAL  -22      /* Invalid argument */
+#define ENOENT  -2       /* No such file or directory */
 
 /* User memory region bounds
  * TODO: Make these dynamic per-process when full VM is implemented

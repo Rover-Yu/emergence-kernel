@@ -13,6 +13,7 @@
 #include "kernel/scheduler.h"
 #include "kernel/vm.h"
 #include "kernel/pmm.h"
+#include "arch/x86_64/smp.h"
 
 /* External: kernel stack top from boot.S */
 extern uint64_t nk_boot_stack_top;
@@ -73,6 +74,10 @@ void inline_user_program(void) {
 static uint8_t *user_stack = NULL;
 static uint64_t user_stack_size = 16384;
 
+/* Per-CPU buffer for sys_write - eliminates SMP race condition */
+#define SYS_WRITE_BUF_SIZE 4096
+static char sys_write_buf[SMP_MAX_CPUS][SYS_WRITE_BUF_SIZE];
+
 /* Pre-allocate user stack before switching to unprivileged page tables
  * This is called from main.c before CR3 switch */
 void *prealloc_user_stack(void) {
@@ -99,16 +104,19 @@ void *prealloc_user_stack(void) {
  * Returns: Number of bytes written, or negative error code
  */
 static int64_t sys_write(uint64_t fd, const char *buf, uint64_t count) {
-    /* Static buffer to avoid PMM corruption during syscalls from user mode
-     * Using a static buffer ensures we don't need to allocate/free memory
-     * when the kernel is using user mode page tables during syscall execution */
-    static char kernel_buf[4096];
+    /* Per-CPU buffer eliminates SMP race condition from static buffer */
+    int cpu;
+    char *kernel_buf;
     long ret;
+
+    /* Get per-CPU buffer */
+    cpu = smp_get_cpu_index();
+    kernel_buf = sys_write_buf[cpu];
 
     (void)fd;  /* Only stdout for now */
 
-    klog_debug("SYSCALL", "sys_write: fd=%d, buf=%p, count=%d",
-               (int)fd, buf, (int)count);
+    klog_debug("SYSCALL", "sys_write: fd=%d, buf=%p, count=%d (CPU=%d)",
+               (int)fd, buf, (int)count, cpu);
 
     /* Validate arguments */
     if (buf == 0) {
@@ -270,7 +278,10 @@ static int64_t sys_wait(uint64_t pid, int *status) {
 
     /* Validate status pointer if provided */
     if (status != NULL) {
-        /* TODO: Validate user pointer with probe_user_write */
+        if (probe_user_write(status, sizeof(int)) != 0) {
+            klog_warn("SYSCALL", "sys_wait: invalid status pointer %p", status);
+            return -EFAULT;
+        }
     }
 
     /* Call process_wait */

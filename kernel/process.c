@@ -14,6 +14,7 @@
 #include "kernel/pmm.h"
 #include "kernel/klog.h"
 #include "include/string.h"
+#include "include/spinlock.h"
 
 /* External: kernel_halt from main.c */
 extern void kernel_halt(void);
@@ -24,11 +25,11 @@ static slab_cache_t *process_cache = &process_cache_struct;
 
 /* Global process list */
 static struct list_head process_list;
-static uint64_t process_list_lock;
+static spinlock_t process_list_lock = SPIN_LOCK_UNLOCKED;
 
 /* PID allocator */
 static int next_pid = 1;
-static uint64_t pid_lock;
+static spinlock_t pid_lock = SPIN_LOCK_UNLOCKED;
 
 /* Idle "init" process (PID 1) */
 static process_t *init_process = NULL;
@@ -44,8 +45,8 @@ void process_init(void)
 
     /* Initialize global process list */
     list_init(&process_list);
-    process_list_lock = 0;
-    pid_lock = 0;
+    spin_lock_init(&process_list_lock);
+    spin_lock_init(&pid_lock);
 
     /* Create slab cache for process_t structures */
     /* Note: slab_cache_create requires power-of-two size, so use 256 bytes */
@@ -81,15 +82,12 @@ int process_alloc_pid(void)
 {
     int pid;
 
-    /* Simple linear allocator with wrap-around */
-    /* In production, this should track free PIDs for reuse */
-
-    /* TODO: Use proper atomic/spinlock for pid_lock */
+    spin_lock(&pid_lock);
     pid = next_pid++;
-
     if (pid >= PID_MAX) {
         pid = -1;  /* Out of PIDs */
     }
+    spin_unlock(&pid_lock);
 
     return pid;
 }
@@ -152,7 +150,7 @@ process_t *process_create(const char *name, int flags)
     p->flags = 0;
     p->parent = NULL;
     p->waiter = NULL;
-    p->exit_lock = 0;
+    spin_lock_init(&p->exit_lock);
     p->main_thread = NULL;
     p->vm = NULL;
     p->fd_count = 0;
@@ -164,7 +162,9 @@ process_t *process_create(const char *name, int flags)
     list_init(&p->threads);
 
     /* Add to global process list */
+    spin_lock(&process_list_lock);
     list_push_back(&process_list, &p->all_list);
+    spin_unlock(&process_list_lock);
 
     klog_info("PROC", "Created process '%s' (PID=%d)", p->name, p->pid);
 
@@ -196,15 +196,19 @@ process_t *process_get_current(void)
 process_t *process_get_by_pid(int pid)
 {
     struct list_head *pos;
+    process_t *result = NULL;
 
+    spin_lock(&process_list_lock);
     list_for_each(pos, &process_list) {
         process_t *p = list_entry(pos, process_t, all_list);
         if (p->pid == pid) {
-            return p;
+            result = p;
+            break;
         }
     }
+    spin_unlock(&process_list_lock);
 
-    return NULL;
+    return result;
 }
 
 /**
@@ -377,8 +381,10 @@ void process_exit(int exit_code)
     klog_info("PROC", "Process PID=%d exiting with code %d", p->pid, exit_code);
 
     /* Set exit status and state */
+    spin_lock(&p->exit_lock);
     p->exit_status = exit_code;
     p->state = PROCESS_ZOMBIE;
+    spin_unlock(&p->exit_lock);
 
     /* TODO: Close all file descriptors */
     /* TODO: Notify parent */
@@ -459,7 +465,9 @@ void process_reap(process_t *p)
     }
 
     /* Remove from global process list */
+    spin_lock(&process_list_lock);
     list_remove(&p->all_list);
+    spin_unlock(&process_list_lock);
 
     /* Free PID */
     process_free_pid(p->pid);

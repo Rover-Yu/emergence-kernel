@@ -11,6 +11,7 @@
 #include "kernel/klog.h"
 #include "kernel/slab.h"
 #include "include/string.h"
+#include "include/spinlock.h"
 
 /* External: master kernel page table from boot.S */
 extern uint64_t boot_pml4[];
@@ -98,7 +99,7 @@ address_space_t *vm_create_address_space(int flags)
     /* Initialize region list */
     list_init(&as->regions);
     as->region_count = 0;
-    as->lock = 0;
+    spin_lock_init(&as->lock);
 
     /* Initialize heap */
     as->start_brk = USER_HEAP_BASE;
@@ -139,11 +140,13 @@ void vm_destroy_address_space(address_space_t *as)
     klog_debug("VM", "Destroying address space (PML4=%p)", as->pml4);
 
     /* Free all memory regions */
+    spin_lock(&as->lock);
     list_for_each_safe(pos, n, &as->regions) {
         vm_region_t *region = list_entry(pos, vm_region_t, node);
         list_remove(pos);
         slab_free(vm_region_cache, region);
     }
+    spin_unlock(&as->lock);
 
     /* Free PML4 page table */
     pmm_free(as->pml4, 0);
@@ -268,8 +271,10 @@ int vm_map_region(address_space_t *as,
     }
 
     /* Add to region list */
+    spin_lock(&as->lock);
     list_push_back(&as->regions, &region->node);
     as->region_count++;
+    spin_unlock(&as->lock);
 
     /* Map pages into page tables */
     num_pages = size / PAGE_SIZE;
@@ -298,15 +303,19 @@ int vm_map_region(address_space_t *as,
 vm_region_t *vm_find_region(address_space_t *as, uint64_t addr)
 {
     struct list_head *pos;
+    vm_region_t *result = NULL;
 
+    spin_lock(&as->lock);
     list_for_each(pos, &as->regions) {
         vm_region_t *region = list_entry(pos, vm_region_t, node);
         if (addr >= region->start && addr < region->end) {
-            return region;
+            result = region;
+            break;
         }
     }
+    spin_unlock(&as->lock);
 
-    return NULL;
+    return result;
 }
 
 /**
@@ -361,4 +370,51 @@ address_space_t *vm_clone_address_space(address_space_t *src)
     klog_info("VM", "Cloned address space (%d regions)", as->region_count);
 
     return as;
+}
+
+/**
+ * vm_unmap_region - Unmap a memory region from an address space
+ * @as: Address space
+ * @start: Virtual start address
+ * @size: Size in bytes
+ *
+ * Returns: 0 on success, negative error code on failure
+ */
+int vm_unmap_region(address_space_t *as, uint64_t start, uint64_t size)
+{
+    struct list_head *pos, *n;
+    int found = 0;
+
+    if (as == NULL) {
+        return -22;  /* EINVAL */
+    }
+
+    /* Validate alignment */
+    if ((start & (PAGE_SIZE - 1)) || (size & (PAGE_SIZE - 1))) {
+        klog_error("VM", "Unmap: misaligned addresses (virt=%p, size=%p)", start, size);
+        return -22;  /* EINVAL */
+    }
+
+    spin_lock(&as->lock);
+    list_for_each_safe(pos, n, &as->regions) {
+        vm_region_t *region = list_entry(pos, vm_region_t, node);
+        if (region->start == start && region->end == start + size) {
+            list_remove(pos);
+            slab_free(vm_region_cache, region);
+            as->region_count--;
+            found = 1;
+            break;
+        }
+    }
+    spin_unlock(&as->lock);
+
+    if (found) {
+        klog_debug("VM", "Unmapped region %p - %p", start, start + size);
+    } else {
+        klog_warn("VM", "Unmap: region not found at %p", start);
+    }
+
+    /* TODO: Walk page tables and clear PTEs */
+
+    return found ? 0 : -2;  /* ENOENT */
 }
