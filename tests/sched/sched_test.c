@@ -10,6 +10,7 @@
 #include "kernel/thread.h"
 #include "kernel/scheduler.h"
 #include "arch/x86_64/smp.h"
+#include "arch/x86_64/power.h"
 #include "include/string.h"
 
 #if CONFIG_TESTS_SCHED

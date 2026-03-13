@@ -2,10 +2,17 @@
 #include <stddef.h>
 #include "syscall.h"
 #include "arch/x86_64/include/gdt.h"
-#include "serial.h"
+#include "arch/x86_64/include/uaccess.h"
+#include "arch/x86_64/serial.h"
+#include "arch/x86_64/power.h"
 #include "kernel/monitor/monitor.h"  /* For g_unpriv_pd_ptr */
 #include "include/barrier.h"
 #include "kernel/klog.h"
+#include "kernel/process.h"
+#include "kernel/thread.h"
+#include "kernel/scheduler.h"
+#include "kernel/vm.h"
+#include "kernel/pmm.h"
 
 /* External: kernel stack top from boot.S */
 extern uint64_t nk_boot_stack_top;
@@ -34,6 +41,9 @@ void debug_sysret_params(uint64_t rip, uint64_t rsp, uint64_t rflags) {
 /* External user program entry */
 extern void user_program_start(void);
 
+/* External syscall test program entry */
+extern void syscall_test_start(void);
+
 /* User program entry - must be executed in ring 3 */
 void inline_user_program(void) {
     /* Simple test: make a syscall to verify ring 3 execution */
@@ -59,9 +69,6 @@ void inline_user_program(void) {
     }
 }
 
-/* External PMM for allocating user stack */
-extern void *pmm_alloc(int order);
-
 /* User program stack - pre-allocated before page table switch */
 static uint8_t *user_stack = NULL;
 static uint64_t user_stack_size = 16384;
@@ -82,19 +89,196 @@ void *prealloc_user_stack(void) {
 }
 
 /* Syscall implementations */
-static int64_t sys_write(uint64_t fd, const char *buf, uint64_t count) {
-    (void)fd;  /* Only stdout for now */
-    if (buf == 0) return -1;
 
-    /* Simple output - don't dereference user pointer yet (no user paging) */
-    klog_info("USER", "%s", buf);
+/**
+ * sys_write - Write to a file descriptor
+ * @fd: File descriptor (1 = stdout)
+ * @buf: User buffer containing data to write
+ * @count: Number of bytes to write
+ *
+ * Returns: Number of bytes written, or negative error code
+ */
+static int64_t sys_write(uint64_t fd, const char *buf, uint64_t count) {
+    /* Static buffer to avoid PMM corruption during syscalls from user mode
+     * Using a static buffer ensures we don't need to allocate/free memory
+     * when the kernel is using user mode page tables during syscall execution */
+    static char kernel_buf[4096];
+    long ret;
+
+    (void)fd;  /* Only stdout for now */
+
+    klog_debug("SYSCALL", "sys_write: fd=%d, buf=%p, count=%d",
+               (int)fd, buf, (int)count);
+
+    /* Validate arguments */
+    if (buf == 0) {
+        klog_warn("SYSCALL", "sys_write: NULL buffer");
+        return -1;  /* EFAULT */
+    }
+
+    if (count == 0) {
+        return 0;  /* Nothing to write */
+    }
+
+    if (count > 4095) {
+        count = 4095;  /* Limit write size to leave space for null terminator */
+    }
+
+    /* Copy data from user space with validation */
+    ret = copy_from_user(kernel_buf, buf, count);
+    if (ret != 0) {
+        klog_warn("SYSCALL", "copy_from_user failed (err=%ld)", ret);
+        return ret;
+    }
+
+    /* Null-terminate for safety (count is guaranteed < 4096) */
+    kernel_buf[count] = '\0';
+
+    /* Output to kernel log (stdout for now) */
+    klog_info("USER", "%s", kernel_buf);
 
     return count;
 }
 
+/**
+ * sys_exit - Terminate the current process
+ * @exit_code: Exit status code
+ *
+ * Does not return.
+ */
 static void sys_exit(int64_t exit_code) {
-    klog_info("USER", "Process exited with code: %d", (int)exit_code);
-    kernel_halt();  /* Halt for now - no scheduler yet */
+    klog_info("SYSCALL", "sys_exit: code=%d", (int)exit_code);
+
+    /* Check if we have a current process */
+    process_t *p = process_get_current();
+    if (p != NULL) {
+        /* Check if this is the test process (no parent, PID=2)
+         * In this case, shut down the system directly */
+        if (p->parent == NULL || p->parent->pid == 1) {
+            klog_info("USER", "Test process exited with code: %d", (int)exit_code);
+
+            /* Print success message for test framework */
+            if (exit_code == 0) {
+                klog_info("TEST", "PASSED: syscall");
+            } else {
+                klog_error("TEST", "FAILED: syscall (exit code=%d)", (int)exit_code);
+            }
+
+            system_shutdown();
+            /* Should never reach here */
+            kernel_halt();
+        }
+
+        /* Use process_exit for proper cleanup */
+        process_exit((int)exit_code);
+        /* Should never reach here */
+        kernel_halt();
+    } else {
+        /* No process - simple ring 3 program, shut down cleanly */
+        klog_info("USER", "Process exited with code: %d", (int)exit_code);
+        system_shutdown();
+    }
+}
+
+/**
+ * sys_yield - Voluntarily yield the CPU
+ *
+ * Returns: 0 on success
+ */
+static int64_t sys_yield(void) {
+    klog_debug("SYSCALL", "sys_yield");
+
+    /* Yield to next runnable thread */
+    thread_yield();
+
+    return 0;
+}
+
+/**
+ * sys_getpid - Get the current process ID
+ *
+ * Returns: Process ID
+ */
+static int64_t sys_getpid(void) {
+    thread_t *t = thread_get_current();
+    process_t *p = process_get_current();
+
+    if (t == NULL) {
+        klog_warn("SYSCALL", "sys_getpid: no current thread!");
+        return -1;
+    }
+
+    if (p == NULL) {
+        klog_warn("SYSCALL", "sys_getpid: thread=%p has no process (t->process=%p)", t, t->process);
+        return -1;
+    }
+
+    klog_info("USER", "sys_getpid: returning PID=%d", p->pid);
+
+    return p->pid;
+}
+
+/**
+ * sys_fork - Create a child process
+ *
+ * Returns: In parent: child PID > 0
+ *          In child: 0
+ *          On error: negative error code
+ */
+static int64_t sys_fork(void) {
+    process_t *child;
+    thread_t *current = thread_get_current();
+
+    klog_debug("SYSCALL", "sys_fork");
+
+    if (current == NULL || current->process == NULL) {
+        klog_error("SYSCALL", "sys_fork: no current process");
+        return -1;  /* EPERM */
+    }
+
+    /* Fork the process */
+    child = process_fork();
+    if (child == NULL) {
+        klog_error("SYSCALL", "sys_fork: process_fork failed");
+        return -12;  /* ENOMEM */
+    }
+
+    /* If we're the parent, return child PID */
+    if (process_get_current() == current->process) {
+        klog_info("SYSCALL", "sys_fork: parent PID=%d returning child PID=%d",
+                  current->process->pid, child->pid);
+        return child->pid;
+    }
+
+    /* If we're the child, return 0 */
+    klog_info("SYSCALL", "sys_fork: child PID=%d returning 0",
+              process_get_current()->pid);
+    return 0;
+}
+
+/**
+ * sys_wait - Wait for a child process to exit
+ * @pid: PID to wait for (-1 = any child)
+ * @status: Pointer to store exit status
+ *
+ * Returns: PID of exited child, or negative error code
+ */
+static int64_t sys_wait(uint64_t pid, int *status) {
+    int ret;
+
+    klog_debug("SYSCALL", "sys_wait: pid=%d, status=%p", (int)pid, status);
+
+    /* Validate status pointer if provided */
+    if (status != NULL) {
+        /* TODO: Validate user pointer with probe_user_write */
+    }
+
+    /* Call process_wait */
+    ret = process_wait((int)pid, status);
+
+    klog_debug("SYSCALL", "sys_wait: returning %d", ret);
+
+    return ret;
 }
 
 /* Syscall dispatcher */
@@ -114,9 +298,25 @@ void syscall_handler(uint64_t nr, uint64_t a1, uint64_t a2, uint64_t a3) {
         case 2: /* SYS_exit */
             sys_exit(a1);
             break;
+        case 3: /* SYS_yield */
+            result = sys_yield();
+            __asm__ volatile ("mov %0, %%rax" : : "r"(result) : "rax");
+            break;
+        case 4: /* SYS_getpid */
+            result = sys_getpid();
+            __asm__ volatile ("mov %0, %%rax" : : "r"(result) : "rax");
+            break;
+        case 5: /* SYS_fork */
+            result = sys_fork();
+            __asm__ volatile ("mov %0, %%rax" : : "r"(result) : "rax");
+            break;
+        case 6: /* SYS_wait */
+            result = sys_wait(a1, (int *)a2);
+            __asm__ volatile ("mov %0, %%rax" : : "r"(result) : "rax");
+            break;
         default:
             klog_warn("SYSCALL", "Unknown syscall: %x", nr);
-            __asm__ volatile ("mov $-1, %%rax" ::: "rax");
+            __asm__ volatile ("mov $-38, %%rax" ::: "rax");  /* ENOSYS */
             break;
     }
 }
@@ -228,4 +428,59 @@ void enter_user_mode(void) {
 
     /* Should never reach here */
     klog_error("SYSCALL", "ERROR: Returned from jump_to_user_mode!");
+}
+
+/* Jump to syscall test program in ring 3 */
+void enter_syscall_test_mode(void) {
+    klog_info("SYSCALL", "Entering syscall test mode...");
+
+    /* Create test process */
+    process_t *test_process = process_create("syscall_test", 0);
+    if (test_process == NULL) {
+        klog_error("SYSCALL", "Failed to create test process");
+        return;
+    }
+    klog_info("SYSCALL", "Created test process: PID=%d", test_process->pid);
+
+    test_process->state = PROCESS_RUNNING;
+
+    /* CRITICAL FIX: Get the idle thread for this CPU and set it as current
+     * This ensures thread_get_current() returns a valid thread pointer during syscalls
+     * The idle thread infrastructure is already initialized by scheduler_init() */
+    int cpu = smp_get_cpu_index();
+    thread_t *idle = scheduler_get_idle_thread(cpu);
+
+    if (idle == NULL) {
+        klog_error("SYSCALL", "Failed to get idle thread for CPU %d", cpu);
+        return;
+    }
+
+    thread_set_current(idle);
+    klog_info("SYSCALL", "Set idle thread (tid=%d) as current for CPU %d", idle->tid, cpu);
+
+    /* Associate the idle thread with the test process
+     * This allows syscalls to access the process via t->process */
+    idle->process = test_process;
+    klog_info("SYSCALL", "Associated idle thread with test process (PID=%d)", test_process->pid);
+
+    /* Get address of syscall test program */
+    uint64_t user_rip = (uint64_t)syscall_test_start;
+    uint64_t user_rsp = (uint64_t)user_stack + user_stack_size;
+
+    klog_info("SYSCALL", "syscall_test_start address: %p", (void*)user_rip);
+    klog_info("SYSCALL", "User stack: %p", (void*)user_rsp);
+
+    /* Stack alignment */
+    user_rsp &= ~0xF;
+
+    /* RFLAGS: IF=1, bit 1=1 */
+    uint64_t user_rflags = 0x202;
+
+    klog_info("SYSCALL", "About to jump to user mode: RIP=%p, RSP=%p", (void*)user_rip, (void*)user_rsp);
+
+    /* Jump to user mode for syscall test */
+    jump_to_user_mode(user_rip, user_rsp, user_rflags);
+
+    /* Should never reach here */
+    klog_error("SYSCALL", "ERROR: Returned from syscall test!");
 }

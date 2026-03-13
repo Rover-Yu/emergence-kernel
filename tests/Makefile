@@ -27,9 +27,11 @@
 # Since this file is included from the main Makefile, we run in the project root
 
 .PHONY: tests tests-boot tests-apic-timer tests-smp tests-pcd tests-slab tests-sched \
+        tests-syscall \
         tests-nk tests-nk-invariants tests-nk-fault-injection tests-nk-readonly-visibility \
         tests-nk-smp-monitor-stress tests-usermode tests-multiboot tests-minilibc \
         test test-boot test-apic-timer test-smp test-pcd test-slab test-sched \
+        test-syscall \
         test-nk test-nk-invariants test-nk-fault-injection test-nk-readonly-visibility \
         test-nk-smp-monitor-stress test-usermode test-multiboot test-minilibc
 
@@ -41,6 +43,7 @@ test-smp: tests-smp
 test-pcd: tests-pcd
 test-slab: tests-slab
 test-sched: tests-sched
+test-syscall: tests-syscall
 test-nk: tests-nk
 test-nk-invariants: tests-nk-invariants
 test-nk-fault-injection: tests-nk-fault-injection
@@ -79,6 +82,10 @@ tests-slab:
 tests-sched:
 	@echo "Running Scheduler Test..."
 	@$(MAKE) KERNEL_CMDLINE="tests=sched" all run
+
+tests-syscall:
+	@echo "Running Syscall Test (fork, getpid, yield, wait)..."
+	@$(MAKE) KERNEL_CMDLINE="tests=syscall" all run
 
 # Nested Kernel tests (all use nk_ prefix)
 tests-nk:

@@ -270,7 +270,7 @@ use_default_cmdline:
         }
         kernel_cmdline[i] = '\0';
 
-        klog_debug("KERN", "Using embedded command line: '%s'", kernel_cmdline);
+        klog_info("KERN", "Using embedded command line: '%s'", kernel_cmdline);
     }
 
     /* Fallback: If no memory info found, use default QEMU memory map */

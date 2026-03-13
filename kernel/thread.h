@@ -7,6 +7,10 @@
 #include <stddef.h>
 #include "kernel/list.h"
 
+/* Forward declaration */
+typedef struct address_space address_space_t;
+typedef struct process process_t;
+
 /* Thread states */
 typedef enum {
     THREAD_CREATED,     /* Thread created but not yet runnable */
@@ -42,6 +46,7 @@ typedef struct cpu_context {
 
 /* Thread flags */
 #define THREAD_FLAG_KERNEL  0x0001  /* Kernel thread (vs user thread) */
+#define THREAD_FLAG_USER    0x0002  /* User thread (ring 3) */
 
 /* Default stack size (16KB = 4 pages) */
 #define THREAD_DEFAULT_STACK_SIZE 16384
@@ -49,22 +54,27 @@ typedef struct cpu_context {
 /* Thread Control Block
  *
  * Layout (verified offsets):
- *   0-15:   run_list (16 bytes)
- *   16-31:  all_list (16 bytes)
- *   32-35:  state (4 bytes)
- *   36-39:  tid (4 bytes)
- *   40-43:  flags (4 bytes)
- *   44-47:  padding (4 bytes)
- *   48-55:  name pointer (8 bytes)
- *   56-199: context (144 bytes)
- *   200-207: kernel_stack (8 bytes)
- *   208-215: kernel_stack_size (8 bytes)
- *   216-223: entry_func (8 bytes)
- *   224-231: entry_arg (8 bytes)
- *   232-235: cpu (4 bytes)
- *   236-239: padding (4 bytes)
- *   240-247: ticks (8 bytes)
- * Total: 248 bytes (fits in 256B slab cache)
+ *   0-15:      run_list (16 bytes)
+ *   16-31:     all_list (16 bytes)
+ *   32-35:     state (4 bytes)
+ *   36-39:     tid (4 bytes)
+ *   40-43:     flags (4 bytes)
+ *   44-47:     padding (4 bytes)
+ *   48-55:     name pointer (8 bytes)
+ *   56-199:    context (144 bytes)
+ *   200-207:   kernel_stack (8 bytes)
+ *   208-215:   kernel_stack_size (8 bytes)
+ *   216-223:   entry_func (8 bytes)
+ *   224-231:   entry_arg (8 bytes)
+ *   232-235:   cpu (4 bytes)
+ *   236-239:   padding (4 bytes)
+ *   240-247:   ticks (8 bytes)
+ *   248-255:   process pointer (8 bytes) [NEW]
+ *   256-263:   address_space pointer (8 bytes) [NEW]
+ *   264-271:   user_stack pointer (8 bytes) [NEW]
+ *   272-279:   user_stack_size (8 bytes) [NEW]
+ *   280-287:   user_rsp (8 bytes) [NEW]
+ * Total: 288 bytes (fits in 512B slab cache)
  */
 struct thread {
     struct list_head run_list;      /* Runqueue linkage */
@@ -85,6 +95,15 @@ struct thread {
 
     int cpu;                        /* Last CPU that ran this thread (-1 = any) */
     uint64_t ticks;                 /* CPU time consumed (timer ticks) */
+
+    /* Process and address space management */
+    process_t *process;             /* Owning process (NULL for kernel threads) */
+    address_space_t *as;            /* Address space (NULL for kernel threads) */
+
+    /* User mode execution state */
+    void *user_stack;               /* User stack base (for user threads) */
+    size_t user_stack_size;         /* User stack size in bytes */
+    uint64_t user_rsp;              /* Saved user RSP during syscall */
 };
 
 typedef struct thread thread_t;

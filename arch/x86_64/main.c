@@ -23,9 +23,10 @@
 /* Test wrapper headers */
 #include "tests/testcases.h"
 
-/* Forward declarations for thread and scheduler */
+/* Forward declarations for thread, scheduler, and process */
 extern void thread_init(void);
 extern void scheduler_init(void);
+extern void process_init(void);
 
 /* External monitor functions */
 extern void monitor_init(void);
@@ -79,11 +80,12 @@ static void run_tests(void) {
     /* Minilibc string library tests */
     test_minilibc();
 
-    /* User mode tests */
-    test_usermode();
-
-    /* Run unified tests if test=unified was specified */
+    /* Run unified tests (includes usermode and syscall tests)
+     * These tests may shut down the system, so run them last */
     test_run_unified();
+
+    /* All tests completed - shut down cleanly */
+    system_shutdown();
 }
 
 /* Kernel main entry point - called from boot.S */
@@ -141,6 +143,10 @@ void kernel_main(uint32_t multiboot_info_addr) {
     /* Initialize Slab Allocator (for small object allocation) */
     extern void slab_init(void);
     slab_init();
+
+    /* Initialize Process subsystem (requires slab allocator) */
+    process_init();
+    klog_info("KERN", "Process subsystem initialized");
 
     /* Initialize Thread subsystem (requires slab allocator) */
     thread_init();

@@ -51,6 +51,7 @@ extern int run_nk_smp_monitor_stress_tests(void);
 extern int run_minilibc_tests(void);
 extern int run_nk_trampoline_tests(void);
 extern int run_sched_tests(void);
+extern int run_syscall_tests(void);
 
 /* Test registry array */
 const test_case_t test_registry[] = {
@@ -176,6 +177,15 @@ const test_case_t test_registry[] = {
         .name = "usermode",
         .description = "User mode syscall and ring 3 execution tests",
         .run_func = run_usermode_tests,
+        .enabled = 1,
+        .auto_run = 0  /* Disabled: shuts down system, preventing other tests from running */
+    },
+#endif
+#if CONFIG_TESTS_SYSCALL
+    {
+        .name = "syscall",
+        .description = "Syscall tests (fork, getpid, yield, wait)",
+        .run_func = run_syscall_tests,
         .enabled = 1,
         .auto_run = 1  /* Auto-run in test-all */
     },
@@ -415,10 +425,13 @@ int test_run_by_name(const char *name) {
 int test_run_unified(void) {
     int failures = 0;
 
+    klog_info("TEST", "test_run_unified: mode=%d, selected_count=%d, tests_run_count=%d",
+              test_mode, selected_test_count, tests_run_count);
+
     /* Only run if in unified mode or CSV mode with selected tests */
     int should_run = 0;
 
-    if (test_mode == TEST_MODE_UNIFIED) {
+    if (test_mode == TEST_MODE_UNIFIED || test_mode == TEST_MODE_ALL) {
         should_run = 1;
     } else if (selected_test_count > 0) {
         /* CSV mode: run selected tests that haven't run yet */
@@ -426,11 +439,14 @@ int test_run_unified(void) {
     }
 
     if (!should_run) {
+        klog_info("TEST", "test_run_unified: skipping (should_run=%d)", should_run);
         return 0;
     }
 
     if (test_mode == TEST_MODE_UNIFIED) {
         klog_info("TEST", "=== UNIFIED TEST EXECUTION ===");
+    } else if (test_mode == TEST_MODE_ALL) {
+        klog_info("TEST", "=== ALL TESTS EXECUTION ===");
     } else {
         klog_info("TEST", "=== CSV TEST LIST EXECUTION ===");
     }
@@ -443,6 +459,10 @@ int test_run_unified(void) {
 
             if (!test->enabled) {
                 continue;  /* Skip disabled tests */
+            }
+
+            if (!test->auto_run) {
+                continue;  /* Skip tests with auto_run=0 */
             }
 
             /* Check if this specific test already ran */

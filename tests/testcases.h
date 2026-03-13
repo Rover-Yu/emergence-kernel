@@ -17,6 +17,7 @@
 #include "tests/pcd/test_pcd.h"
 #include "tests/minilibc/test_minilibc.h"
 #include "tests/usermode/test_usermode.h"
+#include "tests/syscall/test_syscall.h"
 
 /* Nested Kernel tests */
 #include "tests/nested-kernel/test_nk_invariants.h"

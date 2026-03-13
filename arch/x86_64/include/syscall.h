@@ -13,10 +13,15 @@
 /* Syscall numbers */
 #define SYS_write       1
 #define SYS_exit        2
+#define SYS_yield       3
+#define SYS_getpid      4
+#define SYS_fork        5
+#define SYS_wait        6
 
 /* Function prototypes */
 void syscall_init(void);
 void syscall_handler(uint64_t nr, uint64_t a1, uint64_t a2, uint64_t a3);
 void enter_user_mode(void);
+void enter_syscall_test_mode(void);
 
 #endif /* SYSCALL_H */

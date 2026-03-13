@@ -53,6 +53,7 @@ CFLAGS += -DCONFIG_TESTS_NK_TRAMPOLINE=$(CONFIG_TESTS_NK_TRAMPOLINE)
 CFLAGS += -DCONFIG_TESTS_NK_INVARIANTS_VERIFY=$(CONFIG_TESTS_NK_INVARIANTS_VERIFY)
 CFLAGS += -DCONFIG_TESTS_SMP_MONITOR_STRESS=$(CONFIG_TESTS_SMP_MONITOR_STRESS)
 CFLAGS += -DCONFIG_TESTS_SCHED=$(CONFIG_TESTS_SCHED)
+CFLAGS += -DCONFIG_TESTS_SYSCALL=$(CONFIG_TESTS_SYSCALL)
 
 # Debug configuration options (sorted by kernel.config order)
 CFLAGS += -DCONFIG_DEBUG_SMP_AP=$(CONFIG_DEBUG_SMP_AP)
@@ -81,11 +82,13 @@ CONFIG_DEP := $(CONFIG_HASH_FILE)
 # Architecture-specific sources (x86_64)
 ARCH_DIR := arch/x86_64
 ARCH_BOOT_SRC := $(ARCH_DIR)/boot.S $(ARCH_DIR)/isr.S $(ARCH_DIR)/monitor/monitor_call.S $(ARCH_DIR)/userprog.S $(ARCH_DIR)/syscall_entry.S $(ARCH_DIR)/context.S
+ARCH_TEST_SRC := $(ARCH_DIR)/syscall_test.S
 ARCH_LINKER := $(ARCH_DIR)/linker.ld
 ARCH_C_SRCS := $(ARCH_DIR)/main.c $(ARCH_DIR)/smp.c $(ARCH_DIR)/multiboot2.c \
                $(ARCH_DIR)/vga.c $(ARCH_DIR)/serial_driver.c $(ARCH_DIR)/apic.c \
                $(ARCH_DIR)/acpi.c $(ARCH_DIR)/idt.c $(ARCH_DIR)/timer.c $(ARCH_DIR)/rtc.c \
-               $(ARCH_DIR)/ipi.c $(ARCH_DIR)/power.c $(ARCH_DIR)/syscall.c
+               $(ARCH_DIR)/ipi.c $(ARCH_DIR)/power.c $(ARCH_DIR)/syscall.c \
+               $(ARCH_DIR)/uaccess.c
 
 # AP Trampoline (assembled as part of kernel, uses PIC)
 TRAMPOLINE_SRC := $(ARCH_DIR)/ap_trampoline.S
@@ -95,13 +98,16 @@ TRAMPOLINE_OBJ := $(BUILD_DIR)/ap_trampoline.o
 MULTIBOOT_HEADER_SRC := $(ARCH_DIR)/multiboot_header.S
 MULTIBOOT_HEADER_OBJ := $(BUILD_DIR)/multiboot_header.o
 
+
 # Architecture-independent kernel sources
 KERNEL_DIR := kernel
 KERNEL_C_SRCS := $(KERNEL_DIR)/device.c $(KERNEL_DIR)/pmm.c $(KERNEL_DIR)/pcd.c \
                  $(KERNEL_DIR)/slab.c $(KERNEL_DIR)/test.c $(KERNEL_DIR)/klog.c \
                  $(KERNEL_DIR)/monitor/monitor.c \
                  $(KERNEL_DIR)/thread.c \
-                 $(KERNEL_DIR)/scheduler.c
+                 $(KERNEL_DIR)/scheduler.c \
+                 $(KERNEL_DIR)/vm.c \
+                 $(KERNEL_DIR)/process.c
 
 # Minilibc sources
 MINILIBC_C_SRCS := lib/minilibc/string.c \

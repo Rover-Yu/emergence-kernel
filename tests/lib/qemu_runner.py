@@ -313,7 +313,7 @@ class QEMURunner:
 
         # Save to output file for record-keeping
         with self.capture_output("qemu") as output_file:
-            output_file.write_text(content)
+            output_file.write_text(content, errors='replace')
 
         return content, exit_code
 
@@ -355,7 +355,7 @@ class QEMURunner:
 
         # Save to output file for record-keeping
         with self.capture_output("qemu") as output_file:
-            output_file.write_text(content)
+            output_file.write_text(content, errors='replace')
 
         return content, exit_code
 

@@ -13,4 +13,7 @@ void serial_put_hex(uint64_t value);
 void serial_unlock(void);
 void serial_flush(void);
 
+/* Serial driver initialization */
+int serial_driver_init(void);
+
 #endif /* EMERGENCE_ARCH_X86_64_SERIAL_H */

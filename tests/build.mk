@@ -57,6 +57,10 @@ MINILIBC_TEST_OBJ := $(BUILD_DIR)/minilibc_test.o
 USERMODE_TEST_SRC := tests/usermode/usermode_test.c
 USERMODE_TEST_OBJ := $(BUILD_DIR)/kernel_usermode_test.o
 
+# Syscall test (always compiled - provides stubs when disabled)
+SYSCALL_TEST_SRC := $(ARCH_DIR)/syscall_test.S
+SYSCALL_TEST_OBJ := $(BUILD_DIR)/syscall_test.o
+
 # ============================================================================
 # Nested Kernel Test Sources (tests/nested-kernel/)
 # ============================================================================
@@ -89,6 +93,10 @@ NK_INVARIANTS_VERIFY_TEST_OBJ := $(BUILD_DIR)/nk_invariants_verify_test.o
 SCHED_TEST_SRC := tests/sched/sched_test.c
 SCHED_TEST_OBJ := $(BUILD_DIR)/kernel_sched_test.o
 
+# Syscall test (conditionally compiled)
+SYSCALL_C_TEST_SRC := tests/syscall/syscall_test.c
+SYSCALL_C_TEST_OBJ := $(BUILD_DIR)/kernel_syscall_test.o
+
 # ============================================================================
 # Test Objects Assembly
 # ============================================================================
@@ -102,6 +110,8 @@ TESTS_OBJS += $(NK_MONITOR_TRAMPOLINE_TEST_OBJ)
 TESTS_OBJS += $(NK_INVARIANTS_VERIFY_TEST_OBJ)
 TESTS_OBJS += $(USERMODE_TEST_OBJ)
 TESTS_OBJS += $(MINILIBC_TEST_OBJ)
+TESTS_OBJS += $(SYSCALL_TEST_OBJ)
+
 
 # Conditionally compiled tests
 ifeq ($(CONFIG_TESTS_PMM),1)
@@ -128,6 +138,10 @@ endif
 
 ifeq ($(CONFIG_TESTS_SCHED),1)
 TESTS_OBJS += $(SCHED_TEST_OBJ)
+endif
+
+ifeq ($(CONFIG_TESTS_SYSCALL),1)
+TESTS_OBJS += $(SYSCALL_C_TEST_OBJ)
 endif
 
 # ============================================================================
@@ -166,6 +180,12 @@ $(USERMODE_TEST_OBJ): $(USERMODE_TEST_SRC) $(CONFIG_DEP) | $(BUILD_DIR)
 $(MINILIBC_TEST_OBJ): $(MINILIBC_TEST_SRC) $(CONFIG_DEP) | $(BUILD_DIR)
 	@echo "  CC      $<"
 	$(Q)$(CC) $(CFLAGS) -c $< -o $@
+
+# Syscall test program compilation rule (assembly file)
+$(SYSCALL_TEST_OBJ): $(SYSCALL_TEST_SRC) | $(BUILD_DIR)
+	@echo "  AS      $<"
+	$(Q)$(CC) $(CFLAGS) -c $< -o $@
+
 
 # Conditionally compiled tests
 ifeq ($(CONFIG_TESTS_PMM),1)
@@ -212,6 +232,12 @@ endif
 
 ifeq ($(CONFIG_TESTS_SCHED),1)
 $(SCHED_TEST_OBJ): $(SCHED_TEST_SRC) $(CONFIG_DEP) | $(BUILD_DIR)
+	@echo "  CC      $<"
+	$(Q)$(CC) $(CFLAGS) -c $< -o $@
+endif
+
+ifeq ($(CONFIG_TESTS_SYSCALL),1)
+$(SYSCALL_C_TEST_OBJ): $(SYSCALL_C_TEST_SRC) $(CONFIG_DEP) | $(BUILD_DIR)
 	@echo "  CC      $<"
 	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 endif

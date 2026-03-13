@@ -25,18 +25,45 @@ syscall_entry:
     mov %rsp, %r15
     leaq nk_boot_stack_top(%rip), %rsp
 
+    /* Save user CR3 for memory isolation
+     * We save it in R14 temporarily before pushing it */
+    mov %cr3, %r14
+
     /* Save RCX (return RIP) and R11 (RFLAGS) for later use */
     push %rcx
     push %r11
+    push %r14           /* Save user CR3 */
+
+    /* CR3 SWITCH: Switch to kernel page tables
+     * For now, we keep the same CR3 (no isolation yet)
+     * TODO: Load kernel master page table when address spaces are implemented
+     *
+     * Future implementation:
+     * mov $_kernel_pml4_phys, %r14
+     * mov %r14, %cr3
+     */
 
     /* Set up syscall arguments for C handler */
-    /* Syscall number in RAX, args in RDI, RSI, RDX */
-    mov %rdx, %r8        /* arg3 */
-    mov %rsi, %rdx       /* arg2 in RDX */
-    mov %rdi, %rsi       /* arg1 in RSI */
-    mov %rax, %rdi       /* syscall number in RDI */
+    /* C handler: void syscall_handler(uint64_t nr, uint64_t a1, uint64_t a2, uint64_t a3)
+     * System V AMD64 ABI: params in RDI, RSI, RDX, RCX, R8, R9
+     * Syscall ABI: nr in RAX, args in RDI, RSI, RDX, R10, R8, R9
+     *
+     * Need to map: User RAX→RDI(nr), User RDI→RSI(a1), User RSI→RDX(a2), User RDX→RCX(a3)
+     */
+    mov %rdi, %r8        /* Save User RDI (arg1) */
+    mov %rsi, %r9        /* Save User RSI (arg2) */
+    mov %rdx, %r10       /* Save User RDX (arg3) */
+    mov %rax, %rdi       /* Param 1: nr = syscall number */
+    mov %r8, %rsi        /* Param 2: a1 = User RDI */
+    mov %r9, %rdx        /* Param 3: a2 = User RSI */
+    mov %r10, %rcx       /* Param 4: a3 = User RDX */
 
     call syscall_handler
+
+    /* Restore user CR3 - switch back to user page tables
+     * This ensures we return to the correct address space */
+    pop %r14
+    mov %r14, %cr3
 
     /* Restore RCX and R11 */
     pop %r11
