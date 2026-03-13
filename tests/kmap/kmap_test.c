@@ -472,7 +472,7 @@ static int test_lookup(void) {
  * - Properties are preserved
  */
 static int test_split(void) {
-    kmap_t *mapping, *lookup1, *lookup2;
+    kmap_t *mapping, *lookup2;
 
     klog_info("KMAP_TEST", "Test 5: Split operation...");
 
@@ -855,7 +855,7 @@ static int test_pageable_query(void) {
  * kmap_test_ap_entry - AP entry point for SMP tests
  */
 void kmap_test_ap_entry(void) {
-    int num_cpus = test_get_active_cpu_count();
+    (void)test_get_active_cpu_count();
 
     /* Wait for BSP to signal first test phase */
     if (test_wait_phase(1) < 0) {

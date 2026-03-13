@@ -110,7 +110,6 @@ static int kmap_alloc_page(uint64_t virt_addr, uint64_t flags) {
     void *pt_page = NULL;
     bool pdpt_created = false;
     bool pd_created = false;
-    bool pt_created = false;
 
     /* Allocate physical page */
     void *page = pmm_alloc(0);  /* order 0 = 1 page */
@@ -178,7 +177,6 @@ static int kmap_alloc_page(uint64_t virt_addr, uint64_t flags) {
         }
         memset(PA_TO_VA((uint64_t)pt_page), 0, PAGE_SIZE);
         pd[pd_idx] = (uint64_t)pt_page | X86_PTE_PRESENT | X86_PTE_WRITABLE | X86_PTE_USER;
-        pt_created = true;
     }
     pt = (uint64_t *)PA_TO_VA(pte_get_phys(pd[pd_idx]));
 
