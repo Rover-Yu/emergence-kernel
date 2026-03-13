@@ -27,6 +27,7 @@
 extern void thread_init(void);
 extern void scheduler_init(void);
 extern void process_init(void);
+extern void kmap_init(void);
 
 /* External monitor functions */
 extern void monitor_init(void);
@@ -143,6 +144,9 @@ void kernel_main(uint32_t multiboot_info_addr) {
     /* Initialize Slab Allocator (for small object allocation) */
     extern void slab_init(void);
     slab_init();
+
+    /* Initialize KMAP subsystem (kernel virtual memory mapping management) */
+    kmap_init();
 
     /* Initialize Process subsystem (requires slab allocator) */
     process_init();

@@ -172,22 +172,42 @@ void idt_init(void) {
 extern uint64_t unpriv_pml4_phys;
 
 /**
- * page_fault_handler - Handle page fault with logging from outer kernel
+ * page_fault_handler - Handle page fault with kmap demand paging support
  * @fault_addr: Faulting virtual address from CR2
  * @error_code: Page fault error code from stack
  * @fault_ip: Instruction pointer where fault occurred
  *
  * NOTE: This handler runs in outer kernel mode (unprivileged).
- * It logs the fault and initiates shutdown directly without switching
- * to monitor mode, since system_shutdown() is callable from outer kernel.
+ * It first attempts to handle the fault via kmap demand paging for
+ * pageable kernel regions. If the fault cannot be handled, it logs
+ * the fault and initiates shutdown.
  *
  * IMPORTANT: This handler must be very simple to avoid causing additional
  * faults (double faults). Avoid complex functions that might fault.
  */
 void page_fault_handler(uint64_t fault_addr, uint64_t error_code, uint64_t fault_ip) {
-    /* Very simple fault handler - minimal processing to avoid double faults
-     * Just call system_shutdown() which will print the shutdown message
-     * and cleanly shut down the system */
+    /* Try demand paging via kmap subsystem */
+    extern int kmap_handle_page_fault(uint64_t fault_addr, uint64_t error_code);
+    int ret = kmap_handle_page_fault(fault_addr, error_code);
+
+    if (ret == 0) {
+        /* Page fault was handled successfully, return to continue execution */
+        return;
+    }
+
+    /* Page fault could not be handled - log diagnostics and shutdown */
+    /* This is an unexpected fault in non-pageable memory or allocation failure */
+
+    /* Log diagnostic information */
+    extern void serial_puts(const char *str);
+    serial_puts("PAGE FAULT: addr=0x");
+    extern void serial_put_hex(uint64_t val);
+    serial_put_hex(fault_addr);
+    serial_puts(" ip=0x");
+    serial_put_hex(fault_ip);
+    serial_puts(" err=0x");
+    serial_put_hex(error_code);
+    serial_puts("\n");
 
     /* Shutdown directly from outer kernel */
     extern void system_shutdown(void);
